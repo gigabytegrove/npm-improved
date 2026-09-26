@@ -1,6 +1,7 @@
 import _ from "lodash";
 import errs from "../lib/error.js";
 import { castJsonIfNeed } from "../lib/helpers.js";
+import { deleteUncommittedRow, restoreModelRow, snapshotModelRow } from "../lib/model-rollback.js";
 import utils from "../lib/utils.js";
 import streamModel from "../models/stream.js";
 import internalAuditLog from "./audit-log.js";
@@ -18,72 +19,50 @@ const internalStream = {
 	 * @param   {Object}  data
 	 * @returns {Promise}
 	 */
-	create: (access, data) => {
-		const create_certificate = data.certificate_id === "new";
+	create: async (access, data) => {
+		let thisData = { ...data };
+		const createCertificate = thisData.certificate_id === "new";
+		if (createCertificate) delete thisData.certificate_id;
 
-		if (create_certificate) {
-			delete data.certificate_id;
+		await access.can("streams:create", thisData);
+		thisData.owner_user_id = access.token.getUserId(1);
+		if (typeof thisData.meta === "undefined") thisData.meta = {};
+
+		const dataNoDomains = structuredClone(thisData);
+		delete dataNoDomains.domain_names;
+		const row = await streamModel.query().insertAndFetch(dataNoDomains).then(utils.omitRow(omissions()));
+		let freshRow;
+
+		try {
+			if (createCertificate) {
+				const cert = await internalCertificate.createQuickCertificate(access, thisData);
+				thisData.certificate_id = cert.id;
+				await streamModel.query().where("id", row.id).patch({ certificate_id: cert.id });
+			}
+			freshRow = await internalStream.get(access, {
+				id: row.id,
+				expand: ["certificate", "owner"],
+			});
+			if (freshRow.enabled) {
+				const newMeta = await internalNginx.configure(streamModel, "stream", freshRow);
+				freshRow.meta = newMeta;
+			}
+		} catch (err) {
+			try {
+				await deleteUncommittedRow(streamModel, row.id);
+			} catch (rollbackErr) {
+				err.rollbackError = rollbackErr;
+			}
+			throw err;
 		}
 
-		return access
-			.can("streams:create", data)
-			.then((/*access_data*/) => {
-				// TODO: At this point the existing ports should have been checked
-				data.owner_user_id = access.token.getUserId(1);
-
-				if (typeof data.meta === "undefined") {
-					data.meta = {};
-				}
-
-				// streams aren't routed by domain name so don't store domain names in the DB
-				const data_no_domains = structuredClone(data);
-				delete data_no_domains.domain_names;
-
-				return streamModel.query().insertAndFetch(data_no_domains).then(utils.omitRow(omissions()));
-			})
-			.then((row) => {
-				if (create_certificate) {
-					return internalCertificate
-						.createQuickCertificate(access, data)
-						.then((cert) => {
-							// update host with cert id
-							return internalStream.update(access, {
-								id: row.id,
-								certificate_id: cert.id,
-							});
-						})
-						.then(() => {
-							return row;
-						});
-				}
-				return row;
-			})
-			.then((row) => {
-				// re-fetch with cert
-				return internalStream.get(access, {
-					id: row.id,
-					expand: ["certificate", "owner"],
-				});
-			})
-			.then((row) => {
-				// Configure nginx
-				return internalNginx.configure(streamModel, "stream", row).then(() => {
-					return row;
-				});
-			})
-			.then((row) => {
-				// Add to audit log
-				return internalAuditLog
-					.add(access, {
-						action: "created",
-						object_type: "stream",
-						object_id: row.id,
-						meta: data,
-					})
-					.then(() => {
-						return row;
-					});
-			});
+		await internalAuditLog.add(access, {
+			action: "created",
+			object_type: "stream",
+			object_id: freshRow.id,
+			meta: thisData,
+		});
+		return freshRow;
 	},
 
 	/**
@@ -92,80 +71,54 @@ const internalStream = {
 	 * @param  {Number}  data.id
 	 * @return {Promise}
 	 */
-	update: (access, data) => {
-		let thisData = data;
-		const create_certificate = thisData.certificate_id === "new";
+	update: async (access, data) => {
+		let thisData = { ...data };
+		const createCertificate = thisData.certificate_id === "new";
+		if (createCertificate) delete thisData.certificate_id;
 
-		if (create_certificate) {
-			delete thisData.certificate_id;
+		await access.can("streams:update", thisData.id);
+		const currentRow = await internalStream.get(access, { id: thisData.id });
+		if (currentRow.id !== thisData.id) {
+			throw new errs.InternalValidationError(
+				`Stream could not be updated, IDs do not match: ${currentRow.id} !== ${thisData.id}`,
+			);
+		}
+		const previousState = await snapshotModelRow(streamModel, currentRow.id);
+
+		if (createCertificate) {
+			const cert = await internalCertificate.createQuickCertificate(access, {
+				domain_names: thisData.domain_names || currentRow.domain_names,
+				meta: _.assign({}, currentRow.meta, thisData.meta),
+			});
+			thisData.certificate_id = cert.id;
 		}
 
-		return access
-			.can("streams:update", thisData.id)
-			.then((/*access_data*/) => {
-				// TODO: at this point the existing streams should have been checked
-				return internalStream.get(access, { id: thisData.id });
-			})
-			.then((row) => {
-				if (row.id !== thisData.id) {
-					// Sanity check that something crazy hasn't happened
-					throw new errs.InternalValidationError(
-						`Stream could not be updated, IDs do not match: ${row.id} !== ${thisData.id}`,
-					);
-				}
+		const patchData = structuredClone(thisData);
+		delete patchData.domain_names;
+		await streamModel.query().patchAndFetchById(currentRow.id, patchData);
 
-				if (create_certificate) {
-					return internalCertificate
-						.createQuickCertificate(access, {
-							domain_names: thisData.domain_names || row.domain_names,
-							meta: _.assign({}, row.meta, thisData.meta),
-						})
-						.then((cert) => {
-							// update host with cert id
-							thisData.certificate_id = cert.id;
-						})
-						.then(() => {
-							return row;
-						});
-				}
-				return row;
-			})
-			.then((row) => {
-				// Add domain_names to the data in case it isn't there, so that the audit log renders correctly. The order is important here.
-				thisData = _.assign(
-					{},
-					{
-						domain_names: row.domain_names,
-					},
-					thisData,
-				);
-
-				return streamModel
-					.query()
-					.patchAndFetchById(row.id, thisData)
-					.then(utils.omitRow(omissions()))
-					.then((saved_row) => {
-						// Add to audit log
-						return internalAuditLog
-							.add(access, {
-								action: "updated",
-								object_type: "stream",
-								object_id: row.id,
-								meta: thisData,
-							})
-							.then(() => {
-								return saved_row;
-							});
-					});
-			})
-			.then(() => {
-				return internalStream.get(access, { id: thisData.id, expand: ["owner", "certificate"] }).then((row) => {
-					return internalNginx.configure(streamModel, "stream", row).then((new_meta) => {
-						row.meta = new_meta;
-						return _.omit(internalHost.cleanRowCertificateMeta(row), omissions());
-					});
-				});
+		let updatedRow;
+		try {
+			updatedRow = await internalStream.get(access, {
+				id: thisData.id,
+				expand: ["owner", "certificate"],
 			});
+			if (updatedRow.enabled) {
+				const newMeta = await internalNginx.configure(streamModel, "stream", updatedRow);
+				updatedRow.meta = newMeta;
+			}
+		} catch (err) {
+			await restoreModelRow(streamModel, currentRow.id, previousState);
+			throw err;
+		}
+
+		await internalAuditLog.add(access, {
+			action: "updated",
+			object_type: "stream",
+			object_id: currentRow.id,
+			meta: thisData,
+		});
+		return _.omit(internalHost.cleanRowCertificateMeta(updatedRow), omissions());
 	},
 
 	/**
@@ -219,42 +172,27 @@ const internalStream = {
 	 * @param {String}  [data.reason]
 	 * @returns {Promise}
 	 */
-	delete: (access, data) => {
-		return access
-			.can("streams:delete", data.id)
-			.then(() => {
-				return internalStream.get(access, { id: data.id });
-			})
-			.then((row) => {
-				if (!row?.id) {
-					throw new errs.ItemNotFoundError(data.id);
-				}
+	delete: async (access, data) => {
+		await access.can("streams:delete", data.id);
+		const row = await internalStream.get(access, { id: data.id });
+		if (!row?.id) throw new errs.ItemNotFoundError(data.id);
 
-				return streamModel
-					.query()
-					.where("id", row.id)
-					.patch({
-						is_deleted: 1,
-					})
-					.then(() => {
-						// Delete Nginx Config
-						return internalNginx.deleteConfig("stream", row).then(() => {
-							return internalNginx.reload();
-						});
-					})
-					.then(() => {
-						// Add to audit log
-						return internalAuditLog.add(access, {
-							action: "deleted",
-							object_type: "stream",
-							object_id: row.id,
-							meta: _.omit(row, omissions()),
-						});
-					});
-			})
-			.then(() => {
-				return true;
-			});
+		const previousState = await snapshotModelRow(streamModel, row.id);
+		await streamModel.query().where("id", row.id).patch({ is_deleted: 1 });
+		try {
+			await internalNginx.removeConfigTransactional("stream", row);
+		} catch (err) {
+			await restoreModelRow(streamModel, row.id, previousState);
+			throw err;
+		}
+
+		await internalAuditLog.add(access, {
+			action: "deleted",
+			object_type: "stream",
+			object_id: row.id,
+			meta: _.omit(row, omissions()),
+		});
+		return true;
 	},
 
 	/**
@@ -264,48 +202,32 @@ const internalStream = {
 	 * @param {String}  [data.reason]
 	 * @returns {Promise}
 	 */
-	enable: (access, data) => {
-		return access
-			.can("streams:update", data.id)
-			.then(() => {
-				return internalStream.get(access, {
-					id: data.id,
-					expand: ["certificate", "owner"],
-				});
-			})
-			.then((row) => {
-				if (!row?.id) {
-					throw new errs.ItemNotFoundError(data.id);
-				}
-				if (row.enabled) {
-					throw new errs.ValidationError("Stream is already enabled");
-				}
+	enable: async (access, data) => {
+		await access.can("streams:update", data.id);
+		const row = await internalStream.get(access, {
+			id: data.id,
+			expand: ["certificate", "owner"],
+		});
+		if (!row?.id) throw new errs.ItemNotFoundError(data.id);
+		if (row.enabled) throw new errs.ValidationError("Stream is already enabled");
 
-				row.enabled = 1;
+		const previousState = await snapshotModelRow(streamModel, row.id);
+		row.enabled = 1;
+		await streamModel.query().where("id", row.id).patch({ enabled: 1 });
+		try {
+			await internalNginx.configure(streamModel, "stream", row);
+		} catch (err) {
+			await restoreModelRow(streamModel, row.id, previousState);
+			throw err;
+		}
 
-				return streamModel
-					.query()
-					.where("id", row.id)
-					.patch({
-						enabled: 1,
-					})
-					.then(() => {
-						// Configure nginx
-						return internalNginx.configure(streamModel, "stream", row);
-					})
-					.then(() => {
-						// Add to audit log
-						return internalAuditLog.add(access, {
-							action: "enabled",
-							object_type: "stream",
-							object_id: row.id,
-							meta: _.omit(row, omissions()),
-						});
-					});
-			})
-			.then(() => {
-				return true;
-			});
+		await internalAuditLog.add(access, {
+			action: "enabled",
+			object_type: "stream",
+			object_id: row.id,
+			meta: _.omit(row, omissions()),
+		});
+		return true;
 	},
 
 	/**
@@ -315,47 +237,29 @@ const internalStream = {
 	 * @param {String}  [data.reason]
 	 * @returns {Promise}
 	 */
-	disable: (access, data) => {
-		return access
-			.can("streams:update", data.id)
-			.then(() => {
-				return internalStream.get(access, { id: data.id });
-			})
-			.then((row) => {
-				if (!row?.id) {
-					throw new errs.ItemNotFoundError(data.id);
-				}
-				if (!row.enabled) {
-					throw new errs.ValidationError("Stream is already disabled");
-				}
+	disable: async (access, data) => {
+		await access.can("streams:update", data.id);
+		const row = await internalStream.get(access, { id: data.id });
+		if (!row?.id) throw new errs.ItemNotFoundError(data.id);
+		if (!row.enabled) throw new errs.ValidationError("Stream is already disabled");
 
-				row.enabled = 0;
+		const previousState = await snapshotModelRow(streamModel, row.id);
+		row.enabled = 0;
+		await streamModel.query().where("id", row.id).patch({ enabled: 0 });
+		try {
+			await internalNginx.removeConfigTransactional("stream", row);
+		} catch (err) {
+			await restoreModelRow(streamModel, row.id, previousState);
+			throw err;
+		}
 
-				return streamModel
-					.query()
-					.where("id", row.id)
-					.patch({
-						enabled: 0,
-					})
-					.then(() => {
-						// Delete Nginx Config
-						return internalNginx.deleteConfig("stream", row).then(() => {
-							return internalNginx.reload();
-						});
-					})
-					.then(() => {
-						// Add to audit log
-						return internalAuditLog.add(access, {
-							action: "disabled",
-							object_type: "stream",
-							object_id: row.id,
-							meta: _.omit(row, omissions()),
-						});
-					});
-			})
-			.then(() => {
-				return true;
-			});
+		await internalAuditLog.add(access, {
+			action: "disabled",
+			object_type: "stream",
+			object_id: row.id,
+			meta: _.omit(row, omissions()),
+		});
+		return true;
 	},
 
 	/**
