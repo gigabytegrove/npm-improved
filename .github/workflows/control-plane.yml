@@ -1,0 +1,49 @@
+name: Control Plane
+
+on:
+  push:
+    branches:
+      - develop
+      - "feature/**"
+    paths:
+      - "controlplane/**"
+      - "docker/Dockerfile"
+      - "docker/rootfs/etc/nginx/conf.d/production.conf.template"
+      - "docker/rootfs/etc/s6-overlay/s6-rc.d/control-plane/**"
+      - ".github/workflows/control-plane.yml"
+  pull_request:
+    paths:
+      - "controlplane/**"
+      - "docker/Dockerfile"
+      - "docker/rootfs/etc/nginx/conf.d/production.conf.template"
+      - "docker/rootfs/etc/s6-overlay/s6-rc.d/control-plane/**"
+      - ".github/workflows/control-plane.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: controlplane
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: controlplane/go.mod
+          cache: false
+
+      - name: Test
+        run: go test -race ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build
+        run: CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /tmp/npm-improved-control-plane .

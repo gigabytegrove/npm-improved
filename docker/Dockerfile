@@ -1,11 +1,27 @@
 # This is a Dockerfile intended to be built using `docker buildx`
 # for multi-arch support. Building with `docker build` may have unexpected results.
 
-# This file assumes that the frontend has been built using ./scripts/frontend-build
-
+# The NPM Improved control plane is intentionally compiled as a standalone binary.
 ARG BASE_IMAGE=nginxproxymanager/nginx-full:certbot-node
+ARG GO_IMAGE=golang:1.23-alpine
+
+FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS controlplane-builder
+ARG TARGETOS
+ARG TARGETARCH
+ARG TARGETVARIANT
+
+WORKDIR /src
+COPY controlplane/go.mod ./
+COPY controlplane/*.go ./
+
+RUN CGO_ENABLED=0 go test ./...
+RUN set -eux; \
+	if [ "$TARGETARCH" = "arm" ] && [ -n "$TARGETVARIANT" ]; then export GOARM="${TARGETVARIANT#v}"; fi; \
+	CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" \
+	go build -trimpath -ldflags="-s -w" -o /out/npm-improved-control-plane .
+
 FROM nginxproxymanager/testca AS testca
-FROM $BASE_IMAGE
+FROM ${BASE_IMAGE}
 
 ARG TARGETPLATFORM
 ARG BUILD_VERSION
@@ -27,7 +43,7 @@ ENV SUPPRESS_NO_CONFIG_WARNING=1 \
 
 RUN echo "fs.file-max = 65535" > /etc/sysctl.conf \
 	&& apt-get update \
-	&& apt-get install -y --no-install-recommends jq logrotate \
+	&& apt-get install -y --no-install-recommends jq logrotate libcap2-bin \
 	&& apt-get clean \
 	&& rm -rf /var/lib/apt/lists/*
 
@@ -40,6 +56,12 @@ EXPOSE 80 81 443
 COPY backend       /app
 COPY frontend/dist /app/frontend
 COPY docker/rootfs /
+COPY --from=controlplane-builder /out/npm-improved-control-plane /usr/local/bin/npm-improved-control-plane
+
+# Port 81 is privileged. Give only the standalone control-plane binary the
+# capability required to bind it when NPM is configured to run services as
+# a non-root PUID.
+RUN setcap 'cap_net_bind_service=+ep' /usr/local/bin/npm-improved-control-plane
 
 # Copy test CA cert for use in container and add to trusted certs from a self-signed CA
 COPY --from=testca /home/step/certs/root_ca.crt /etc/ssl/certs/NginxProxyManager.crt
@@ -59,8 +81,7 @@ ENTRYPOINT [ "/init" ]
 
 LABEL org.label-schema.schema-version="1.0" \
 	org.label-schema.license="MIT" \
-	org.label-schema.name="nginx-proxy-manager" \
-	org.label-schema.description="Docker container for managing Nginx proxy hosts with a simple, powerful interface " \
-	org.label-schema.url="https://github.com/jc21/nginx-proxy-manager" \
-	org.label-schema.vcs-url="https://github.com/jc21/nginx-proxy-manager.git" \
-	org.label-schema.cmd="docker run --rm -ti jc21/nginx-proxy-manager:latest"
+	org.label-schema.name="npm-improved" \
+	org.label-schema.description="NPM Improved - resilient Nginx proxy management with an independent control plane" \
+	org.label-schema.url="https://github.com/gigabytegrove/npm-improved" \
+	org.label-schema.vcs-url="https://github.com/gigabytegrove/npm-improved.git"
