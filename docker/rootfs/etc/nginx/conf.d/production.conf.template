@@ -1,33 +1,9 @@
-# Admin Interface
-server {
-	listen {{NPM_ADMIN_PORT}} default;
-	listen [::]:{{NPM_ADMIN_PORT}} default;
-
-	server_name nginxproxymanager;
-	root /app/frontend;
-	access_log /dev/null;
-
-	location /api {
-		return 302 /api/;
-	}
-
-	location /api/ {
-		add_header            X-Served-By $host;
-		proxy_set_header Host $host;
-		proxy_set_header      X-Forwarded-Scheme $scheme;
-		proxy_set_header      X-Forwarded-Proto  $scheme;
-		proxy_set_header      X-Forwarded-For    $remote_addr;
-		proxy_pass            http://127.0.0.1:3000/;
-
-		proxy_read_timeout 15m;
-		proxy_send_timeout 15m;
-	}
-
-	location / {
-		index index.html;
-		if ($request_uri ~ ^/(.*)\.html$) {
-			return 302 /$1;
-		}
-		try_files $uri $uri.html $uri/ /index.html;
-	}
-}
+# NPM Improved
+#
+# The management UI no longer runs inside Nginx. Port NPM_ADMIN_PORT (81 by
+# default) is owned by the standalone npm-improved-control-plane binary.
+#
+# This file intentionally contains no server block. Keeping the management
+# listener outside the Nginx data plane means a failed proxy configuration,
+# failed Nginx reload, or stopped Nginx process cannot make the recovery UI
+# unavailable.
