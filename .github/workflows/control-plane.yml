@@ -44,3 +44,9 @@ jobs:
 
       - name: Build
         run: CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /tmp/npm-improved-control-plane .
+
+      - name: Validate repository protection assets
+        working-directory: .
+        run: |
+          bash -n scripts/apply-repository-rulesets.sh
+          jq empty .github/rulesets/*.json
