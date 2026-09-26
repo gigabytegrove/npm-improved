@@ -4,6 +4,7 @@ import { castJsonIfNeed } from "../lib/helpers.js";
 import { deleteUncommittedRow, restoreModelRow, snapshotModelRow } from "../lib/model-rollback.js";
 import utils from "../lib/utils.js";
 import proxyHostModel from "../models/proxy_host.js";
+import { global as logger } from "../logger.js";
 import internalAuditLog from "./audit-log.js";
 import internalCertificate from "./certificate.js";
 import internalHost from "./host.js";
@@ -62,7 +63,7 @@ const internalProxyHost = {
 			}
 		} catch (err) {
 			await deleteUncommittedRow(proxyHostModel, row.id).catch((rollbackErr) => {
-				debug(console, "Failed to remove uncommitted proxy host:", rollbackErr.message);
+				logger.error("Failed to remove uncommitted proxy host:", rollbackErr.message);
 			});
 			throw err;
 		}
