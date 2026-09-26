@@ -1,29 +1,26 @@
-name: Control Plane
+name: Required Checks
 
 on:
+  pull_request:
+    branches:
+      - develop
   push:
     branches:
       - develop
       - "feature/**"
-    paths:
-      - "controlplane/**"
-      - "docker/Dockerfile"
-      - "docker/rootfs/etc/nginx/conf.d/production.conf.template"
-      - "docker/rootfs/etc/s6-overlay/s6-rc.d/control-plane/**"
-      - ".github/workflows/control-plane.yml"
-  pull_request:
-    paths:
-      - "controlplane/**"
-      - "docker/Dockerfile"
-      - "docker/rootfs/etc/nginx/conf.d/production.conf.template"
-      - "docker/rootfs/etc/s6-overlay/s6-rc.d/control-plane/**"
-      - ".github/workflows/control-plane.yml"
+      - "fix/**"
+      - "chore/**"
 
 permissions:
   contents: read
 
+concurrency:
+  group: required-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
+  required-checks:
+    name: Required Checks
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -47,3 +44,9 @@ jobs:
 
       - name: Build
         run: CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /tmp/npm-improved-control-plane .
+
+      - name: Validate repository protection assets
+        working-directory: .
+        run: |
+          bash -n scripts/apply-repository-rulesets.sh
+          jq empty .github/rulesets/*.json
