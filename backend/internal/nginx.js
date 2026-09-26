@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import _ from "lodash";
 import errs from "../lib/error.js";
+import { applyConfigTransaction, removeConfigTransaction } from "../lib/nginx-transaction.js";
 import utils from "../lib/utils.js";
 import { debug, nginx as logger } from "../logger.js";
 import accessListModel from "../models/access_list.js";
@@ -26,80 +27,62 @@ const internalNginx = {
 	 * @param   {Object}         host
 	 * @returns {Promise}
 	 */
-	configure: (model, host_type, host) => {
-		let combined_meta = {};
+	configure: async (model, host_type, host) => {
+		// Do not layer a new change on top of an already-invalid Nginx
+		// configuration. A pre-existing failure must be repaired first.
+		await internalNginx.test();
 
-		return internalNginx
-			.test()
-			.then(() => {
-				// Nginx is OK
-				// We're deleting this config regardless.
-				// Don't throw errors, as the file may not exist at all
-				// Delete the .err file too
-				return internalNginx.deleteConfig(host_type, host, true);
-			})
-			.then(() => {
-				return internalNginx.generateConfig(host_type, host);
-			})
-			.then(() => {
-				// Test nginx again and update meta with result
-				return internalNginx
-					.test()
-					.then(() => {
-						// nginx is ok
-						combined_meta = _.assign({}, host.meta, {
-							nginx_online: true,
-							nginx_err: null,
-						});
-
-						return model.query().where("id", host.id).patch({
-							meta: combined_meta,
-						});
-					})
-					.catch((err) => {
-						// Remove the error_log line because it's a docker-ism false positive that doesn't need to be reported.
-						// It will always look like this:
-						//   nginx: [alert] could not open error log file: open() "/var/log/nginx/error.log" failed (6: No such device or address)
-
-						const valid_lines = [];
-						const err_lines = err.message.split("\n");
-						err_lines.map((line) => {
-							if (line.indexOf("/var/log/nginx/error.log") === -1) {
-								valid_lines.push(line);
-							}
-							return true;
-						});
-
-						debug(logger, "Nginx test failed:", valid_lines.join("\n"));
-
-						// config is bad, update meta and delete config
-						combined_meta = _.assign({}, host.meta, {
-							nginx_online: false,
-							nginx_err: valid_lines.join("\n"),
-						});
-
-						return model
-							.query()
-							.where("id", host.id)
-							.patch({
-								meta: combined_meta,
-							})
-							.then(() => {
-								// Keep the failed config as a .err file for inspection
-								return internalNginx.renameConfigAsError(host_type, host);
-							})
-							.then(() => {
-								// The rename removed the live config already, don't touch the .err file
-								return internalNginx.deleteConfig(host_type, host, false);
-							});
-					});
-			})
-			.then(() => {
-				return internalNginx.reload();
-			})
-			.then(() => {
-				return combined_meta;
+		const configPath = internalNginx.getConfigName(host_type, host.id);
+		try {
+			await applyConfigTransaction({
+				livePath: configPath,
+				renderCandidate: async (candidatePath) => {
+					await internalNginx.generateConfig(host_type, host, candidatePath);
+				},
+				validate: () => internalNginx.test(),
+				reload: () => internalNginx.reload(),
+				log: (message) => logger.error(message),
 			});
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			debug(logger, "Nginx transactional configure failed:", message);
+			throw new errs.ConfigurationError(message, err);
+		}
+
+		const combined_meta = _.assign({}, host.meta, {
+			nginx_online: true,
+			nginx_err: null,
+		});
+
+		await model.query().where("id", host.id).patch({
+			meta: combined_meta,
+		});
+
+		return combined_meta;
+	},
+
+	/**
+	 * Removes a host config without losing the live file until the resulting
+	 * Nginx configuration has validated and reloaded successfully.
+	 *
+	 * @param   {String}  host_type
+	 * @param   {Object}  host
+	 * @returns {Promise}
+	 */
+	removeConfigTransactional: async (host_type, host) => {
+		await internalNginx.test();
+		const configPath = internalNginx.getConfigName(host_type, host.id);
+		try {
+			return await removeConfigTransaction({
+				livePath: configPath,
+				validate: () => internalNginx.test(),
+				reload: () => internalNginx.reload(),
+				log: (message) => logger.error(message),
+			});
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			throw new errs.ConfigurationError(message, err);
+		}
 	},
 
 	/**
@@ -209,7 +192,7 @@ const internalNginx = {
 	 * @param   {Object}  host
 	 * @returns {Promise}
 	 */
-	generateConfig: (host_type, host_row) => {
+	generateConfig: (host_type, host_row, filename_override = null) => {
 		// Prevent modifying the original object:
 		const host = JSON.parse(JSON.stringify(host_row));
 		const nice_host_type = internalNginx.getFileFriendlyHostType(host_type);
@@ -220,7 +203,7 @@ const internalNginx = {
 
 		return new Promise((resolve, reject) => {
 			let template = null;
-			const filename = internalNginx.getConfigName(nice_host_type, host.id);
+			const filename = filename_override || internalNginx.getConfigName(nice_host_type, host.id);
 
 			try {
 				template = fs.readFileSync(`${__dirname}/../templates/${nice_host_type}.conf`, { encoding: "utf8" });
