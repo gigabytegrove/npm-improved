@@ -12,6 +12,8 @@ const up = async (knex) => {
 			table.dateTime("updated_on").nullable();
 			table.string("updated_by", 64).nullable();
 			table.string("filesystem_hash", 64).nullable();
+			table.string("primary_node_id", 64).nullable();
+			table.dateTime("primary_seen_on").nullable();
 		});
 	}
 
@@ -51,6 +53,8 @@ const up = async (knex) => {
 			updated_on: null,
 			updated_by: null,
 			filesystem_hash: null,
+			primary_node_id: null,
+			primary_seen_on: null,
 		});
 	}
 
