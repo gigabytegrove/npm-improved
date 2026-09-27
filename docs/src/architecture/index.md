@@ -35,6 +35,24 @@ Upstream services
 
 The Node backend remains in place while control-plane responsibilities are migrated incrementally. The important reliability boundary is that Nginx no longer owns the management listener.
 
+## Health paths
+
+The Go control plane exposes:
+
+```text
+/__npm_improved/health
+```
+
+This endpoint does not depend on the Node API. It reports only safe diagnostic state for the control plane, compiled frontend, backend reachability, and Nginx PID/config validity. The HTTP endpoint itself remains successful when components are degraded; the JSON `status` field carries the health state.
+
+When the backend is available, administrators can also use:
+
+```text
+/api/reports/system-health
+```
+
+The authenticated report adds database connectivity, Nginx last-reload state, certificate scheduler state, log-storage health, backend uptime, and revision-engine state.
+
 ## Transactional Nginx changes
 
 Generated host configuration follows this sequence:
