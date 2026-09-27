@@ -9,6 +9,7 @@ export * from "./LoadingPage";
 export * from "./LocalePicker";
 export * from "./NavLink";
 export * from "./Page";
+export { default as ProtectionProfileField } from "./ProtectionProfileField";
 export * from "./SiteContainer";
 export * from "./SiteFooter";
 export * from "./SiteHeader";
