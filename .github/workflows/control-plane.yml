@@ -150,3 +150,28 @@ jobs:
           docker exec npm-improved-smoke /usr/sbin/nginx -t
           docker exec npm-improved-smoke curl --fail --silent --show-error \
             http://127.0.0.1:81/__npm_improved/health
+
+          docker exec npm-improved-smoke sh -lc '
+            set -eu
+            test -s /data/recovery-access.json
+            test "$(stat -c "%a" /data/recovery-access.json)" = "600"
+
+            curl --fail --silent --show-error \
+              http://127.0.0.1:81/recovery/ \
+              | grep -q "NPM Improved Recovery"
+
+            token="$(jq -r .token /data/recovery-access.json)"
+            test -n "$token"
+            test "$token" != "null"
+
+            curl --fail --silent --show-error \
+              -c /tmp/npm-improved-recovery.cookies \
+              -H "Content-Type: application/json" \
+              --data "{\"token\":\"$token\"}" \
+              http://127.0.0.1:81/__npm_improved/recovery/login >/dev/null
+
+            curl --fail --silent --show-error \
+              -b /tmp/npm-improved-recovery.cookies \
+              http://127.0.0.1:81/__npm_improved/recovery/status \
+              | grep -q "\"control_plane\""
+          '
