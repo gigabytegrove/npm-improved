@@ -9,6 +9,7 @@ import tempWrite from "temp-write";
 import dnsPlugins from "../certbot/dns-plugins.json" with { type: "json" };
 import { installPlugin } from "../lib/certbot.js";
 import { applyAtomicCertificateFiles, runCertificateMutationWithRollback } from "../lib/certificate-transaction.js";
+import { calculateCertificateLifecycle, normalizeCertificateLifecyclePolicy } from "../lib/certificate-lifecycle.js";
 import { useLetsencryptServer, useLetsencryptStaging } from "../lib/config.js";
 import error from "../lib/error.js";
 import { restoreModelRow, snapshotModelRow } from "../lib/model-rollback.js";
@@ -147,28 +148,21 @@ const internalCertificate = {
 
 	getLifecyclePolicy: async () => {
 		const row = await settingModel.query().where("id", "certificate-lifecycle").first();
-		const retention = Number.parseInt(row?.meta?.unused_retention_days, 10);
-		return {
-			enabled: row?.value !== "disabled",
-			unusedRetentionDays: Number.isInteger(retention) && retention >= 1 && retention <= 3650 ? retention : 30,
-			purgeCustomCertificates: row?.meta?.purge_custom_certificates !== false,
-		};
+		return normalizeCertificateLifecyclePolicy(row);
 	},
 
 	decorateLifecycle: (certificate, usageMap, policy) => {
-		const usageCount = usageMap.get(certificate.id) || 0;
-		const unusedSince = usageCount === 0 ? certificate.meta?.lifecycle_unused_since || null : null;
-		const purgeEligibleOn =
-			unusedSince && moment(unusedSince).isValid()
-				? moment(unusedSince).add(policy.unusedRetentionDays, "days").toISOString()
-				: null;
-		const providerEligible = certificate.provider !== "other" || policy.purgeCustomCertificates;
+		const state = calculateCertificateLifecycle({
+			certificate,
+			usageCount: usageMap.get(certificate.id) || 0,
+			policy,
+		});
 
-		certificate.is_in_use = usageCount > 0;
-		certificate.usage_count = usageCount;
-		certificate.unused_since = unusedSince;
-		certificate.purge_eligible_on = purgeEligibleOn;
-		certificate.auto_purge_eligible = policy.enabled && providerEligible;
+		certificate.is_in_use = state.isInUse;
+		certificate.usage_count = state.usageCount;
+		certificate.unused_since = state.unusedSince;
+		certificate.purge_eligible_on = state.purgeEligibleOn;
+		certificate.auto_purge_eligible = state.autoPurgeEligible;
 		return certificate;
 	},
 
@@ -185,47 +179,46 @@ const internalCertificate = {
 				internalCertificate.getUsageMap(),
 			]);
 
+			const now = new Date();
 			for (const certificate of certificates) {
-				const usageCount = usageMap.get(certificate.id) || 0;
+				const state = calculateCertificateLifecycle({
+					certificate,
+					usageCount: usageMap.get(certificate.id) || 0,
+					policy,
+					now,
+				});
 				const meta = _.cloneDeep(certificate.meta || {});
 				let changed = false;
 
-				if (usageCount > 0) {
+				if (state.isInUse) {
 					if (meta.lifecycle_unused_since || meta.lifecycle_purge_after) {
 						delete meta.lifecycle_unused_since;
 						delete meta.lifecycle_purge_after;
 						changed = true;
 					}
-					if (changed) {
-						await certificateModel.query().patchAndFetchById(certificate.id, { meta });
+				} else {
+					if (meta.lifecycle_unused_since !== state.unusedSince) {
+						meta.lifecycle_unused_since = state.unusedSince;
+						changed = true;
 					}
-					continue;
-				}
-
-				let unusedSince = meta.lifecycle_unused_since;
-				if (!unusedSince || !moment(unusedSince).isValid()) {
-					unusedSince = new Date().toISOString();
-					meta.lifecycle_unused_since = unusedSince;
-					changed = true;
-				}
-
-				const purgeAfter = moment(unusedSince).add(policy.unusedRetentionDays, "days").toISOString();
-				if (meta.lifecycle_purge_after !== purgeAfter) {
-					meta.lifecycle_purge_after = purgeAfter;
-					changed = true;
+					if (meta.lifecycle_purge_after !== state.purgeEligibleOn) {
+						meta.lifecycle_purge_after = state.purgeEligibleOn;
+						changed = true;
+					}
 				}
 
 				if (changed) {
 					await certificateModel.query().patchAndFetchById(certificate.id, { meta });
 				}
 
-				const providerEligible = certificate.provider !== "other" || policy.purgeCustomCertificates;
-				if (
-					policy.enabled &&
-					providerEligible &&
-					moment().isSameOrAfter(moment(purgeAfter))
-				) {
-					await internalCertificate.purgeUnusedCertificate({ ...certificate, meta });
+				if (state.shouldPurge) {
+					try {
+						await internalCertificate.purgeUnusedCertificate({ ...certificate, meta });
+					} catch (err) {
+						// One certificate must never stop lifecycle processing for every
+						// other certificate. The next hourly pass will retry it.
+						logger.error(`Auto-purge failed for Cert #${certificate.id}: ${err.message}`);
+					}
 				}
 			}
 		} catch (err) {
