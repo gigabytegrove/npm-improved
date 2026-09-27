@@ -144,6 +144,26 @@ test("snapshot and restore preserve existing certificate bytes", (t) => {
 	assert.equal(fs.readFileSync(f.privkey, "utf8"), "old-key");
 });
 
+test("snapshot restore puts Certbot-style symlinks back on their original archive target", (t) => {
+	const f = fixture();
+	t.after(f.cleanup);
+
+	const archiveOne = path.join(f.root, "fullchain1.pem");
+	const archiveTwo = path.join(f.root, "fullchain2.pem");
+	fs.writeFileSync(archiveOne, "old-cert");
+	fs.writeFileSync(archiveTwo, "new-cert");
+	fs.symlinkSync(path.basename(archiveOne), f.fullchain);
+
+	const snapshot = snapshotCertificateFiles([f.fullchain]);
+	fs.unlinkSync(f.fullchain);
+	fs.symlinkSync(path.basename(archiveTwo), f.fullchain);
+
+	restoreCertificateFiles(snapshot);
+
+	assert.equal(fs.readlinkSync(f.fullchain), path.basename(archiveOne));
+	assert.equal(fs.readFileSync(f.fullchain, "utf8"), "old-cert");
+});
+
 test("renewal-style mutation restores certificate and commit state after failure", async (t) => {
 	const f = fixture();
 	t.after(f.cleanup);
