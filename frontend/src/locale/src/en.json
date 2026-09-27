@@ -785,6 +785,9 @@
 	"streams.udp": {
 		"defaultMessage": "UDP"
 	},
+	"system-health": {
+		"defaultMessage": "System Health"
+	},
 	"test": {
 		"defaultMessage": "Test"
 	},
