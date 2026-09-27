@@ -61,12 +61,14 @@ http://<host>:81
 
 ## MariaDB / MySQL deployment
 
-Edit `.env` and replace at least:
+Edit `.env` and set both database passwords:
 
 ```dotenv
-MYSQL_PASSWORD=CHANGE_ME
-MYSQL_ROOT_PASSWORD=CHANGE_ME_ROOT
+MYSQL_PASSWORD=<strong-unique-password>
+MYSQL_ROOT_PASSWORD=<strong-unique-root-password>
 ```
+
+The MariaDB Compose stack refuses to start while either password is blank.
 
 Then start the MariaDB stack:
 
@@ -84,11 +86,13 @@ The application receives the existing `DB_MYSQL_*` environment variables from th
 
 ## PostgreSQL deployment
 
-Edit `.env` and replace at least:
+Edit `.env` and set the PostgreSQL password:
 
 ```dotenv
-POSTGRES_PASSWORD=CHANGE_ME
+POSTGRES_PASSWORD=<strong-unique-password>
 ```
+
+The PostgreSQL Compose stack refuses to start while the password is blank.
 
 Then start the PostgreSQL stack:
 
@@ -254,4 +258,4 @@ To build the local image without starting Compose:
 
 The production Dockerfile builds the frontend and standalone Go control plane as part of the image build.
 
-See the root [Docker installation guide](../../../DOCKER.md) for the copy-and-run deployment commands.
+See the [Docker installation guide on GitHub](https://github.com/gigabytegrove/npm-improved/blob/develop/DOCKER.md) for the copy-and-run deployment commands.
