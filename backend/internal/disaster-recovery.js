@@ -12,6 +12,7 @@ import accessListModel from "../models/access_list.js";
 import accessListAuthModel from "../models/access_list_auth.js";
 import accessListClientModel from "../models/access_list_client.js";
 import authModel from "../models/auth.js";
+import auditLogModel from "../models/audit-log.js";
 import certificateModel from "../models/certificate.js";
 import configRevisionModel from "../models/config_revision.js";
 import deadHostModel from "../models/dead_host.js";
@@ -53,6 +54,7 @@ const TABLES = Object.freeze({
 		["dead_host", deadHostModel],
 		["stream", streamModel],
 		["config_revision", configRevisionModel],
+		["audit_log", auditLogModel],
 	],
 });
 
