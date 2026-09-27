@@ -149,6 +149,7 @@ func (m *recoveryManager) register(mux *http.ServeMux) {
 	mux.Handle("/__npm_improved/recovery/status", m.requireAuth(http.HandlerFunc(m.status)))
 	mux.Handle("/__npm_improved/recovery/nginx/test", m.requireAuth(http.HandlerFunc(m.testNginx)))
 	mux.Handle("/__npm_improved/recovery/nginx/reload", m.requireAuth(http.HandlerFunc(m.reloadNginx)))
+	mux.Handle("/__npm_improved/recovery/failed", m.requireAuth(http.HandlerFunc(m.viewFailedCandidate)))
 	mux.Handle("/__npm_improved/recovery/backups/", m.requireAuth(http.HandlerFunc(m.downloadBackup)))
 }
 
@@ -387,6 +388,51 @@ func (m *recoveryManager) listFailedCandidates() []recoveryFailedCandidate {
 	return result
 }
 
+
+func (m *recoveryManager) viewFailedCandidate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	relative := filepath.Clean(filepath.FromSlash(strings.TrimSpace(r.URL.Query().Get("path"))))
+	if relative == "." || relative == "" || filepath.IsAbs(relative) || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || !strings.HasSuffix(relative, ".err") {
+		http.NotFound(w, r)
+		return
+	}
+
+	root := filepath.Join(m.dataDir, "nginx")
+	filename := filepath.Join(root, relative)
+	resolvedRoot, err := filepath.Abs(root)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	resolved, err := filepath.Abs(filename)
+	if err != nil || (resolved != resolvedRoot && !strings.HasPrefix(resolved, resolvedRoot+string(filepath.Separator))) {
+		http.NotFound(w, r)
+		return
+	}
+
+	info, err := os.Stat(resolved)
+	if err != nil || info.IsDir() || info.Size() > 1024*1024 {
+		http.NotFound(w, r)
+		return
+	}
+
+	content, err := os.ReadFile(resolved)
+	if err != nil {
+		http.Error(w, "failed to read candidate", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", "inline; filename=\""+strings.ReplaceAll(filepath.Base(resolved), "\"", "")+"\"")
+	w.WriteHeader(http.StatusOK)
+	if r.Method == http.MethodGet {
+		_, _ = w.Write(content)
+	}
+}
+
 func (m *recoveryManager) downloadBackup(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -477,7 +523,7 @@ async function login(){const token=document.getElementById("token").value;const 
 async function logout(){await fetch(api+"/logout",{method:"POST"});document.getElementById("console").classList.add("hidden");document.getElementById("login").classList.remove("hidden")}
 function card(name,c){return '<div class="status"><div class="name">'+esc(name)+' <span class="'+esc(c.status)+'">'+esc(c.status)+'</span></div><div class="detail">'+esc(c.detail)+'</div></div>'}
 function table(rows,cols){if(!rows.length)return '<div class="detail">None.</div>';return '<table><thead><tr>'+cols.map(c=>'<th>'+esc(c[0])+'</th>').join('')+'</tr></thead><tbody>'+rows.map(row=>'<tr>'+cols.map(c=>'<td>'+c[2](row[c[1]],row)+'</td>').join('')+'</tr>').join('')+'</tbody></table>'}
-async function loadStatus(){const r=await fetch(api+"/status");if(r.status===401){document.getElementById("console").classList.add("hidden");document.getElementById("login").classList.remove("hidden");return}const s=await r.json();document.getElementById("login").classList.add("hidden");document.getElementById("console").classList.remove("hidden");document.getElementById("health").innerHTML=card("Control plane",s.control_plane)+card("Backend",s.backend)+card("Nginx",s.nginx)+card("/data",s.data)+card("Let's Encrypt",s.letsencrypt);document.getElementById("failed").innerHTML=table(s.failed_candidates,[["Path","path",v=>esc(v)],["Size","size",v=>esc(v+" B")],["Modified","modified_at",v=>esc(v)]]);document.getElementById("backups").innerHTML=table(s.backups,[["Backup","name",v=>esc(v)],["Size","size",v=>esc(v+" B")],["Modified","modified_at",v=>esc(v)],["","name",v=>'<a href="'+api+'/backups/'+encodeURIComponent(v)+'">Download</a>']])}
+async function loadStatus(){const r=await fetch(api+"/status");if(r.status===401){document.getElementById("console").classList.add("hidden");document.getElementById("login").classList.remove("hidden");return}const s=await r.json();document.getElementById("login").classList.add("hidden");document.getElementById("console").classList.remove("hidden");document.getElementById("health").innerHTML=card("Control plane",s.control_plane)+card("Backend",s.backend)+card("Nginx",s.nginx)+card("/data",s.data)+card("Let's Encrypt",s.letsencrypt);document.getElementById("failed").innerHTML=table(s.failed_candidates,[["Path","path",v=>esc(v)],["Size","size",v=>esc(v+" B")],["Modified","modified_at",v=>esc(v)],["","path",v=>'<a target="_blank" rel="noopener" href="'+api+'/failed?path='+encodeURIComponent(v)+'">View</a>']]);document.getElementById("backups").innerHTML=table(s.backups,[["Backup","name",v=>esc(v)],["Size","size",v=>esc(v+" B")],["Modified","modified_at",v=>esc(v)],["","name",v=>'<a href="'+api+'/backups/'+encodeURIComponent(v)+'">Download</a>']])}
 async function action(path){const r=await fetch(api+path,{method:"POST"});let body={};try{body=await r.json()}catch{}document.getElementById("nginxOutput").textContent=JSON.stringify(body,null,2);await loadStatus()}
 const nginxTest=()=>action("/nginx/test");const nginxReload=()=>action("/nginx/reload");loadStatus();
 </script>
