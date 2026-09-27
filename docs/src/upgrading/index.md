@@ -17,6 +17,14 @@ Back up:
 
 For external MySQL/MariaDB/PostgreSQL deployments, back up the database as well.
 
+## NPM Improved backup bundles
+
+In addition to infrastructure snapshots, **Settings → Backup & Recovery** can create encrypted Configuration or Full Disaster Recovery bundles.
+
+A Configuration backup is suitable for portable configuration migration. A Full Disaster Recovery backup additionally contains users/authentication/JWT state and is intended to rebuild the same instance.
+
+See [Backup & Disaster Recovery](/guide/disaster-recovery).
+
 ## Recommended process
 
 1. stop or snapshot the existing deployment;
