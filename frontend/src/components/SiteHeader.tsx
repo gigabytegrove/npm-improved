@@ -34,12 +34,12 @@ export function SiteHeader() {
 									width={36}
 									height={36}
 									className="navbar-brand-image"
-									alt="NPM Improved"
+									alt="NPMi"
 								/>
 							</span>
 							<span className={styles.wordmark}>
-								<span className={styles.name}>NPM Improved</span>
-								<span className={styles.tagline}>Control Plane</span>
+								<span className={styles.name}>NPMi</span>
+								<span className={styles.tagline}>Nginx Proxy Manager Improved</span>
 							</span>
 						</span>
 					</NavLink>
