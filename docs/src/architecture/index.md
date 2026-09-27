@@ -57,6 +57,42 @@ Host database state is also restored when a host transaction fails.
 
 Managed settings that generate Nginx configuration use the same transaction helper. This includes the default site and HTTP Protection policy.
 
+## Durable configuration revisions
+
+Host and stream mutations are recorded in the `config_revision` table at the same transaction boundary used to activate Nginx.
+
+A revision stores:
+
+- object type and object ID;
+- operation and actor;
+- database snapshot;
+- generated Nginx configuration;
+- Pending, Active, Superseded, or Failed state;
+- exact validation/reload error and failure phase;
+- source revision when the change was produced by a restore.
+
+Before the first recorded change to an existing object, NPM Improved captures the currently serving state as a baseline Active revision. This gives upgraded installations a last-known-good restore point without rewriting every host at startup.
+
+Only a successful Nginx activation becomes Active. The previous Active revision becomes Superseded in the same database transaction. Failed candidates remain Failed and the prior Active revision remains authoritative.
+
+Restoring a revision is itself a new transaction:
+
+```text
+stored snapshot
+      ↓
+restore database candidate
+      ↓
+regenerate Nginx config
+      ↓
+nginx -t
+      ↓
+reload
+      ↓
+new Active revision
+```
+
+The source revision remains immutable history. If the restore cannot validate or reload, the current database state is restored and the existing last-known-good Nginx configuration remains in service.
+
 ## Certificate lifecycle
 
 A certificate is considered in use when a non-deleted proxy host, redirection host, 404 host, or stream references it. Disabled hosts still count as references.
