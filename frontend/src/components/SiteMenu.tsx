@@ -4,6 +4,7 @@ import {
 	IconFileText,
 	IconHome,
 	IconHistory,
+	IconHeartbeat,
 	IconLock,
 	IconSettings,
 	IconShield,
@@ -107,6 +108,12 @@ const menuItems: MenuItem[] = [
 		to: "/logs",
 		icon: IconFileText,
 		label: "logs",
+		permissionSection: ADMIN,
+	},
+	{
+		to: "/system-health",
+		icon: IconHeartbeat,
+		label: "system-health",
 		permissionSection: ADMIN,
 	},
 	{
