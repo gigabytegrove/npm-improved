@@ -213,10 +213,53 @@ export default function Database() {
 			</div>
 
 			{status.mysqlSharedMode ? (
-				<Alert variant="info">
-					<div className="fw-bold mb-1">This node is using Shared MySQL mode.</div>
-					Database changes are common to every NPMi node using this database. Each node watches for changes and regenerates its own Nginx configuration. JWT signing identity is also coordinated through the shared database so users can move between nodes without being logged out.
-				</Alert>
+				<>
+					<Alert variant="info">
+						<div className="fw-bold mb-1">This node is using Shared MySQL mode.</div>
+						Database changes are common to every NPMi node using this database. Each node watches for changes and regenerates its own Nginx configuration. JWT signing identity is also coordinated through the shared database so users can move between nodes without being logged out.
+					</Alert>
+					<div className="card mb-4">
+						<div className="card-header">
+							<div>
+								<h3 className="card-title mb-1">Shared database nodes</h3>
+								<div className="text-secondary small">
+									Nodes appear here after they check in to this MySQL database.
+								</div>
+							</div>
+						</div>
+						<div className="table-responsive">
+							<table className="table table-vcenter card-table">
+								<thead>
+									<tr>
+										<th>Node</th>
+										<th>Version</th>
+										<th>Last seen</th>
+									</tr>
+								</thead>
+								<tbody>
+									{status.sharedNodes.length ? (
+										status.sharedNodes.map((node) => (
+											<tr key={node.id}>
+												<td>
+													<div className="fw-bold">{node.name}</div>
+													<div className="small text-secondary">{node.id}</div>
+												</td>
+												<td>{node.version}</td>
+												<td>{node.lastSeen ? new Date(node.lastSeen).toLocaleString() : "Unknown"}</td>
+											</tr>
+										))
+									) : (
+										<tr>
+											<td colSpan={3} className="text-center text-secondary py-4">
+												No shared-database node heartbeat has been recorded yet.
+											</td>
+										</tr>
+									)}
+								</tbody>
+							</table>
+						</div>
+					</div>
+				</>
 			) : null}
 
 			<div className="card mb-4">
@@ -440,7 +483,7 @@ export default function Database() {
 							</div>
 							<div className="small mt-2">
 								{testResult.npmSchema
-									? `NPM Improved schema detected · ${testResult.rowCount} existing data rows · migration ${testResult.migration}`
+									? `NPM Improved schema detected · ${testResult.rowCount} existing data rows · migration ${testResult.migration}${testResult.sharedVersion ? ` · shared cluster ${testResult.sharedVersion}` : ""}`
 									: "Database is reachable and does not currently contain an NPM Improved schema."}
 							</div>
 						</Alert>
