@@ -188,62 +188,34 @@ export default function Login() {
 
 	return (
 		<Page className={`page page-center ${styles.loginPage}`}>
-			<div className={styles.authShell}>
-				<section className={styles.brandPanel}>
-					<div className={styles.brandLockup}>
-						<div className={styles.fullLogoPlate}>
-							<img
-								src="/images/npm-improved-logo.webp"
-								className={styles.fullLogo}
-								alt="Nginx Proxy Manager Improved"
-							/>
-						</div>
-					</div>
-					<div className={styles.heroCopy}>
-						<span className={styles.heroEyebrow}>
-							<T id="login.hero.eyebrow" />
-						</span>
-						<h2>
-							<T id="login.hero.title" />
-						</h2>
-						<p>
-							<T id="login.hero.description" />
-						</p>
-						<div className={styles.featureGrid}>
-							<span>
-								<T id="login.hero.feature-config" />
-							</span>
-							<span>
-								<T id="login.hero.feature-recovery" />
-							</span>
-							<span>
-								<T id="login.hero.feature-health" />
-							</span>
-						</div>
-					</div>
-					<div className={styles.brandFooter}>Built for reliable self-hosted infrastructure.</div>
-				</section>
-
-				<section className={styles.formPanel}>
+			<main className={styles.loginShell}>
+				<section className={styles.loginCard} aria-label="NPM Improved sign in">
 					<div className={styles.toolbar}>
 						<LocalePicker />
 						<ThemeSwitcher />
 					</div>
-					<div className={styles.formWrap}>
-						<div className={styles.mobileBrand}>
-							<img src="/images/npm-improved-mark.webp" width={62} height={41} alt="" />
-							<div>
-								<strong>Nginx Proxy Manager</strong>
-								<span>
-									<T id="app.tagline" />
-								</span>
-							</div>
+
+					<div className={styles.brand}>
+						<div className={styles.brandMark}>
+							<img src="/images/npm-improved-mark.webp" alt="" />
 						</div>
+						<div className={styles.brandName}>NPM Improved</div>
+						<div className={styles.brandTagline}>Reverse proxy control center</div>
+					</div>
+
+					<div className={styles.formWrap}>
 						{twoFactorChallenge ? <TwoFactorForm /> : <LoginForm />}
-						<div className={styles.version}>NPM Improved {getVersion()}</div>
+					</div>
+
+					<div className={styles.cardFooter}>
+						<span>NPM Improved {getVersion()}</span>
+						<span className={styles.footerDivider} aria-hidden="true">
+							•
+						</span>
+						<span>Self-hosted infrastructure control</span>
 					</div>
 				</section>
-			</div>
+			</main>
 		</Page>
 	);
 }
