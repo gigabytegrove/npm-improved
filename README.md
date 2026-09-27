@@ -161,22 +161,6 @@ However, this fork introduces new generated configuration, settings, control-pla
 
 See the documentation under `docs/src/upgrading/` for current upgrade notes.
 
-## Repository protection
-
-The intended GitHub branch/tag protection policy is versioned under:
-
-```text
-.github/rulesets/
-```
-
-The `develop` branch policy requires pull requests, resolved review conversations, current required checks, and blocks deletion/force-push behavior. Release tags matching `v*` are intended to be immutable.
-
-The checked-in rulesets can be applied by a repository administrator with:
-
-```bash
-./scripts/apply-repository-rulesets.sh
-```
-
 ## Security
 
 Please do **not** open public issues for security vulnerabilities.
