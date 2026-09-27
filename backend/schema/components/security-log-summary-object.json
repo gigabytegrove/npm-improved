@@ -1,0 +1,70 @@
+{
+	"type": "object",
+	"required": [
+		"requestsAnalyzed",
+		"eventsDetected",
+		"blockedResponses",
+		"uniqueIps",
+		"topSources",
+		"topHosts",
+		"categories",
+		"statuses",
+		"events",
+		"hours",
+		"sourcesScanned",
+		"filesMissing",
+		"filesTruncated",
+		"hostLimitReached",
+		"generatedAt"
+	],
+	"properties": {
+		"requestsAnalyzed": { "type": "integer", "minimum": 0 },
+		"eventsDetected": { "type": "integer", "minimum": 0 },
+		"blockedResponses": { "type": "integer", "minimum": 0 },
+		"uniqueIps": { "type": "integer", "minimum": 0 },
+		"hours": { "type": "integer", "minimum": 1, "maximum": 168 },
+		"sourcesScanned": { "type": "integer", "minimum": 0 },
+		"filesMissing": { "type": "integer", "minimum": 0 },
+		"filesTruncated": { "type": "integer", "minimum": 0 },
+		"hostLimitReached": { "type": "boolean" },
+		"generatedAt": { "type": "string", "format": "date-time" },
+		"topSources": {
+			"type": "array",
+			"items": { "$ref": "./security-log-count-object.json" }
+		},
+		"topHosts": {
+			"type": "array",
+			"items": { "$ref": "./security-log-count-object.json" }
+		},
+		"categories": {
+			"type": "array",
+			"items": { "$ref": "./security-log-count-object.json" }
+		},
+		"statuses": {
+			"type": "array",
+			"items": { "$ref": "./security-log-count-object.json" }
+		},
+		"events": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"required": ["category", "label", "severity", "confidence", "status", "method", "host", "uri", "clientIp"],
+				"properties": {
+					"category": { "type": "string" },
+					"label": { "type": "string" },
+					"severity": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+					"confidence": { "type": "string", "enum": ["heuristic", "strong"] },
+					"timestamp": { "type": ["string", "null"], "format": "date-time" },
+					"status": { "type": "integer" },
+					"method": { "type": "string" },
+					"host": { "type": "string" },
+					"uri": { "type": "string" },
+					"clientIp": { "type": "string" },
+					"userAgent": { "type": "string" },
+					"sourceHostType": { "type": ["string", "null"] },
+					"sourceHostId": { "type": ["integer", "null"] }
+				}
+			}
+		}
+	}
+}
