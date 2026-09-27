@@ -247,9 +247,10 @@ set_env() {
 # default to the locally built image.
 set_env NPM_HOST_PROJECT_DIR "$ROOT_DIR"
 set_env NPM_DEPLOYMENT_MODE "$MODE"
-if ! grep -q '^NPM_IMAGE=' .env; then
-	set_env NPM_IMAGE "npm-improved:local"
-fi
+# Running the source installer intentionally returns the application service
+# to the locally built image. The UI updater changes NPM_IMAGE to an official
+# stable GHCR image only when a managed update is installed.
+set_env NPM_IMAGE "npm-improved:local"
 
 find_free_port() {
 	local candidate="$1"
