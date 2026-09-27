@@ -10,8 +10,6 @@
 		"object_id",
 		"operation",
 		"status",
-		"config_text",
-		"snapshot",
 		"meta"
 	],
 	"properties": {
@@ -63,11 +61,13 @@
 			]
 		},
 		"config_text": {
-			"type": "string"
+			"type": "string",
+			"description": "Generated Nginx configuration. Included by the single-revision endpoint."
 		},
 		"snapshot": {
 			"type": "object",
-			"additionalProperties": true
+			"additionalProperties": true,
+			"description": "Stored database snapshot. Included by the single-revision endpoint."
 		},
 		"error_text": {
 			"type": [
