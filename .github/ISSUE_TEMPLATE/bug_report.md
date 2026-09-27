@@ -1,55 +1,49 @@
 ---
 name: Bug report
-about: Create a report to help us improve
+about: Report a reproducible NPM Improved defect
 title: ''
 labels: bug
 assignees: ''
-
 ---
-<!--
- 
-Are you in the right place?
-- If you are looking for support on how to get your upstream server forwarding, please consider asking the community on Reddit.
-- If you are writing code changes to contribute and need to ask about the internals of the software, Gitter is the best place to ask.
-- If you think you found a bug with NPM (not Nginx, or your upstream server or MySql) then you are in the *right place.*
 
--->
+> Do not disclose security vulnerabilities here. Use the private reporting process in SECURITY.md.
 
-**Checklist**
-- Have you pulled and found the error with `jc21/nginx-proxy-manager:latest` docker image?
-  - Yes / No
-- Are you sure you're not using someone else's docker image?
-  - Yes / No
-- Have you searched for similar issues (both open and closed)?
-  - Yes / No
+## Checklist
 
-**Describe the bug**
-<!-- A clear and concise description of what the bug is. -->
+- [ ] I reproduced this with NPM Improved, not an upstream `jc21/nginx-proxy-manager` image.
+- [ ] I am using the latest relevant NPM Improved commit/release for this report.
+- [ ] I searched existing reports/pull requests for the same problem.
+- [ ] I removed passwords, tokens, private keys, and other secrets from logs.
 
+## NPM Improved version
 
-**Nginx Proxy Manager Version**
-<!-- What version of Nginx Proxy Manager is reported on the login page? -->
+Commit SHA, release/tag, or image identifier:
 
+## Deployment
 
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
+- Architecture: amd64 / arm64
+- Database: SQLite / MariaDB/MySQL / PostgreSQL
+- Docker / Compose versions:
+- Browser (for UI issues):
 
+## What happened?
 
-**Expected behavior**
-<!-- A clear and concise description of what you expected to happen. -->
+Describe the actual behavior.
 
+## What should have happened?
 
-**Screenshots**
-<!-- If applicable, add screenshots to help explain your problem. -->
+Describe the expected behavior.
 
+## Reproduction steps
 
-**Operating System**
-<!-- Please specify if using a Rpi, Mac, orchestration tool or any other setups that might affect the reproduction of this error. -->
+1.
+2.
+3.
 
+## Relevant logs
 
-**Additional context**
-<!-- Add any other context about the problem here, docker version, browser version, logs if applicable to the problem. Too much info is better than too little. -->
+Include the smallest useful log/config excerpts. For Nginx configuration failures, include the reported validation/reload error and whether rollback occurred.
+
+## Additional context
+
+Screenshots, host type, certificate type, Protection profile, network topology, or other details that materially affect reproduction.
