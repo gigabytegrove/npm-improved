@@ -2,7 +2,7 @@
 
 This roadmap records planned post-1.0 work that has been accepted for future NPM Improved releases.
 
-## v1.1.0 — Native Control Center Updates
+## v1.1.0 — Native Control Center Updates (implemented)
 
 ### Goal
 
@@ -51,7 +51,7 @@ The update process must resolve and record the image digest before replacement a
 
 ### Control Center
 
-Add **Settings → System & Updates**.
+Add **Settings → Update**.
 
 Display:
 
@@ -178,7 +178,7 @@ Audit records must include:
 
 ### Acceptance criteria
 
-v1.1.0 is not complete until all of the following are true:
+v1.1.0 implementation requirements:
 
 - stable GHCR images are published automatically by the release workflow;
 - a healthy single-node Docker installation can update from the Control Center with one **Update** action;

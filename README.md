@@ -25,7 +25,7 @@
 
 > **Current release**
 >
-> NPM Improved **v1.0.0** is the first stable release. The `develop` branch remains the active integration branch. Current deployments build directly from this repository with the included Docker installer; a pre-built container image is not published yet.
+> NPM Improved **v1.1.0** adds the built-in **Settings → Update** manager and official stable multi-architecture container images. The `develop` branch remains the active integration branch.
 
 ## What is NPM Improved?
 
@@ -48,6 +48,7 @@ NPM Improved keeps that simple workflow, but adds the things that become importa
 - system-health monitoring;
 - logs and security-event visibility;
 - built-in HTTP protection controls;
+- a native **Settings → Update** manager with health-verified updates and rollback;
 - a redesigned management interface intended for day-to-day operations.
 
 You do **not** need to understand raw Nginx configuration files to use these features.
@@ -466,25 +467,30 @@ Keep both locations on persistent storage.
 
 Even though NPM Improved includes application-level backups, infrastructure-level backups or snapshots of these locations are still recommended.
 
-## Updating an existing source-based installation
+## Updating
 
-The current development workflow builds NPM Improved from the repository.
+Beginning with v1.1.0, normal single-node Docker installations can use **Settings → Update**.
 
-For a typical SQLite installation:
+The Update workspace shows the installed and latest stable versions, release notes, update progress, restart controls, and the previous image when rollback is available. Update/restart/rollback actions require the current administrator password.
+
+NPM Improved uses a temporary, self-cleaning Docker handoff only while replacing the running application container. There is no permanent updater worker.
+
+The move from v1.0.0 to v1.1.0 is the final normal CLI upgrade because v1.0.0 does not yet contain the Update manager. A typical SQLite upgrade is:
 
 ```bash
 cd ~/npm-improved
 git checkout develop
 git pull --ff-only
-./scripts/install-docker sqlite --clean-build
+./scripts/install-docker sqlite
 ```
 
-For v1.x upgrades:
+Shared MySQL and Instance Synchronization deployments are intentionally excluded from single-node automatic updates. Upgrade those nodes together during a coordinated maintenance window.
 
-- keep a current backup before upgrading;
-- review upgrade notes;
-- test important deployments before relying on a new release;
-- verify Proxy Hosts, certificates, streams, logs, health, database state, and synchronization after upgrading.
+For every upgrade:
+
+- keep a current backup;
+- review release notes;
+- verify Proxy Hosts, certificates, streams, logs, health, and database state afterward.
 
 ## Compatibility with Nginx Proxy Manager
 
@@ -525,7 +531,7 @@ For multi-node deployments, NPM Improved keeps the proxy configuration synchroni
 
 ## Project status and releases
 
-NPM Improved is on the stable **1.x** version line. **v1.0.0** is the first stable release.
+NPM Improved is on the stable **1.x** version line. **v1.1.0** adds native Control Center updates and official stable container images.
 
 The active integration branch is:
 

@@ -32,10 +32,11 @@ const internalRemoteVersion = {
 	 * release is a valid state and is cached as "no update available".
 	 * @return {Promise<{current: string, latest: string | null, update_available: boolean}>}
 	 */
-	get: async () => {
+	get: async (refresh = false) => {
 		const currentVersion = getCurrentVersion();
 
 		if (
+			refresh ||
 			!internalRemoteVersion.last_result ||
 			!internalRemoteVersion.last_fetch_time ||
 			Date.now() - internalRemoteVersion.last_fetch_time > internalRemoteVersion.cache_timeout
@@ -62,6 +63,10 @@ const internalRemoteVersion = {
 			update_available: latestVersion
 				? internalRemoteVersion.compareVersions(currentVersion, latestVersion)
 				: false,
+			release_name: internalRemoteVersion.last_result?.name || null,
+			release_notes: internalRemoteVersion.last_result?.body || null,
+			published_at: internalRemoteVersion.last_result?.published_at || null,
+			release_url: internalRemoteVersion.last_result?.html_url || null,
 		};
 	},
 

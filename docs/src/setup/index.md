@@ -6,7 +6,7 @@ outline: deep
 
 ## Docker quick start
 
-NPM Improved v1.0.0 is the first stable release. A pre-built container image is not published yet. The repository includes production Compose files that build the image directly from the checked-out source.
+NPM Improved v1.1.0 publishes official stable multi-architecture images and includes the built-in **Settings → Update** manager. The repository also retains production Compose files and the Docker installer for first installation, source builds, and recovery.
 
 Requirements:
 
@@ -224,31 +224,19 @@ The independent control plane also exposes:
 
 Before upgrading, back up `./data`, `./letsencrypt`, and the external database data when MariaDB or PostgreSQL is used.
 
-Use the installer target that matches the deployment:
+For normal single-node Docker installations running v1.1.0 or newer, open **Settings → Update**. The page checks the official stable release, shows release notes and progress, replaces only the application container through a temporary self-cleaning Docker handoff, and verifies the new container before reporting success. A failed health/build verification triggers automatic rollback to the previous image configuration.
 
-SQLite:
-
-```bash
-git checkout develop
-git pull --ff-only
-./scripts/install-docker sqlite --clean-build
-```
-
-MariaDB / MySQL:
+The first move from v1.0.0 to v1.1.0 still uses the installer because v1.0.0 does not contain the Update manager:
 
 ```bash
 git checkout develop
 git pull --ff-only
-./scripts/install-docker mysql --clean-build
+./scripts/install-docker sqlite
 ```
 
-PostgreSQL:
+Use `mysql` or `postgres` instead of `sqlite` for those underlying deployments. Add `--clean-build` only when a cache-free source rebuild is intentionally required.
 
-```bash
-git checkout develop
-git pull --ff-only
-./scripts/install-docker postgres --clean-build
-```
+Shared MySQL and Instance Synchronization deployments are updated as coordinated maintenance operations rather than through the single-node Update action.
 
 If **Settings → Database & Storage** selected a runtime database, that selection is stored under `/data` and survives the rebuild.
 

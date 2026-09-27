@@ -24,6 +24,10 @@ export interface VersionCheckResponse {
 	current: string | null;
 	latest: string | null;
 	updateAvailable: boolean;
+	releaseName?: string | null;
+	releaseNotes?: string | null;
+	publishedAt?: string | null;
+	releaseUrl?: string | null;
 }
 
 export interface TwoFactorChallengeResponse {
