@@ -1,5 +1,5 @@
 import { IconHelp, IconSearch } from "@tabler/icons-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Alert from "react-bootstrap/Alert";
 import { deleteCertificate, downloadCertificate } from "src/api/backend";
 import { Button, HasPermission, LoadingPage } from "src/components";
@@ -17,8 +17,11 @@ import { CERTIFICATES, MANAGE } from "src/modules/Permissions";
 import { showError, showObjectSuccess } from "src/notifications";
 import Table from "./Table";
 
+type CertificateView = "active" | "unused";
+
 export default function TableWrapper() {
 	const [search, setSearch] = useState("");
+	const [view, setView] = useState<CertificateView>("active");
 	const { isFetching, isLoading, isError, error, data } = useCertificates([
 		"owner",
 		"dead_hosts",
@@ -26,6 +29,9 @@ export default function TableWrapper() {
 		"redirection_hosts",
 		"streams",
 	]);
+
+	const activeCertificates = useMemo(() => (data ?? []).filter((item) => item.isInUse !== false), [data]);
+	const unusedCertificates = useMemo(() => (data ?? []).filter((item) => item.isInUse === false), [data]);
 
 	if (isLoading) {
 		return <LoadingPage />;
@@ -48,17 +54,14 @@ export default function TableWrapper() {
 		}
 	};
 
-	let filtered = null;
-	if (search && data) {
-		filtered = data?.filter(
-			(item) =>
-				item.domainNames.some((domain: string) => domain.toLowerCase().includes(search)) ||
-				item.niceName.toLowerCase().includes(search),
-		);
-	} else if (search !== "") {
-		// this can happen if someone deletes the last item while searching
-		setSearch("");
-	}
+	const visibleCertificates = view === "active" ? activeCertificates : unusedCertificates;
+	const filtered = search
+		? visibleCertificates.filter(
+				(item) =>
+					item.domainNames.some((domain: string) => domain.toLowerCase().includes(search)) ||
+					item.niceName.toLowerCase().includes(search),
+			)
+		: visibleCertificates;
 
 	return (
 		<div className="card mt-4">
@@ -83,6 +86,7 @@ export default function TableWrapper() {
 											type="text"
 											className="form-control form-control-sm"
 											autoComplete="off"
+											value={search}
 											onChange={(e: any) => setSearch(e.target.value.toLowerCase().trim())}
 										/>
 									</div>
@@ -140,8 +144,46 @@ export default function TableWrapper() {
 						</div>
 					</div>
 				</div>
+
+				{data?.length ? (
+					<>
+						<div className="card-header py-2">
+							<div className="btn-group" role="group" aria-label="Certificate status">
+								<button
+									type="button"
+									className={`btn btn-sm ${view === "active" ? "btn-pink" : "btn-outline-secondary"}`}
+									onClick={() => {
+										setView("active");
+										setSearch("");
+									}}
+								>
+									Active <span className="badge bg-white text-dark ms-1">{activeCertificates.length}</span>
+								</button>
+								<button
+									type="button"
+									className={`btn btn-sm ${view === "unused" ? "btn-pink" : "btn-outline-secondary"}`}
+									onClick={() => {
+										setView("unused");
+										setSearch("");
+									}}
+								>
+									Unused <span className="badge bg-white text-dark ms-1">{unusedCertificates.length}</span>
+								</button>
+							</div>
+						</div>
+						{view === "unused" ? (
+							<div className="px-3 pt-3">
+								<Alert variant="warning" className="mb-0">
+									Unused certificates are quarantined before cleanup. Referencing one from any host cancels
+									its quarantine automatically.
+								</Alert>
+							</div>
+						) : null}
+					</>
+				) : null}
+
 				<Table
-					data={filtered ?? data ?? []}
+					data={filtered}
 					isFiltered={!!search}
 					isFetching={isFetching}
 					onRenew={showRenewCertificateModal}
