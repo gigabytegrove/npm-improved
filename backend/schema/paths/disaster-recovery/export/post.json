@@ -1,0 +1,32 @@
+{
+	"operationId": "exportDisasterRecoveryBackup",
+	"summary": "Create an encrypted NPM Improved backup",
+	"tags": ["disaster-recovery"],
+	"security": [{"bearerAuth": ["admin"]}],
+	"requestBody": {
+		"required": true,
+		"content": {
+			"application/json": {
+				"schema": {
+					"type": "object",
+					"additionalProperties": false,
+					"required": ["scope", "passphrase"],
+					"properties": {
+						"scope": {"type": "string", "enum": ["configuration", "disaster-recovery"]},
+						"passphrase": {"type": "string", "minLength": 12}
+					}
+				}
+			}
+		}
+	},
+	"responses": {
+		"200": {
+			"description": "Encrypted .npmibak backup bundle",
+			"content": {
+				"application/vnd.npm-improved.backup": {
+					"schema": {"type": "string", "format": "binary"}
+				}
+			}
+		}
+	}
+}
