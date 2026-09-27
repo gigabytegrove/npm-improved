@@ -475,6 +475,131 @@ const parseUploadedBundle = (file, passphrase) => {
 	}
 };
 
+
+const readScheduledBackupConfig = () => {
+	const passphrase = process.env.NPM_BACKUP_PASSPHRASE || "";
+	const requestedScope = process.env.NPM_BACKUP_SCOPE || "disaster-recovery";
+	const scope = TABLES[requestedScope] ? requestedScope : "disaster-recovery";
+	const intervalHoursRaw = Number.parseInt(process.env.NPM_BACKUP_INTERVAL_HOURS || "24", 10);
+	const retentionRaw = Number.parseInt(process.env.NPM_BACKUP_RETENTION || "7", 10);
+	const intervalHours = Number.isInteger(intervalHoursRaw) ? Math.min(Math.max(intervalHoursRaw, 1), 8760) : 24;
+	const retention = Number.isInteger(retentionRaw) ? Math.min(Math.max(retentionRaw, 1), 365) : 7;
+
+	return {
+		enabled: passphrase.length >= 12,
+		scope,
+		intervalHours,
+		retention,
+		passphrase,
+	};
+};
+
+const listRetainedBackups = () => {
+	const backupDir = "/data/backups";
+	if (!fs.existsSync(backupDir)) return [];
+	return fs
+		.readdirSync(backupDir)
+		.filter((name) => name.endsWith(".npmibak"))
+		.map((name) => {
+			const fullPath = path.join(backupDir, name);
+			const stat = fs.statSync(fullPath);
+			return {
+				name,
+				size: stat.size,
+				modifiedAt: stat.mtime.toISOString(),
+				type: name.startsWith("scheduled-") ? "scheduled" : name.startsWith("pre-restore-") ? "pre-restore" : "manual",
+				mtime: stat.mtimeMs,
+			};
+		})
+		.sort((a, b) => b.mtime - a.mtime);
+};
+
+const createRetainedBackup = async ({ scope, passphrase, prefix = "scheduled", retention = 7 }) => {
+	if (!TABLES[scope]) throw new Error("Backup scope is unsupported");
+	const database = await captureDatabase(scope);
+	const filesystem = captureFilesystem(scope);
+	const payload = makePayload(scope, database, filesystem);
+	const backupDir = "/data/backups";
+	fs.mkdirSync(backupDir, { recursive: true, mode: 0o700 });
+	const filename =
+		prefix +
+		"-" +
+		new Date().toISOString().replace(/[:.]/g, "-") +
+		"-" +
+		scope +
+		".npmibak";
+	const fullPath = path.join(backupDir, filename);
+	fs.writeFileSync(fullPath, createBackupEnvelope(payload, passphrase), { mode: 0o600 });
+
+	const retained = listRetainedBackups().filter((item) => item.type === prefix);
+	for (const stale of retained.slice(retention)) {
+		fs.rmSync(path.join(backupDir, stale.name), { force: true });
+	}
+	return {
+		path: fullPath,
+		name: filename,
+		summary: summarize({ ...payload, format_version: 1 }),
+	};
+};
+
+
+const performRestore = async ({ bundle, passphrase, currentUserId = null, access = null }) => {
+	const rollbackScope = bundle.scope === "disaster-recovery" ? "disaster-recovery" : "configuration";
+	const previousDatabase = await captureDatabase(rollbackScope);
+	const safetyBackupPath = writePreRestoreBackup(rollbackScope, previousDatabase, passphrase);
+	const rollbackRoot = snapshotLiveFilesystem();
+
+	restoreInProgress = true;
+	try {
+		await replaceDatabase(
+			bundle.database,
+			bundle.scope,
+			bundle.scope === "configuration" ? currentUserId : null,
+		);
+		restoreFilesystem(bundle);
+		await regenerateNginx();
+
+		removePath(rollbackRoot);
+		if (access) {
+			await internalAuditLog.add(access, {
+				action: "restored",
+				object_type: "disaster-recovery",
+				object_id: 0,
+				meta: {
+					scope: bundle.scope,
+					source_version: bundle.source?.version || "unknown",
+					safety_backup_path: safetyBackupPath,
+				},
+			});
+		}
+		return {
+			ok: true,
+			scope: bundle.scope,
+			restoredAt: new Date().toISOString(),
+			restartRequired: bundle.scope === "disaster-recovery",
+			safetyBackupPath,
+			summary: summarize(bundle),
+		};
+	} catch (err) {
+		try {
+			await replaceDatabase(
+				previousDatabase,
+				rollbackScope,
+				bundle.scope === "configuration" ? currentUserId : null,
+			);
+			restoreLiveFilesystemSnapshot(rollbackRoot);
+			await internalNginx.test();
+			await internalNginx.reload();
+		} catch (rollbackErr) {
+			err.rollbackError = rollbackErr;
+		}
+		throw err;
+	} finally {
+		restoreInProgress = false;
+		removePath(rollbackRoot);
+	}
+};
+
 const internalDisasterRecovery = {
 	status: async (access) => {
 		await access.can("settings:update", "disaster-recovery");
@@ -490,6 +615,18 @@ const internalDisasterRecovery = {
 			encryptionRequired: true,
 			minimumPassphraseLength: 12,
 			restoreInProgress,
+			automation: (() => {
+				const config = readScheduledBackupConfig();
+				const retained = listRetainedBackups().filter((item) => item.type === "scheduled");
+				return {
+					enabled: config.enabled,
+					scope: config.scope,
+					intervalHours: config.intervalHours,
+					retention: config.retention,
+					retainedCount: retained.length,
+					latestBackup: retained[0] || null,
+				};
+			})(),
 		};
 	},
 
@@ -528,6 +665,34 @@ const internalDisasterRecovery = {
 		return validateBundle(parseUploadedBundle(file, passphrase));
 	},
 
+	runScheduledBackup: async () => {
+		const config = readScheduledBackupConfig();
+		if (!config.enabled) {
+			return { enabled: false, skipped: true };
+		}
+		const result = await createRetainedBackup({
+			scope: config.scope,
+			passphrase: config.passphrase,
+			prefix: "scheduled",
+			retention: config.retention,
+		});
+		return {
+			enabled: true,
+			skipped: false,
+			...result,
+		};
+	},
+
+	getScheduledBackupConfig: () => {
+		const config = readScheduledBackupConfig();
+		return {
+			enabled: config.enabled,
+			scope: config.scope,
+			intervalHours: config.intervalHours,
+			retention: config.retention,
+		};
+	},
+
 	restore: async (access, { file, passphrase, confirmation }) => {
 		await access.can("settings:update", "disaster-recovery");
 		if (confirmation !== "RESTORE") {
@@ -538,59 +703,39 @@ const internalDisasterRecovery = {
 		}
 
 		const bundle = parseUploadedBundle(file, passphrase);
-		const currentUserId = access.token.getUserId(1);
-		const rollbackScope = bundle.scope === "disaster-recovery" ? "disaster-recovery" : "configuration";
-		const previousDatabase = await captureDatabase(rollbackScope);
-		const safetyBackupPath = writePreRestoreBackup(rollbackScope, previousDatabase, passphrase);
-		const rollbackRoot = snapshotLiveFilesystem();
+		return performRestore({
+			bundle,
+			passphrase,
+			currentUserId: access.token.getUserId(1),
+			access,
+		});
+	},
 
-		restoreInProgress = true;
-		try {
-			await replaceDatabase(
-				bundle.database,
-				bundle.scope,
-				bundle.scope === "configuration" ? currentUserId : null,
-			);
-			restoreFilesystem(bundle);
-			await regenerateNginx();
-
-			removePath(rollbackRoot);
-			await internalAuditLog.add(access, {
-				action: "restored",
-				object_type: "disaster-recovery",
-				object_id: 0,
-				meta: {
-					scope: bundle.scope,
-					source_version: bundle.source?.version || "unknown",
-					safety_backup_path: safetyBackupPath,
-				},
-			});
-			return {
-				ok: true,
-				scope: bundle.scope,
-				restoredAt: new Date().toISOString(),
-				restartRequired: bundle.scope === "disaster-recovery",
-				safetyBackupPath,
-				summary: summarize(bundle),
-			};
-		} catch (err) {
-			try {
-				await replaceDatabase(
-					previousDatabase,
-					rollbackScope,
-					bundle.scope === "configuration" ? currentUserId : null,
-				);
-				restoreLiveFilesystemSnapshot(rollbackRoot);
-				await internalNginx.test();
-				await internalNginx.reload();
-			} catch (rollbackErr) {
-				err.rollbackError = rollbackErr;
-			}
-			throw err;
-		} finally {
-			restoreInProgress = false;
-			removePath(rollbackRoot);
+	restoreEmergencyFile: async ({ filename, passphrase, confirmation }) => {
+		if (confirmation !== "RESTORE") {
+			throw new errs.ValidationError('Type "RESTORE" to confirm this destructive operation');
 		}
+		if (restoreInProgress) {
+			throw new errs.ValidationError("A restore is already in progress");
+		}
+		if (typeof filename !== "string" || !filename.endsWith(".npmibak") || !fs.existsSync(filename)) {
+			throw new errs.ValidationError("Emergency backup file is missing");
+		}
+		const stat = fs.statSync(filename);
+		if (!stat.isFile() || stat.size > MAX_BUNDLE_BYTES) {
+			throw new errs.ValidationError("Emergency backup file is invalid or too large");
+		}
+
+		const bundle = parseUploadedBundle({ data: fs.readFileSync(filename) }, passphrase);
+		if (bundle.scope !== "disaster-recovery") {
+			throw new errs.ValidationError(
+				"Native emergency restore only accepts full disaster-recovery backups",
+			);
+		}
+		return performRestore({
+			bundle,
+			passphrase,
+		});
 	},
 };
 

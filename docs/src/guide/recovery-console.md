@@ -55,7 +55,15 @@ Available recovery operations include:
 
 - run `nginx -t`;
 - validate and reload Nginx;
-- download retained encrypted recovery backups.
+- download retained encrypted recovery backups, including scheduled backups created under `/data/backups`;
+- upload/stage an encrypted `.npmibak` bundle under the recovery backup directory;
+- emergency-restore a **Full Disaster Recovery** bundle when the normal Node management API is unavailable.
+
+Emergency restore deliberately refuses to run while the normal management API is healthy. In that situation, use **Settings → Backup & Recovery**, where the backup can be inspected and restored through the normal authenticated workflow.
+
+The native emergency restore path uses the same Node database models and restore engine through a one-shot helper process, rather than reimplementing database/schema logic in Go. The backup passphrase is sent to that helper through stdin and is not placed on the command line or written to logs.
+
+Configuration-only backups cannot be restored from the native recovery console because their import semantics remap object ownership to the administrator performing the restore. Use the normal Backup & Recovery page for configuration-only imports.
 
 A recovery-triggered Nginx reload is never attempted unless `nginx -t` succeeds first.
 
@@ -98,6 +106,8 @@ The production defaults are:
 | Let's Encrypt root | `/etc/letsencrypt` |
 | Nginx binary | `/usr/sbin/nginx` |
 | Nginx PID file | `/run/nginx/nginx.pid` |
+| Node binary | `/usr/local/bin/node` |
+| Emergency restore helper | `/app/scripts/recovery-restore.js` |
 
 Advanced deployments can override these paths with:
 
@@ -108,6 +118,8 @@ NPM_DATA_DIR
 NPM_LETSENCRYPT_DIR
 NPM_NGINX_BINARY
 NPM_NGINX_PID_FILE
+NPM_NODE_BINARY
+NPM_RECOVERY_RESTORE_SCRIPT
 ```
 
 Changing these values is normally unnecessary in the standard container image.
