@@ -31,7 +31,7 @@ const (
 	defaultNginxBinary       = "/usr/sbin/nginx"
 	defaultNginxPIDFile      = "/run/nginx/nginx.pid"
 	defaultNodeBinary        = "/usr/local/bin/node"
-	defaultRecoveryScript    = "/app/backend/scripts/recovery-restore.js"
+	defaultRecoveryScript    = "/app/scripts/recovery-restore.js"
 )
 
 type config struct {
