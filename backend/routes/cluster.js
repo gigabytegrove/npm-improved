@@ -85,17 +85,27 @@ router.put("/settings", async (req, res, next) => {
 				additionalProperties: false,
 				properties: {
 					enabled: { type: "boolean" },
-					nodeName: { type: "string", minLength: 1, maxLength: 100 },
+					node_name: { type: "string", minLength: 1, maxLength: 100 },
 					role: { type: "string", enum: ["primary", "secondary"] },
-					publicUrl: { type: "string", maxLength: 2048 },
-					primaryUrl: { type: "string", maxLength: 2048 },
-					intervalSeconds: { type: "integer", minimum: 15, maximum: 3600 },
-					sharedSecret: { type: "string", minLength: 24, maxLength: 1024 },
+					public_url: { type: "string", maxLength: 2048 },
+					primary_url: { type: "string", maxLength: 2048 },
+					interval_seconds: { type: "integer", minimum: 15, maximum: 3600 },
+					shared_secret: { type: "string", minLength: 24, maxLength: 1024 },
 				},
 			},
 			req.body,
 		);
-		res.status(200).send(await internalInstanceSync.updateSettings(data));
+		res.status(200).send(
+			await internalInstanceSync.updateSettings({
+				enabled: data.enabled,
+				nodeName: data.node_name,
+				role: data.role,
+				publicUrl: data.public_url,
+				primaryUrl: data.primary_url,
+				intervalSeconds: data.interval_seconds,
+				sharedSecret: data.shared_secret,
+			}),
+		);
 	} catch (err) {
 		debug(logger, `PUT /cluster/settings: ${err}`);
 		next(err);
