@@ -1,3 +1,44 @@
+export interface ComponentHealth {
+	status: string;
+	latencyMs?: number;
+	httpStatus?: number;
+	pid?: number | null;
+	configValid?: boolean;
+	lastReload?: string | null;
+	path?: string;
+	renewalTimer?: boolean;
+	lifecycleTimer?: boolean;
+	renewalProcessing?: boolean;
+	lifecycleProcessing?: boolean;
+	activeRevisions?: number;
+	pendingRevisions?: number;
+	failedRevisions?: number;
+	latestActiveRevisionId?: number | null;
+	checks?: Record<string, ComponentHealth>;
+	[key: string]: any;
+}
+
+export interface ControlPlaneHealth {
+	status: "ok" | "degraded";
+	component: "control-plane";
+	checkedAt: string;
+	checks: Record<string, ComponentHealth>;
+}
+
+export interface SystemHealth {
+	status: "ok" | "degraded";
+	generatedAt: string;
+	backendUptimeSeconds: number;
+	checks: {
+		controlPlane: ComponentHealth;
+		nginx: ComponentHealth;
+		database: ComponentHealth;
+		certificateEngine: ComponentHealth;
+		logEngine: ComponentHealth;
+		revisionEngine: ComponentHealth;
+	};
+}
+
 export interface AppVersion {
 	major: number;
 	minor: number;
