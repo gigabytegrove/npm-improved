@@ -30,7 +30,7 @@ The default deployment uses SQLite at `/data/database.sqlite`.
 
 ## MariaDB / MySQL
 
-Copy and edit the environment file first. At minimum, replace `MYSQL_PASSWORD` and `MYSQL_ROOT_PASSWORD`.
+Copy and edit the environment file first. Set both `MYSQL_PASSWORD` and `MYSQL_ROOT_PASSWORD`. The MariaDB Compose stack refuses to start while either value is blank.
 
 ```bash
 cp .env.example .env
@@ -39,7 +39,7 @@ docker compose -f compose.mysql.yaml up -d --build
 
 ## PostgreSQL
 
-Copy and edit the environment file first. At minimum, replace `POSTGRES_PASSWORD`.
+Copy and edit the environment file first. Set `POSTGRES_PASSWORD`. The PostgreSQL Compose stack refuses to start while it is blank.
 
 ```bash
 cp .env.example .env
