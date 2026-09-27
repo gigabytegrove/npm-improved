@@ -95,6 +95,11 @@
 				"$ref": "./paths/logs/tail/get.json"
 			}
 		},
+		"/logs/security": {
+			"get": {
+				"$ref": "./paths/logs/security/get.json"
+			}
+		},
 		"/nginx/access-lists": {
 			"get": {
 				"$ref": "./paths/nginx/access-lists/get.json"

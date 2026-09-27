@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import errs from "../lib/error.js";
+import { parseAccessLogLine, summarizeSecurityRecords } from "../lib/security-events.js";
 import internalDeadHost from "./dead-host.js";
 import internalProxyHost from "./proxy-host.js";
 import internalRedirectionHost from "./redirection-host.js";
@@ -26,6 +27,13 @@ const CHUNK_SIZE = 64 * 1024;
 // Never scan further back than this, regardless of how many lines were requested,
 // so a huge or pathological log file can't turn a single request into unbounded I/O.
 const MAX_SCAN_BYTES = 5 * 1024 * 1024;
+const SECURITY_LINES_PER_HOST = 500;
+const SECURITY_MAX_SCAN_BYTES = 512 * 1024;
+const SECURITY_MAX_HOSTS = 100;
+const SECURITY_DEFAULT_HOURS = 24;
+const SECURITY_MAX_HOURS = 168;
+const SECURITY_DEFAULT_EVENT_LIMIT = 100;
+const SECURITY_MAX_EVENT_LIMIT = 500;
 
 /**
  * Reads at most `maxLines` lines from the end of a file, without loading the
@@ -37,7 +45,7 @@ const MAX_SCAN_BYTES = 5 * 1024 * 1024;
  * @param   {Number} maxLines
  * @returns {Promise<{lines: String[], size: Number, truncated: Boolean}>}
  */
-const readLastLines = async (filePath, maxLines) => {
+const readLastLines = async (filePath, maxLines, maxScanBytes = MAX_SCAN_BYTES) => {
 	let handle;
 	try {
 		handle = await fs.promises.open(filePath, "r");
@@ -53,7 +61,7 @@ const readLastLines = async (filePath, maxLines) => {
 		let newlineCount = 0;
 		const chunks = [];
 
-		while (position > 0 && newlineCount <= maxLines && scanned < MAX_SCAN_BYTES) {
+		while (position > 0 && newlineCount <= maxLines && scanned < maxScanBytes) {
 			const readSize = Math.min(CHUNK_SIZE, position);
 			position -= readSize;
 			const buffer = Buffer.alloc(readSize);
@@ -65,7 +73,7 @@ const readLastLines = async (filePath, maxLines) => {
 			chunks.unshift(buffer);
 		}
 
-		const truncated = position > 0 && scanned >= MAX_SCAN_BYTES;
+		const truncated = position > 0 && scanned >= maxScanBytes;
 
 		// If we didn't start reading from byte 0, the first line in our buffer is only
 		// partial *unless* it happens that `position` landed exactly on a line boundary
@@ -168,6 +176,92 @@ const internalLogViewer = {
 					label: `Port ${row.incoming_port} → ${row.forwarding_host}:${row.forwarding_port}`,
 				})),
 			},
+		};
+	},
+
+	/**
+	 * Builds a structured security summary from recent HTTP access logs that
+	 * the current caller is already allowed to view. TCP/UDP stream logs are
+	 * intentionally excluded because they do not contain HTTP request paths.
+	 *
+	 * The scan is bounded by host count, line count and bytes per file.
+	 *
+	 * @param {Access} access
+	 * @param {Object} data
+	 * @param {Number} [data.hours]
+	 * @param {Number} [data.limit]
+	 * @returns {Promise<Object>}
+	 */
+	securitySummary: async (access, data = {}) => {
+		await access.can("logs:list");
+
+		const hours = Math.min(Math.max(data.hours || SECURITY_DEFAULT_HOURS, 1), SECURITY_MAX_HOURS);
+		const eventLimit = Math.min(
+			Math.max(data.limit || SECURITY_DEFAULT_EVENT_LIMIT, 1),
+			SECURITY_MAX_EVENT_LIMIT,
+		);
+		const cutoff = Date.now() - hours * 60 * 60 * 1000;
+
+		const [proxyHosts, redirectionHosts, deadHosts] = await Promise.all([
+			internalProxyHost.getAll(access),
+			internalRedirectionHost.getAll(access),
+			internalDeadHost.getAll(access),
+		]);
+
+		const sources = [
+			...proxyHosts.map((host) => ({ type: "proxy", prefix: "proxy-host", host })),
+			...redirectionHosts.map((host) => ({
+				type: "redirection",
+				prefix: "redirection-host",
+				host,
+			})),
+			...deadHosts.map((host) => ({ type: "dead", prefix: "dead-host", host })),
+		].slice(0, SECURITY_MAX_HOSTS);
+
+		const records = [];
+		let filesMissing = 0;
+		let filesTruncated = 0;
+
+		await Promise.all(
+			sources.map(async ({ type, prefix, host }) => {
+				const filePath = `/data/logs/${prefix}-${host.id}_access.log`;
+				let result;
+				try {
+					result = await readLastLines(filePath, SECURITY_LINES_PER_HOST, SECURITY_MAX_SCAN_BYTES);
+				} catch (err) {
+					if (err.code === "ENOENT") {
+						filesMissing++;
+						return;
+					}
+					throw err;
+				}
+
+				if (result.truncated) {
+					filesTruncated++;
+				}
+
+				for (const line of result.lines) {
+					const record = parseAccessLogLine(line);
+					if (!record?.timestamp || Date.parse(record.timestamp) < cutoff) {
+						continue;
+					}
+					record.sourceHostType = type;
+					record.sourceHostId = host.id;
+					records.push(record);
+				}
+			}),
+		);
+
+		const summary = summarizeSecurityRecords(records, { eventLimit });
+		return {
+			...summary,
+			hours,
+			sourcesScanned: sources.length,
+			filesMissing,
+			filesTruncated,
+			hostLimitReached:
+				proxyHosts.length + redirectionHosts.length + deadHosts.length > SECURITY_MAX_HOSTS,
+			generatedAt: new Date().toISOString(),
 		};
 	},
 
