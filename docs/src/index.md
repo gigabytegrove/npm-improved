@@ -4,7 +4,7 @@ layout: home
 hero:
   name: "NPM Improved"
   text: "Nginx Proxy Manager, with safer failure modes."
-  tagline: Independent management, transactional rollback, certificate lifecycle management, security observability, and managed HTTP protection.
+  tagline: Independent management, transactional rollback, configuration history, certificate lifecycle management, security observability, and managed HTTP protection.
   image:
     src: /logo.svg
     alt: NPM Improved
@@ -24,6 +24,8 @@ features:
     details: Port 81 is served outside the Nginx traffic process so a broken site configuration does not have to take the management listener down with it.
   - title: Transactional Configuration
     details: New Nginx configurations are rendered, validated, activated, reloaded, and committed with automatic last-known-good rollback on failure.
+  - title: Configuration History
+    details: Durable Active, Superseded, and Failed revisions preserve database snapshots, generated Nginx configuration, activation errors, and safe restore points.
   - title: Certificate Lifecycle
     details: Active and unused certificates are tracked separately, with quarantine and configurable cleanup instead of an undifferentiated certificate list.
   - title: Logs & Security Events
