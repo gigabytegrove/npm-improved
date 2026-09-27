@@ -34,12 +34,6 @@ Certificates referenced by active database objects cannot be removed through nor
 
 DNS-provider credentials are only written to the Certbot credential file when needed for a Certbot operation and are removed afterward.
 
-## Repository security
-
-The intended GitHub repository protection policy is stored under `.github/rulesets/`.
-
-It requires pull requests for `develop`, resolved review threads, current required checks, and prevents destructive branch/tag history operations when the rulesets are applied to the live repository.
-
 ## Vulnerability reporting
 
 Do not disclose an unpatched vulnerability in a public issue or pull request.
