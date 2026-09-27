@@ -2,11 +2,12 @@ import { useState } from "react";
 import { T } from "src/locale";
 import CertificateLifecycle from "./CertificateLifecycle";
 import DefaultSite from "./DefaultSite";
+import Database from "./Database";
 import DisasterRecovery from "./DisasterRecovery";
 import InstanceSync from "./InstanceSync";
 import Protection from "./Protection";
 
-type SettingsPage = "default-site" | "certificate-lifecycle" | "protection" | "instance-sync" | "disaster-recovery";
+type SettingsPage = "default-site" | "certificate-lifecycle" | "protection" | "database" | "instance-sync" | "disaster-recovery";
 
 export default function Layout() {
 	const [page, setPage] = useState<SettingsPage>("default-site");
@@ -58,6 +59,16 @@ export default function Layout() {
 								</a>
 								<a
 									href="#"
+									className={`list-group-item list-group-item-action d-flex align-items-center ${page === "database" ? "active" : ""}`}
+									onClick={(e) => {
+										e.preventDefault();
+										setPage("database");
+									}}
+								>
+									Database &amp; Cluster
+								</a>
+								<a
+									href="#"
 									className={`list-group-item list-group-item-action d-flex align-items-center ${page === "instance-sync" ? "active" : ""}`}
 									onClick={(e) => {
 										e.preventDefault();
@@ -86,6 +97,8 @@ export default function Layout() {
 							<CertificateLifecycle />
 						) : page === "protection" ? (
 							<Protection />
+						) : page === "database" ? (
+							<Database />
 						) : page === "instance-sync" ? (
 							<InstanceSync />
 						) : (
