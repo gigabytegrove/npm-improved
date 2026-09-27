@@ -329,6 +329,9 @@
 	"column.status": {
 		"defaultMessage": "Status"
 	},
+	"config-history": {
+		"defaultMessage": "Configuration History"
+	},
 	"created-on": {
 		"defaultMessage": "Created: {date}"
 	},
