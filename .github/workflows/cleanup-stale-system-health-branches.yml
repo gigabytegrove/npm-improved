@@ -1,0 +1,43 @@
+name: Cleanup stale System Health branches
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - .github/workflows/cleanup-stale-system-health-branches.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete superseded branches
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const branches = [
+              "feature/system-health",
+              "feature/system-health-current",
+              "feature/system-health-rebased",
+              "chore/delete-stale-system-health-branches",
+            ];
+
+            for (const branch of branches) {
+              try {
+                await github.rest.git.deleteRef({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: `heads/${branch}`,
+                });
+                core.info(`Deleted ${branch}`);
+              } catch (error) {
+                if (error.status === 404 || error.status === 422) {
+                  core.info(`${branch} already absent or not deletable; continuing`);
+                  continue;
+                }
+                throw error;
+              }
+            }
