@@ -14,11 +14,11 @@
 			"schema": {
 				"type": "string",
 				"minLength": 1,
-				"enum": ["default-site"]
+				"enum": ["default-site", "certificate-lifecycle", "http-protection"]
 			},
 			"required": true,
 			"description": "Setting ID",
-			"example": "default-site"
+			"example": "http-protection"
 		}
 	],
 	"requestBody": {
@@ -34,8 +34,18 @@
 						"value": {
 							"type": "string",
 							"minLength": 1,
-							"enum": ["congratulations", "404", "444", "redirect", "html"],
-							"example": "html"
+							"enum": [
+								"congratulations",
+								"404",
+								"444",
+								"redirect",
+								"html",
+								"enabled",
+								"disabled",
+								"off",
+								"standard",
+								"aggressive"
+							]
 						},
 						"meta": {
 							"type": "object",
@@ -46,17 +56,46 @@
 								},
 								"html": {
 									"type": "string"
+								},
+								"unused_retention_days": {
+									"type": "integer",
+									"minimum": 1,
+									"maximum": 3650
+								},
+								"purge_custom_certificates": {
+									"type": "boolean"
+								},
+								"trusted_networks": {
+									"type": "array",
+									"maxItems": 128,
+									"items": {
+										"type": "string",
+										"minLength": 1,
+										"maxLength": 64
+									}
 								}
-							},
-							"example": {
-								"html": "<p>hello world</p>"
 							}
 						}
 					}
 				},
-				"example": {
-					"value": "congratulations",
-					"meta": {}
+				"examples": {
+					"protection": {
+						"value": {
+							"value": "standard",
+							"meta": {
+								"trusted_networks": ["10.0.0.0/8", "192.168.1.50/32"]
+							}
+						}
+					},
+					"certificateLifecycle": {
+						"value": {
+							"value": "enabled",
+							"meta": {
+								"unused_retention_days": 30,
+								"purge_custom_certificates": false
+							}
+						}
+					}
 				}
 			}
 		}
@@ -66,17 +105,6 @@
 			"description": "200 response",
 			"content": {
 				"application/json": {
-					"examples": {
-						"default": {
-							"value": {
-								"id": "default-site",
-								"name": "Default Site",
-								"description": "What to show when Nginx is hit with an unknown Host",
-								"value": "congratulations",
-								"meta": {}
-							}
-						}
-					},
 					"schema": {
 						"$ref": "../../../components/setting-object.json"
 					}
