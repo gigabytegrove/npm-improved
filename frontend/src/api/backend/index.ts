@@ -74,3 +74,5 @@ export * from "./exportDisasterRecoveryBackup";
 export * from "./getDisasterRecoveryStatus";
 export * from "./inspectDisasterRecoveryBackup";
 export * from "./restoreDisasterRecoveryBackup";
+
+export * from "./instanceSync";
