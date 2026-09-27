@@ -16,6 +16,8 @@
   ·
   <a href="docs/src/guide/index.md">Documentation</a>
   ·
+  <a href="ROADMAP.md">Roadmap</a>
+  ·
   <a href="SECURITY.md">Security</a>
 </p>
 
