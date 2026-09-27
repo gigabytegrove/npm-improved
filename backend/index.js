@@ -5,6 +5,7 @@ import internalCertificate from "./internal/certificate.js";
 import internalDatabaseManager from "./internal/database-manager.js";
 import internalIpRanges from "./internal/ip_ranges.js";
 import internalInstanceSync from "./internal/instance-sync.js";
+import internalUpdateManager from "./internal/update-manager.js";
 import { global as logger } from "./logger.js";
 import { migrateUp } from "./migrate.js";
 import { getCompiledSchema } from "./schema/index.js";
@@ -22,6 +23,11 @@ async function appStart() {
 			}
 		})
 		.then(setup)
+		.then(() =>
+			internalUpdateManager.reconcileAudit().catch((err) => {
+				logger.warn(`Update audit reconciliation failed: ${err instanceof Error ? err.message : String(err)}`);
+			}),
+		)
 		.then(getCompiledSchema)
 		.then(() => {
 			if (!IP_RANGES_FETCH_ENABLED) {
