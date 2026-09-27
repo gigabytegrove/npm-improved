@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
@@ -29,6 +30,8 @@ type recoveryManager struct {
 	letsencryptDir string
 	nginxBinary    string
 	nginxPIDFile   string
+	nodeBinary     string
+	recoveryScript string
 	backendURL     *url.URL
 	logger         *log.Logger
 	client         *http.Client
@@ -85,6 +88,8 @@ func newRecoveryManager(cfg config, logger *log.Logger) (*recoveryManager, error
 		letsencryptDir: cfg.LetsEncryptDir,
 		nginxBinary:    cfg.NginxBinary,
 		nginxPIDFile:   cfg.NginxPIDFile,
+		nodeBinary:     cfg.NodeBinary,
+		recoveryScript: cfg.RecoveryScript,
 		backendURL:     cfg.BackendURL,
 		logger:         logger,
 		client:         &http.Client{Timeout: 3 * time.Second},
@@ -150,6 +155,8 @@ func (m *recoveryManager) register(mux *http.ServeMux) {
 	mux.Handle("/__npm_improved/recovery/nginx/test", m.requireAuth(http.HandlerFunc(m.testNginx)))
 	mux.Handle("/__npm_improved/recovery/nginx/reload", m.requireAuth(http.HandlerFunc(m.reloadNginx)))
 	mux.Handle("/__npm_improved/recovery/failed", m.requireAuth(http.HandlerFunc(m.viewFailedCandidate)))
+	mux.Handle("/__npm_improved/recovery/backups/upload", m.requireAuth(http.HandlerFunc(m.uploadBackup)))
+	mux.Handle("/__npm_improved/recovery/backups/restore", m.requireAuth(http.HandlerFunc(m.restoreBackup)))
 	mux.Handle("/__npm_improved/recovery/backups/", m.requireAuth(http.HandlerFunc(m.downloadBackup)))
 }
 
@@ -433,6 +440,127 @@ func (m *recoveryManager) viewFailedCandidate(w http.ResponseWriter, r *http.Req
 	}
 }
 
+func (m *recoveryManager) uploadBackup(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 512*1024*1024)
+	if err := r.ParseMultipartForm(32 * 1024 * 1024); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "backup upload is invalid or too large"})
+		return
+	}
+	file, header, err := r.FormFile("backup")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "backup file is required"})
+		return
+	}
+	defer file.Close()
+
+	name := filepath.Base(strings.TrimSpace(header.Filename))
+	if name == "." || name == "" || !strings.HasSuffix(name, ".npmibak") {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "backup filename must end with .npmibak"})
+		return
+	}
+	if err := os.MkdirAll(m.backupsDir, 0o700); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "backup directory is unavailable"})
+		return
+	}
+
+	target := filepath.Join(m.backupsDir, "uploaded-"+time.Now().UTC().Format("20060102T150405Z")+"-"+name)
+	tmp := target + ".partial"
+	out, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o600)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "could not stage backup"})
+		return
+	}
+	written, copyErr := io.Copy(out, io.LimitReader(file, 512*1024*1024+1))
+	closeErr := out.Close()
+	if copyErr != nil || closeErr != nil || written > 512*1024*1024 {
+		_ = os.Remove(tmp)
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "backup upload failed or exceeded 512 MiB"})
+		return
+	}
+	if err := os.Rename(tmp, target); err != nil {
+		_ = os.Remove(tmp)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "could not retain uploaded backup"})
+		return
+	}
+	m.logger.Printf("native recovery console retained uploaded backup %s", filepath.Base(target))
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "name": filepath.Base(target), "size": written})
+}
+
+func (m *recoveryManager) restoreBackup(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if backend := m.checkBackend(time.Now().UTC().Format(time.RFC3339)); backend.Status == "healthy" {
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"error": "management API is healthy; use Settings > Backup & Recovery for restores",
+		})
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 8192)
+	var body struct {
+		Name         string `json:"name"`
+		Passphrase   string `json:"passphrase"`
+		Confirmation string `json:"confirmation"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid restore request"})
+		return
+	}
+	name := filepath.Base(strings.TrimSpace(body.Name))
+	if name == "." || name == "" || name != body.Name || !strings.HasSuffix(name, ".npmibak") {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid backup name"})
+		return
+	}
+	if len(body.Passphrase) < 12 || body.Confirmation != "RESTORE" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "passphrase and RESTORE confirmation are required"})
+		return
+	}
+	filename := filepath.Join(m.backupsDir, name)
+	if info, err := os.Stat(filename); err != nil || info.IsDir() {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "backup not found"})
+		return
+	}
+	if _, err := os.Stat(m.recoveryScript); err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "emergency restore helper is unavailable"})
+		return
+	}
+
+	request, _ := json.Marshal(map[string]string{
+		"passphrase": body.Passphrase,
+		"confirmation": body.Confirmation,
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, m.nodeBinary, m.recoveryScript, filename)
+	cmd.Stdin = strings.NewReader(string(request))
+	output, err := cmd.CombinedOutput()
+	text := strings.TrimSpace(string(output))
+	if len(text) > 32768 {
+		text = text[len(text)-32768:]
+	}
+	if ctx.Err() == context.DeadlineExceeded {
+		writeJSON(w, http.StatusGatewayTimeout, map[string]any{"ok": false, "error": "emergency restore timed out"})
+		return
+	}
+	if err != nil {
+		m.logger.Printf("native emergency restore failed for %s: %v", name, err)
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": text})
+		return
+	}
+
+	m.logger.Printf("native emergency restore completed for %s; restart required", name)
+	var result any
+	if json.Unmarshal([]byte(text), &result) != nil {
+		result = map[string]any{"ok": true, "output": text, "restartRequired": true}
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
 func (m *recoveryManager) downloadBackup(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -511,7 +639,10 @@ pre{white-space:pre-wrap;background:#0c1017;border:1px solid #293244;border-radi
 
 <div class="card">
 <h2>Retained recovery backups</h2>
-<p class="sub">Encrypted <code>.npmibak</code> files retained under <code>/data/backups</code>.</p>
+<p class="sub">Encrypted <code>.npmibak</code> files retained under <code>/data/backups</code>. Uploading only stages a bundle; emergency restore accepts full disaster-recovery backups and is available only while the normal management API is unhealthy.</p>
+<input id="backupUpload" type="file" accept=".npmibak,application/vnd.npm-improved.backup">
+<button class="secondary" onclick="uploadBackup()">Upload backup</button>
+<div id="backupMessage" class="detail"></div>
 <div id="backups"></div>
 </div>
 </div>
@@ -523,8 +654,10 @@ async function login(){const token=document.getElementById("token").value;const 
 async function logout(){await fetch(api+"/logout",{method:"POST"});document.getElementById("console").classList.add("hidden");document.getElementById("login").classList.remove("hidden")}
 function card(name,c){return '<div class="status"><div class="name">'+esc(name)+' <span class="'+esc(c.status)+'">'+esc(c.status)+'</span></div><div class="detail">'+esc(c.detail)+'</div></div>'}
 function table(rows,cols){if(!rows.length)return '<div class="detail">None.</div>';return '<table><thead><tr>'+cols.map(c=>'<th>'+esc(c[0])+'</th>').join('')+'</tr></thead><tbody>'+rows.map(row=>'<tr>'+cols.map(c=>'<td>'+c[2](row[c[1]],row)+'</td>').join('')+'</tr>').join('')+'</tbody></table>'}
-async function loadStatus(){const r=await fetch(api+"/status");if(r.status===401){document.getElementById("console").classList.add("hidden");document.getElementById("login").classList.remove("hidden");return}const s=await r.json();document.getElementById("login").classList.add("hidden");document.getElementById("console").classList.remove("hidden");document.getElementById("health").innerHTML=card("Control plane",s.control_plane)+card("Backend",s.backend)+card("Nginx",s.nginx)+card("/data",s.data)+card("Let's Encrypt",s.letsencrypt);document.getElementById("failed").innerHTML=table(s.failed_candidates,[["Path","path",v=>esc(v)],["Size","size",v=>esc(v+" B")],["Modified","modified_at",v=>esc(v)],["","path",v=>'<a target="_blank" rel="noopener" href="'+api+'/failed?path='+encodeURIComponent(v)+'">View</a>']]);document.getElementById("backups").innerHTML=table(s.backups,[["Backup","name",v=>esc(v)],["Size","size",v=>esc(v+" B")],["Modified","modified_at",v=>esc(v)],["","name",v=>'<a href="'+api+'/backups/'+encodeURIComponent(v)+'">Download</a>']])}
+async function loadStatus(){const r=await fetch(api+"/status");if(r.status===401){document.getElementById("console").classList.add("hidden");document.getElementById("login").classList.remove("hidden");return}const s=await r.json();document.getElementById("login").classList.add("hidden");document.getElementById("console").classList.remove("hidden");document.getElementById("health").innerHTML=card("Control plane",s.control_plane)+card("Backend",s.backend)+card("Nginx",s.nginx)+card("/data",s.data)+card("Let's Encrypt",s.letsencrypt);document.getElementById("failed").innerHTML=table(s.failed_candidates,[["Path","path",v=>esc(v)],["Size","size",v=>esc(v+" B")],["Modified","modified_at",v=>esc(v)],["","path",v=>'<a target="_blank" rel="noopener" href="'+api+'/failed?path='+encodeURIComponent(v)+'">View</a>']]);document.getElementById("backups").innerHTML=table(s.backups,[["Backup","name",v=>esc(v)],["Size","size",v=>esc(v+" B")],["Modified","modified_at",v=>esc(v)],["Actions","name",(v,row)=>'<a href="'+api+'/backups/'+encodeURIComponent(v)+'">Download</a> &nbsp; <a href="#" onclick="emergencyRestore('+JSON.stringify(v).replace(/"/g,'&quot;')+');return false">Emergency restore</a>']])}
 async function action(path){const r=await fetch(api+path,{method:"POST"});let body={};try{body=await r.json()}catch{}document.getElementById("nginxOutput").textContent=JSON.stringify(body,null,2);await loadStatus()}
+async function uploadBackup(){const input=document.getElementById("backupUpload");const msg=document.getElementById("backupMessage");if(!input.files.length){msg.textContent="Choose a .npmibak file first.";return}const form=new FormData();form.append("backup",input.files[0]);msg.textContent="Uploading…";const r=await fetch(api+"/backups/upload",{method:"POST",body:form});let body={};try{body=await r.json()}catch{}msg.textContent=r.ok?"Backup staged as "+body.name:(body.error||"Upload failed");if(r.ok){input.value="";await loadStatus()}}
+async function emergencyRestore(name){if(!confirm("Emergency restore replaces full instance state from "+name+". Continue?"))return;const passphrase=prompt("Backup passphrase:");if(!passphrase)return;const confirmation=prompt('Type RESTORE to confirm:');if(confirmation!=="RESTORE")return;const msg=document.getElementById("backupMessage");msg.textContent="Emergency restore running…";const r=await fetch(api+"/backups/restore",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,passphrase,confirmation})});let body={};try{body=await r.json()}catch{}msg.textContent=r.ok?"Emergency restore completed. Restart NPM Improved before normal use.":(body.error||"Emergency restore failed");await loadStatus()}
 const nginxTest=()=>action("/nginx/test");const nginxReload=()=>action("/nginx/reload");loadStatus();
 </script>
 </body>
