@@ -456,6 +456,7 @@ export default function Database() {
 							<ul className="mb-0">
 								<li>Share or replicate <code>/etc/letsencrypt</code> between nodes.</li>
 								<li>Share or replicate <code>/data/custom_ssl</code> between nodes.</li>
+								<li>Share or replicate custom/default site assets under <code>/data/nginx/custom</code> and <code>/data/nginx/default_www</code> when you use them.</li>
 								<li>Run the same NPM Improved version on every node.</li>
 							</ul>
 						</Alert>
