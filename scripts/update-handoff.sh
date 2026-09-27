@@ -6,6 +6,7 @@ TARGET_IMAGE="${2:-}"
 MODE="${3:-sqlite}"
 SOURCE_VERSION="${4:-unknown}"
 TARGET_VERSION="${5:-unknown}"
+INITIATED_BY="${NPM_UPDATE_INITIATED_BY:-}"
 
 ROOT="${NPM_UPDATE_PROJECT_DIR:-$(pwd)}"
 STATUS_FILE="${NPM_UPDATE_STATUS_FILE:-$ROOT/data/update-status.json}"
@@ -53,11 +54,15 @@ write_status() {
   "previous_image": "$(json_escape "$previous_image")",
   "target_image": "$(json_escape "$target_image")",
   "target_digest": "$(json_escape "$target_digest")",
-  "error": "$(json_escape "$error_text")"
+  "error": "$(json_escape "$error_text")",
+  "initiated_by": "$(json_escape "$INITIATED_BY")"
 }
 EOF
 	chmod 600 "$tmp" 2>/dev/null || true
 	mv "$tmp" "$STATUS_FILE"
+	if [ -n "$STATUS_OWNER" ]; then
+		chown "$STATUS_OWNER" "$STATUS_FILE" 2>/dev/null || true
+	fi
 }
 
 get_env() {
