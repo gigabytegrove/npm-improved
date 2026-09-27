@@ -58,6 +58,12 @@ cp .env.example .env
 ./scripts/install-docker mysql
 ```
 
+This Compose file is a convenient way to run a local MariaDB service next to NPM Improved. It is **not required** for an external or shared MySQL server.
+
+A server originally installed with the normal SQLite Compose stack can later open **Settings → Database & Cluster** and migrate to an external MySQL/MariaDB server from the UI. The UI-managed selection is persisted under `/data/database-config.json` and takes precedence over the original database environment variables on later backend starts.
+
+For multiple NPMi nodes using one MySQL database, see [Database & Shared MySQL](docs/src/guide/database.md).
+
 ## PostgreSQL
 
 Copy and edit the environment file first. Set `POSTGRES_PASSWORD`. The PostgreSQL Compose stack refuses to start while it is blank.
@@ -85,6 +91,8 @@ Database-backed deployments also use:
 ```
 
 Do not delete these directories during upgrades.
+
+If the in-app wizard is used, `/data/database-config.json` contains the selected database connection and may contain a MySQL password. Keep `./data` private and include it in secure deployment backups.
 
 ## Configuration
 
