@@ -81,8 +81,21 @@ export const normalizeProtectionSetting = (data) => {
 	};
 };
 
-export const normalizeHostProtectionProfile = (value) =>
-	HOST_PROTECTION_PROFILES.includes(value) ? value : "inherit";
+export const validateHostProtectionProfile = (value) => {
+	const profile = value ?? "inherit";
+	if (!HOST_PROTECTION_PROFILES.includes(profile)) {
+		throw new Error("Protection profile must be inherit, off, standard, or aggressive");
+	}
+	return profile;
+};
+
+export const normalizeHostProtectionProfile = (value) => {
+	try {
+		return validateHostProtectionProfile(value);
+	} catch {
+		return "inherit";
+	}
+};
 
 const renderGlobalDirectives = (profile) => {
 	if (profile === "off") {
@@ -125,7 +138,7 @@ export const renderProtectionPolicy = (setting) => {
 		"}",
 		"",
 		"map $npm_protection_trusted $npm_protection_key {",
-		"    0 $binary_remote_addr;",
+		"    0 \"$binary_remote_addr:$host\";",
 		"    1 \"\";",
 		"}",
 		"",
