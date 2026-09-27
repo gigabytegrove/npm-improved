@@ -369,17 +369,20 @@ const ProxyHostModal = EasyModal.create(({ id, visible, remove }: Props) => {
 																				<label className="form-label" htmlFor={`upstream-${index}-enabled`}>
 																					<T id="column.status" />
 																				</label>
-																				<label className="form-check form-switch mb-1">
+																				<div className="form-check form-switch mb-1">
 																					<Field
 																						id={`upstream-${index}-enabled`}
 																						name={`upstreams.${index}.enabled`}
 																						type="checkbox"
 																						className="form-check-input"
 																					/>
-																					<span className="form-check-label">
+																					<label
+																						className="form-check-label"
+																						htmlFor={`upstream-${index}-enabled`}
+																					>
 																						<T id="enabled" />
-																					</span>
-																				</label>
+																					</label>
+																				</div>
 																			</div>
 																		</div>
 																	</div>
