@@ -461,10 +461,26 @@ const initTimer = async () => {
 
 	try {
 		if (node.role === "primary") {
+			const stateBeforeClaim = await stateRow();
+			if (
+				revisionNumber(stateBeforeClaim.revision) > 0 &&
+				revisionNumber(stateBeforeClaim.revision) > node.last_applied_revision
+			) {
+				// This node may be a former Primary returning after another node
+				// handled failover. Adopt the newer shared filesystem/JWT generation
+				// before it is allowed to reclaim the Primary lease.
+				writeNode({ role: "secondary" });
+				const result = await reconcileNow();
+				writeNode({ role: "primary" });
+				if (result?.restartRequired) {
+					logger.info("Restarting backend before reclaiming Primary so shared JWT identity is active");
+					process.exit(0);
+				}
+			}
+
 			await claimPrimary(false);
-			const state = await stateRow();
-			if (revisionNumber(state.revision) === 0) await publishNow({ force: true });
-			else await registerNode();
+			await internalDisasterRecovery.regenerateNginx();
+			await publishNow({ force: false });
 		} else {
 			const result = await reconcileNow();
 			if (result?.restartRequired) {
