@@ -14,12 +14,20 @@ export interface DatabaseCurrentStatus {
 	ssl: boolean;
 }
 
+export interface SharedDatabaseNode {
+	id: string;
+	name: string;
+	version: string;
+	lastSeen: string;
+}
+
 export interface DatabaseStatus {
 	current: DatabaseCurrentStatus;
 	migrationInProgress: boolean;
 	runtimeConfigPresent: boolean;
 	supportedTargets: DatabaseEngine[];
 	mysqlSharedMode: boolean;
+	sharedNodes: SharedDatabaseNode[];
 	sharedModeRequirements: string[];
 }
 
@@ -55,6 +63,7 @@ export interface DatabaseTestResult {
 	rowCount: number;
 	counts: Record<string, number>;
 	migration: string;
+	sharedVersion: string | null;
 }
 
 export interface DatabaseSwitchResult {
