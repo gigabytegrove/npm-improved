@@ -124,25 +124,34 @@ export const applyAtomicCertificateFiles = async ({
 export const snapshotCertificateFiles = (paths) =>
 	paths.map((filename) => {
 		try {
+			const linkStat = fs.lstatSync(filename);
 			const stat = fs.statSync(filename);
 			return {
 				path: filename,
 				exists: true,
 				content: fs.readFileSync(filename),
 				mode: stat.mode & 0o777,
+				isSymlink: linkStat.isSymbolicLink(),
+				linkTarget: linkStat.isSymbolicLink() ? fs.readlinkSync(filename) : null,
 			};
 		} catch (err) {
 			if (err.code === "ENOENT") {
-				return { path: filename, exists: false, content: null, mode: null };
+				return {
+					path: filename,
+					exists: false,
+					content: null,
+					mode: null,
+					isSymlink: false,
+					linkTarget: null,
+				};
 			}
 			throw err;
 		}
 	});
 
 /**
- * Restores a previously captured certificate snapshot. Existing symlinks are
- * preserved; writeFileSync follows them to restore the bytes used by the live
- * certificate path.
+ * Restores a previously captured certificate snapshot, including Certbot's
+ * original live/ symlink destinations when applicable.
  */
 export const restoreCertificateFiles = (snapshot) => {
 	for (const item of snapshot) {
@@ -150,7 +159,25 @@ export const restoreCertificateFiles = (snapshot) => {
 			removeIfExists(item.path);
 			continue;
 		}
+
 		fs.mkdirSync(path.dirname(item.path), { recursive: true });
+
+		if (item.isSymlink && item.linkTarget) {
+			let currentTarget = null;
+			try {
+				if (fs.lstatSync(item.path).isSymbolicLink()) {
+					currentTarget = fs.readlinkSync(item.path);
+				}
+			} catch (err) {
+				if (err.code !== "ENOENT") throw err;
+			}
+
+			if (currentTarget !== item.linkTarget) {
+				removeIfExists(item.path);
+				fs.symlinkSync(item.linkTarget, item.path);
+			}
+		}
+
 		fs.writeFileSync(item.path, item.content, { mode: safeMode(item.mode, 0o644) });
 		try {
 			fs.chmodSync(item.path, safeMode(item.mode, 0o644));
