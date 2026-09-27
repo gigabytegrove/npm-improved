@@ -129,6 +129,43 @@ export async function post({ url, params, data, noAuth }: PostArgs, abortControl
 	return processResponse(response);
 }
 
+export async function downloadPost(
+	{ url, params, data }: PostArgs,
+	filename = "download.file",
+) {
+	const headers = {
+		...buildAuthHeader(),
+		[contentTypeHeader]: "application/json",
+	};
+	const response = await fetch(buildUrl({ url, params }), {
+		method: "POST",
+		headers,
+		body: buildBody(data),
+	});
+
+	if (!response.ok) {
+		let message = "Download failed";
+		try {
+			const payload = await response.json();
+			message = payload?.error?.messageI18n || payload?.error?.message || message;
+		} catch {
+			// Keep the generic download error when the server did not return JSON.
+		}
+		throw new Error(message);
+	}
+
+	const blob = await response.blob();
+	const disposition = response.headers.get("Content-Disposition") || "";
+	const match = disposition.match(/filename="?([^";]+)"?/i);
+	const resolvedFilename = match?.[1] || filename;
+	const objectUrl = window.URL.createObjectURL(blob);
+	const anchor = document.createElement("a");
+	anchor.href = objectUrl;
+	anchor.download = resolvedFilename;
+	anchor.click();
+	window.URL.revokeObjectURL(objectUrl);
+}
+
 interface PutArgs {
 	url: string;
 	params?: queryString.StringifiableRecord;
