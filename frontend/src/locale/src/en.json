@@ -695,8 +695,47 @@
 	"proxy-host": {
 		"defaultMessage": "Proxy Host"
 	},
+	"proxy-host.add-upstream": {
+		"defaultMessage": "Add Upstream"
+	},
+	"proxy-host.failover-help": {
+		"defaultMessage": "In failover mode, the first enabled upstream is primary. Remaining enabled upstreams are backup servers and are used when the primary is unavailable."
+	},
 	"proxy-host.forward-host": {
 		"defaultMessage": "Forward Hostname / IP"
+	},
+	"proxy-host.upstream-fail-timeout": {
+		"defaultMessage": "Fail timeout (s)"
+	},
+	"proxy-host.upstream-max-fails": {
+		"defaultMessage": "Max failures"
+	},
+	"proxy-host.upstream-mode-failover": {
+		"defaultMessage": "Primary + failover"
+	},
+	"proxy-host.upstream-mode-ip-hash": {
+		"defaultMessage": "Client IP affinity"
+	},
+	"proxy-host.upstream-mode-least-conn": {
+		"defaultMessage": "Least connections"
+	},
+	"proxy-host.upstream-mode-round-robin": {
+		"defaultMessage": "Round robin"
+	},
+	"proxy-host.upstream-name": {
+		"defaultMessage": "Label"
+	},
+	"proxy-host.upstream-pool": {
+		"defaultMessage": "Upstream Pool"
+	},
+	"proxy-host.upstream-pool-help": {
+		"defaultMessage": "Add multiple backend targets for this hostname. Nginx retries healthy peers automatically when a target fails."
+	},
+	"proxy-host.upstream-weight": {
+		"defaultMessage": "Weight"
+	},
+	"proxy-host.upstreams-count": {
+		"defaultMessage": "{count} upstreams"
 	},
 	"proxy-hosts": {
 		"defaultMessage": "Proxy Hosts"
@@ -823,6 +862,69 @@
 	},
 	"streams.udp": {
 		"defaultMessage": "UDP"
+	},
+	"sync.description": {
+		"defaultMessage": "Keep two or more NPMi instances synchronized for redundant management and proxy entry points."
+	},
+	"sync.disabled": {
+		"defaultMessage": "Disabled"
+	},
+	"sync.enabled": {
+		"defaultMessage": "Enable instance synchronization"
+	},
+	"sync.in-sync": {
+		"defaultMessage": "In sync"
+	},
+	"sync.interval": {
+		"defaultMessage": "Sync interval"
+	},
+	"sync.last-error": {
+		"defaultMessage": "Last sync error"
+	},
+	"sync.last-sync": {
+		"defaultMessage": "Last successful sync"
+	},
+	"sync.node-name": {
+		"defaultMessage": "Node name"
+	},
+	"sync.node-role-primary": {
+		"defaultMessage": "Primary"
+	},
+	"sync.node-role-secondary": {
+		"defaultMessage": "Secondary"
+	},
+	"sync.primary-help": {
+		"defaultMessage": "Primary nodes are authoritative. Secondary nodes pull signed configuration snapshots from the primary and can be promoted during a failure."
+	},
+	"sync.primary-url": {
+		"defaultMessage": "Primary node URL"
+	},
+	"sync.promote": {
+		"defaultMessage": "Promote this node"
+	},
+	"sync.promote-warning": {
+		"defaultMessage": "Promoting this node makes it authoritative. Only one primary should be active at a time to avoid split-brain configuration changes."
+	},
+	"sync.public-url": {
+		"defaultMessage": "Public URL"
+	},
+	"sync.secondary-help": {
+		"defaultMessage": "Secondary nodes serve the synchronized proxy configuration locally and periodically pull changes from the primary."
+	},
+	"sync.secret-help": {
+		"defaultMessage": "Use the same strong cluster secret on every node. It authenticates node-to-node synchronization and is never returned by the API after it is saved."
+	},
+	"sync.shared-secret": {
+		"defaultMessage": "Cluster secret"
+	},
+	"sync.status": {
+		"defaultMessage": "Sync status"
+	},
+	"sync.sync-now": {
+		"defaultMessage": "Sync now"
+	},
+	"sync.title": {
+		"defaultMessage": "Instance Synchronization"
 	},
 	"system-health": {
 		"defaultMessage": "System Health"
