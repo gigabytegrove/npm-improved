@@ -16,9 +16,10 @@ NPM Improved includes production-ready Docker Compose definitions in the reposit
 ```bash
 git clone https://github.com/gigabytegrove/npm-improved.git
 cd npm-improved
-cp .env.example .env
-docker compose up -d --build
+./scripts/install-docker sqlite
 ```
+
+The installer creates `.env` from `.env.example` when needed, validates Docker/Compose, checks host-port availability before the build starts, launches the stack, and waits for the application healthcheck.
 
 Open:
 
@@ -28,13 +29,41 @@ http://<host>:81
 
 The default deployment uses SQLite at `/data/database.sqlite`.
 
+## Port conflicts
+
+The installer checks the configured host ports before building. It never stops an existing service automatically.
+
+If ports 80, 81, or 443 are already in use because NPM Improved is being tested alongside another reverse proxy, edit `.env` and choose unused host-side ports, for example:
+
+```dotenv
+HTTP_PORT=8080
+ADMIN_PORT=8181
+HTTPS_PORT=8443
+```
+
+Then rerun:
+
+```bash
+./scripts/install-docker sqlite
+```
+
+The internal container ports remain 80, 81, and 443.
+
+To inspect a conflict manually:
+
+```bash
+ss -ltnp | grep -E ':(80|81|443)\\b' || true
+docker ps --format 'table {{.Names}}\\t{{.Ports}}'
+```
+
 ## MariaDB / MySQL
 
 Copy and edit the environment file first. Set both `MYSQL_PASSWORD` and `MYSQL_ROOT_PASSWORD`. The MariaDB Compose stack refuses to start while either value is blank.
 
 ```bash
 cp .env.example .env
-docker compose -f compose.mysql.yaml up -d --build
+# Set MYSQL_PASSWORD and MYSQL_ROOT_PASSWORD in .env
+./scripts/install-docker mysql
 ```
 
 ## PostgreSQL
@@ -43,7 +72,8 @@ Copy and edit the environment file first. Set `POSTGRES_PASSWORD`. The PostgreSQ
 
 ```bash
 cp .env.example .env
-docker compose -f compose.postgres.yaml up -d --build
+# Set POSTGRES_PASSWORD in .env
+./scripts/install-docker postgres
 ```
 
 ## Persistent data

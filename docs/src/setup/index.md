@@ -20,17 +20,16 @@ Clone the repository and prepare the environment file:
 ```bash
 git clone https://github.com/gigabytegrove/npm-improved.git
 cd npm-improved
-cp .env.example .env
 ```
 
-The production Docker build is self-contained. A clean checkout does not require a separate frontend build.
+The production Docker build is self-contained. A clean checkout does not require a separate frontend build. The installer creates `.env` automatically when needed and checks host-port availability before starting the build.
 
 ## SQLite deployment
 
 SQLite is the simplest deployment and is the default `compose.yaml` stack:
 
 ```bash
-docker compose up -d --build
+./scripts/install-docker sqlite
 ```
 
 Persistent data is stored in:
@@ -59,6 +58,20 @@ Open the management interface at:
 http://<host>:81
 ```
 
+## Port conflicts
+
+The installer refuses to build/start when a configured host port is already occupied and shows the listener information it can identify. It does not stop or replace an existing service automatically.
+
+For a parallel test deployment, choose unused host-side ports in `.env`, for example:
+
+```dotenv
+HTTP_PORT=8080
+ADMIN_PORT=8181
+HTTPS_PORT=8443
+```
+
+Then rerun `./scripts/install-docker sqlite`. Internal container ports remain 80, 81, and 443.
+
 ## MariaDB / MySQL deployment
 
 Edit `.env` and set both database passwords:
@@ -73,7 +86,7 @@ The MariaDB Compose stack refuses to start while either password is blank.
 Then start the MariaDB stack:
 
 ```bash
-docker compose -f compose.mysql.yaml up -d --build
+./scripts/install-docker mysql
 ```
 
 The database is persisted under:
@@ -97,7 +110,7 @@ The PostgreSQL Compose stack refuses to start while the password is blank.
 Then start the PostgreSQL stack:
 
 ```bash
-docker compose -f compose.postgres.yaml up -d --build
+./scripts/install-docker postgres
 ```
 
 The database is persisted under:
