@@ -1,9 +1,12 @@
+import { useState } from "react";
 import { T } from "src/locale";
+import CertificateLifecycle from "./CertificateLifecycle";
 import DefaultSite from "./DefaultSite";
 
+type SettingsPage = "default-site" | "certificate-lifecycle";
+
 export default function Layout() {
-	// Taken from https://preview.tabler.io/settings.html
-	// Refer to that when updating this content
+	const [page, setPage] = useState<SettingsPage>("default-site");
 
 	return (
 		<div className="card mt-4">
@@ -22,16 +25,29 @@ export default function Layout() {
 							<div className="list-group list-group-transparent">
 								<a
 									href="#"
-									className="list-group-item list-group-item-action d-flex align-items-center active"
-									onClick={(e) => e.preventDefault()}
+									className={`list-group-item list-group-item-action d-flex align-items-center ${page === "default-site" ? "active" : ""}`}
+									onClick={(e) => {
+										e.preventDefault();
+										setPage("default-site");
+									}}
 								>
 									<T id="settings.default-site" />
+								</a>
+								<a
+									href="#"
+									className={`list-group-item list-group-item-action d-flex align-items-center ${page === "certificate-lifecycle" ? "active" : ""}`}
+									onClick={(e) => {
+										e.preventDefault();
+										setPage("certificate-lifecycle");
+									}}
+								>
+									Certificate Lifecycle
 								</a>
 							</div>
 						</div>
 					</div>
 					<div className="col-12 col-md-9 d-flex flex-column">
-						<DefaultSite />
+						{page === "default-site" ? <DefaultSite /> : <CertificateLifecycle />}
 					</div>
 				</div>
 			</div>
