@@ -1,12 +1,19 @@
 import { useState } from "react";
 import { T } from "src/locale";
 import CertificateLifecycle from "./CertificateLifecycle";
+import Database from "./Database";
 import DefaultSite from "./DefaultSite";
 import DisasterRecovery from "./DisasterRecovery";
 import InstanceSync from "./InstanceSync";
 import Protection from "./Protection";
 
-type SettingsPage = "default-site" | "certificate-lifecycle" | "protection" | "instance-sync" | "disaster-recovery";
+type SettingsPage =
+	| "default-site"
+	| "certificate-lifecycle"
+	| "protection"
+	| "database"
+	| "instance-sync"
+	| "disaster-recovery";
 
 export default function Layout() {
 	const [page, setPage] = useState<SettingsPage>("default-site");
@@ -55,6 +62,16 @@ export default function Layout() {
 									}}
 								>
 									Protection
+								</a>
+								<a
+									href="#"
+									className={`list-group-item list-group-item-action d-flex align-items-center ${page === "database" ? "active" : ""}`}
+									onClick={(e) => {
+										e.preventDefault();
+										setPage("database");
+									}}
+								>
+									Database &amp; Storage
 								</a>
 								<a
 									href="#"
