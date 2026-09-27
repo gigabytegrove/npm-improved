@@ -9,7 +9,7 @@ NPM Improved stores its intended GitHub repository rulesets here so protection i
 
 The branch ruleset intentionally requires a pull request but does not require an approving review count. This keeps the repository safe from direct pushes while still allowing a single maintainer to operate the project without creating an impossible self-approval requirement.
 
-The required `Required Checks` workflow also performs dependency review on pull requests and rejects newly introduced dependencies with high-or-higher known vulnerabilities.
+Dependency review is not currently enforced because GitHub reports the repository Dependency Graph as disabled. Enable the Dependency Graph in the repository security settings before adding dependency review to the required merge gate.
 
 ## Applying the live GitHub rulesets
 
