@@ -52,8 +52,26 @@ class ProxyHost extends Model {
 	}
 
 	$parseDatabaseJson(json) {
-		const thisJson = super.$parseDatabaseJson(json);
-		return convertIntFieldsToBool(thisJson, boolFields);
+		const thisJson = convertIntFieldsToBool(super.$parseDatabaseJson(json), boolFields);
+		if (!Array.isArray(thisJson.upstreams) || !thisJson.upstreams.length) {
+			if (thisJson.forward_scheme && thisJson.forward_host && thisJson.forward_port) {
+				thisJson.upstreams = [
+					{
+						scheme: thisJson.forward_scheme,
+						host: thisJson.forward_host,
+						port: thisJson.forward_port,
+						weight: 1,
+						max_fails: 3,
+						fail_timeout: 10,
+						enabled: true,
+					},
+				];
+			} else {
+				thisJson.upstreams = [];
+			}
+		}
+		thisJson.upstream_mode = thisJson.upstream_mode || "round-robin";
+		return thisJson;
 	}
 
 	$formatDatabaseJson(json) {
@@ -70,7 +88,7 @@ class ProxyHost extends Model {
 	}
 
 	static get jsonAttributes() {
-		return ["domain_names", "meta", "locations"];
+		return ["domain_names", "meta", "locations", "upstreams"];
 	}
 
 	static get defaultAllowGraph() {
