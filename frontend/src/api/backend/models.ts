@@ -31,6 +31,25 @@ export interface User {
 	permissions?: UserPermissions;
 }
 
+export type ConfigRevisionStatus = "pending" | "active" | "superseded" | "failed";
+export type ConfigRevisionObjectType = "proxy_host" | "redirection_host" | "dead_host" | "stream";
+
+export interface ConfigRevision {
+	id: number;
+	createdOn: string;
+	modifiedOn: string;
+	userId: number;
+	objectType: ConfigRevisionObjectType;
+	objectId: number;
+	operation: "baseline" | "create" | "update" | "enable" | "disable" | "delete" | "restore";
+	status: ConfigRevisionStatus;
+	configText?: string;
+	snapshot?: Record<string, any>;
+	errorText?: string | null;
+	meta: Record<string, any>;
+	user?: User | null;
+}
+
 export interface AuditLog {
 	id: number;
 	createdOn: string;
