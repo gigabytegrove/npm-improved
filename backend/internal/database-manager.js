@@ -614,6 +614,11 @@ const internalDatabaseManager = {
 	initializeSharedMode: async () => {
 		const runtime = sanitizeRuntime();
 		if (runtime.engine !== "mysql" || !runtime.shared) return { enabled: false, restartRequired: false };
+
+		if (await db().schema.hasTable("setting")) {
+			await db()("setting").where({ id: "instance-sync" }).update({ value: "disabled" });
+		}
+
 		const restartRequired = await syncSharedJwtIdentity();
 		return { enabled: true, restartRequired };
 	},
