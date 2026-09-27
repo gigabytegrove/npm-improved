@@ -21,6 +21,8 @@ NPM Improved is currently pre-1.0. The `develop` branch is the integration branc
 - HTTP hosts can use managed Protection profiles;
 - Proxy Hosts can use native Nginx upstream pools for backend load balancing and failover;
 - multiple NPM Improved instances can synchronize through a primary/secondary HA model;
+- SQLite installations can migrate to MySQL/MariaDB from the UI and back again later;
+- Shared MySQL mode lets multiple NPMi proxy nodes use one database with Primary/Secondary write safety;
 - repository rules and required checks are versioned with the project.
 
 ## Development setup
