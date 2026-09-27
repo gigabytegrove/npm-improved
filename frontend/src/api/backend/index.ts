@@ -68,3 +68,7 @@ export * from "./updateUser";
 export * from "./uploadCertificate";
 export * from "./validateCertificate";
 export * from "./twoFactor";
+export * from "./exportDisasterRecoveryBackup";
+export * from "./getDisasterRecoveryStatus";
+export * from "./inspectDisasterRecoveryBackup";
+export * from "./restoreDisasterRecoveryBackup";
