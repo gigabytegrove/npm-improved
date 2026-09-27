@@ -1,3 +1,61 @@
+.brandLoader {
+	position: relative;
+	display: grid;
+	place-items: center;
+	width: 112px;
+	height: 86px;
+	margin: 0 auto 1rem;
+}
+
+.logoFrame {
+	position: relative;
+	z-index: 2;
+	display: grid;
+	place-items: center;
+	width: 84px;
+	height: 58px;
+	border-radius: 1rem;
+	background: transparent;
+}
+
 .logo {
-	max-height: 100px;
+	display: block;
+	width: 76px;
+	height: auto;
+	object-fit: contain;
+	mix-blend-mode: multiply;
+}
+
+.pulseRing {
+	position: absolute;
+	width: 74px;
+	height: 74px;
+	border: 1px solid color-mix(in srgb, var(--npi-primary) 34%, transparent);
+	border-radius: 50%;
+	animation: npmi-loading-pulse 1.6s ease-out infinite;
+}
+
+:global([data-bs-theme="dark"]) .logo {
+	mix-blend-mode: screen;
+	filter: invert(1) hue-rotate(180deg) saturate(1.4) brightness(1.1);
+}
+
+@keyframes npmi-loading-pulse {
+	0% {
+		transform: scale(0.72);
+		opacity: 0.72;
+	}
+
+	70%,
+	100% {
+		transform: scale(1.34);
+		opacity: 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.pulseRing {
+		animation: none;
+		opacity: 0.35;
+	}
 }
