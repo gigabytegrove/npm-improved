@@ -111,10 +111,11 @@ export default function DisasterRecovery() {
 				restorePassphrase,
 				confirmation,
 			);
+			const safety = result.safetyBackupPath ? ` Pre-restore safety backup: ${result.safetyBackupPath}` : "";
 			setRestoreSuccess(
-				result.restartRequired
+				(result.restartRequired
 					? "Restore completed successfully. Restart NPM Improved before relying on restored authentication/JWT state."
-					: "Configuration restore completed successfully and Nginx validated/reloaded.",
+					: "Configuration restore completed successfully and Nginx validated/reloaded.") + safety,
 			);
 			await refetch();
 		} catch (err) {
