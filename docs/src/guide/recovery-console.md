@@ -22,7 +22,13 @@ The first time the control plane starts with recovery enabled, it creates a cryp
 /data/recovery-access.json
 ```
 
-The file is created with mode `0600`. The token is also written to the control-plane log when it is first generated.
+The file is created with mode `0600`. The token is deliberately **not** written to application or container logs.
+
+For the standard container, an administrator with host/container access can retrieve it with:
+
+```bash
+docker exec <container-name> cat /data/recovery-access.json
+```
 
 The token is separate from normal NPM Improved user authentication so recovery remains possible when the application database or Node backend is unavailable.
 
