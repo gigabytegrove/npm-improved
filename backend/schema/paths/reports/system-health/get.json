@@ -1,0 +1,27 @@
+{
+	"operationId": "getSystemHealth",
+	"summary": "Get system health",
+	"description": "Returns authenticated component health for the control plane, Nginx, database, certificate schedulers, log storage, and configuration revision engine.",
+	"tags": [
+		"reports"
+	],
+	"security": [
+		{
+			"bearerAuth": [
+				"admin"
+			]
+		}
+	],
+	"responses": {
+		"200": {
+			"description": "System health",
+			"content": {
+				"application/json": {
+					"schema": {
+						"$ref": "../../../components/system-health-object.json"
+					}
+				}
+			}
+		}
+	}
+}

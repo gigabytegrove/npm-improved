@@ -35,6 +35,21 @@ Control-plane health endpoint:
 /__npm_improved/health
 ```
 
+The endpoint is independent of the Node management API and reports safe component state for the control plane, frontend bundle, backend reachability, and Nginx process/config validity. It remains available in degraded mode so the UI can explain what failed instead of disappearing behind a generic API error.
+
+### System Health and degraded-mode diagnostics
+
+Administrators have a **System Health** workspace covering:
+
+- independent control plane;
+- Nginx process, configuration validity, PID, and last successful reload;
+- database connectivity and query latency;
+- certificate renewal/lifecycle schedulers;
+- log storage read/write health;
+- Configuration History revision engine and pending/failed counts.
+
+When the normal Node API is unavailable, the frontend falls back to the independent Go health endpoint and still shows control-plane, backend, and Nginx status.
+
 ### Transactional Nginx configuration
 
 HTTP hosts and streams use a last-known-good transaction model:

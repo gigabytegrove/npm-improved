@@ -400,6 +400,11 @@
 				"$ref": "./paths/config-history/revisionID/restore/post.json"
 			}
 		},
+		"/reports/system-health": {
+			"get": {
+				"$ref": "./paths/reports/system-health/get.json"
+			}
+		},
 		"/disaster-recovery/status": {
 			"get": {
 				"$ref": "./paths/disaster-recovery/status/get.json"

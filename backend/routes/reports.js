@@ -1,5 +1,6 @@
 import express from "express";
 import internalReport from "../internal/report.js";
+import internalSystemHealth from "../internal/system-health.js";
 import jwtdecode from "../lib/express/jwt-decode.js";
 import { debug, express as logger } from "../logger.js";
 
@@ -22,6 +23,22 @@ router
 	.get(async (req, res, next) => {
 		try {
 			const data = await internalReport.getHostsReport(res.locals.access);
+			res.status(200).send(data);
+		} catch (err) {
+			debug(logger, `${req.method.toUpperCase()} ${req.path}: ${err}`);
+			next(err);
+		}
+	});
+
+router
+	.route("/system-health")
+	.options((_, res) => {
+		res.sendStatus(204);
+	})
+	.all(jwtdecode())
+	.get(async (req, res, next) => {
+		try {
+			const data = await internalSystemHealth.get(res.locals.access);
 			res.status(200).send(data);
 		} catch (err) {
 			debug(logger, `${req.method.toUpperCase()} ${req.path}: ${err}`);

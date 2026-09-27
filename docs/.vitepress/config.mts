@@ -44,6 +44,7 @@ export default defineConfig({
 					{ text: "Backup & Disaster Recovery", link: "/guide/disaster-recovery" },
 					{ text: "Native Recovery Console", link: "/guide/recovery-console" },
 					{ text: "Configuration History", link: "/guide/config-history" },
+					{ text: "System Health", link: "/guide/system-health" },
 					{ text: "Architecture", link: "/architecture/" },
 					{ text: "Security", link: "/security/" },
 					{ text: "Setup Instructions", link: "/setup/" },

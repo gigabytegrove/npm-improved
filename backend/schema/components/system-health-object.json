@@ -1,0 +1,55 @@
+{
+	"type": "object",
+	"required": [
+		"status",
+		"generated_at",
+		"backend_uptime_seconds",
+		"checks"
+	],
+	"properties": {
+		"status": {
+			"type": "string",
+			"enum": [
+				"ok",
+				"degraded"
+			]
+		},
+		"generated_at": {
+			"type": "string"
+		},
+		"backend_uptime_seconds": {
+			"type": "integer",
+			"minimum": 0
+		},
+		"checks": {
+			"type": "object",
+			"additionalProperties": true,
+			"properties": {
+				"control_plane": {
+					"type": "object",
+					"additionalProperties": true
+				},
+				"nginx": {
+					"type": "object",
+					"additionalProperties": true
+				},
+				"database": {
+					"type": "object",
+					"additionalProperties": true
+				},
+				"certificate_engine": {
+					"type": "object",
+					"additionalProperties": true
+				},
+				"log_engine": {
+					"type": "object",
+					"additionalProperties": true
+				},
+				"revision_engine": {
+					"type": "object",
+					"additionalProperties": true
+				}
+			}
+		}
+	}
+}
