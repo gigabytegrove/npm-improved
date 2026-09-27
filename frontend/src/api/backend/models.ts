@@ -115,10 +115,16 @@ export interface Certificate {
 	domainNames: string[];
 	expiresOn: string;
 	meta: Record<string, any>;
+	isInUse?: boolean;
+	usageCount?: number;
+	unusedSince?: string | null;
+	purgeEligibleOn?: string | null;
+	autoPurgeEligible?: boolean;
 	owner?: User;
 	proxyHosts?: ProxyHost[];
 	deadHosts?: DeadHost[];
 	redirectionHosts?: RedirectionHost[];
+	streams?: Stream[];
 }
 
 export interface ProxyLocation {
