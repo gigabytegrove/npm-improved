@@ -183,7 +183,7 @@ export default function Login() {
 			return "";
 		}
 		const v = health.data.version;
-		return `v${v.major}.${v.minor}.${v.revision}`;
+		return v.display || `v${v.major}.${v.minor}.${v.revision}`;
 	};
 
 	return (
@@ -191,14 +191,12 @@ export default function Login() {
 			<div className={styles.authShell}>
 				<section className={styles.brandPanel}>
 					<div className={styles.brandLockup}>
-						<span className={styles.brandMark}>
-							<img src="/images/npm-improved-mark.svg" width={48} height={48} alt="" />
-						</span>
-						<div>
-							<div className={styles.brandName}>NPM Improved</div>
-							<div className={styles.brandTagline}>
-								<T id="app.tagline" />
-							</div>
+						<div className={styles.fullLogoPlate}>
+							<img
+								src="/images/npm-improved-logo.webp"
+								className={styles.fullLogo}
+								alt="Nginx Proxy Manager Improved"
+							/>
 						</div>
 					</div>
 					<div className={styles.heroCopy}>
@@ -233,9 +231,9 @@ export default function Login() {
 					</div>
 					<div className={styles.formWrap}>
 						<div className={styles.mobileBrand}>
-							<img src="/images/npm-improved-mark.svg" width={40} height={40} alt="" />
+							<img src="/images/npm-improved-mark.webp" width={62} height={41} alt="" />
 							<div>
-								<strong>NPM Improved</strong>
+								<strong>Nginx Proxy Manager</strong>
 								<span>
 									<T id="app.tagline" />
 								</span>
