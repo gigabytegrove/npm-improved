@@ -140,6 +140,43 @@ export default function DisasterRecovery() {
 
 			<div className="card mb-4">
 				<div className="card-header">
+					<h3 className="card-title">Automated retained backups</h3>
+				</div>
+				<div className="card-body">
+					{status?.automation?.enabled ? (
+						<>
+							<Alert variant="success">
+								Automated encrypted backups are enabled through deployment environment settings.
+							</Alert>
+							<div className="table-responsive">
+								<table className="table table-sm table-vcenter mb-0">
+									<tbody>
+										<tr><th>Backup type</th><td>{status.automation.scope === "configuration" ? "Configuration" : "Full disaster recovery"}</td></tr>
+										<tr><th>Interval</th><td>Every {status.automation.intervalHours} hour{status.automation.intervalHours === 1 ? "" : "s"}</td></tr>
+										<tr><th>Retention</th><td>{status.automation.retention} scheduled backup{status.automation.retention === 1 ? "" : "s"}</td></tr>
+										<tr><th>Currently retained</th><td>{status.automation.retainedCount}</td></tr>
+										<tr>
+											<th>Latest retained backup</th>
+											<td>
+												{status.automation.latestBackup
+													? `${new Date(status.automation.latestBackup.modifiedAt).toLocaleString()} · ${formatBytes(status.automation.latestBackup.size)}`
+													: "No scheduled backup has completed yet."}
+											</td>
+										</tr>
+									</tbody>
+								</table>
+							</div>
+						</>
+					) : (
+						<Alert variant="secondary" className="mb-0">
+							Automated backups are disabled. Set <code>NPM_BACKUP_PASSPHRASE</code> in the container environment to enable them. The passphrase is not stored in the NPM Improved database.
+						</Alert>
+					)}
+				</div>
+			</div>
+
+			<div className="card mb-4">
+				<div className="card-header">
 					<h3 className="card-title">Create encrypted backup</h3>
 				</div>
 				<div className="card-body">
