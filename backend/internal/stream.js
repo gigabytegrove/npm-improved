@@ -20,7 +20,7 @@ const internalStream = {
 	 * @returns {Promise}
 	 */
 	create: async (access, data) => {
-		let thisData = { ...data };
+		const thisData = { ...data };
 		const createCertificate = thisData.certificate_id === "new";
 		if (createCertificate) delete thisData.certificate_id;
 
@@ -72,7 +72,7 @@ const internalStream = {
 	 * @return {Promise}
 	 */
 	update: async (access, data) => {
-		let thisData = { ...data };
+		const thisData = { ...data };
 		const createCertificate = thisData.certificate_id === "new";
 		if (createCertificate) delete thisData.certificate_id;
 
