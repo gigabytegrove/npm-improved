@@ -21,15 +21,27 @@ import (
 )
 
 const (
-	defaultAdminPort    = 81
-	defaultFrontendRoot = "/app/frontend"
-	defaultBackendURL   = "http://127.0.0.1:3000"
+	defaultAdminPort         = 81
+	defaultFrontendRoot      = "/app/frontend"
+	defaultBackendURL        = "http://127.0.0.1:3000"
+	defaultRecoveryTokenFile = "/data/recovery-access.json"
+	defaultBackupsDir        = "/data/backups"
+	defaultDataDir           = "/data"
+	defaultLetsEncryptDir    = "/etc/letsencrypt"
+	defaultNginxBinary       = "/usr/sbin/nginx"
+	defaultNginxPIDFile      = "/run/nginx/nginx.pid"
 )
 
 type config struct {
-	AdminPort    int
-	FrontendRoot string
-	BackendURL   *url.URL
+	AdminPort         int
+	FrontendRoot      string
+	BackendURL        *url.URL
+	RecoveryTokenFile string
+	BackupsDir        string
+	DataDir           string
+	LetsEncryptDir    string
+	NginxBinary       string
+	NginxPIDFile      string
 }
 
 func main() {
@@ -113,7 +125,17 @@ func loadConfig(logger *log.Logger) (config, error) {
 		return config{}, fmt.Errorf("NPM_BACKEND_URL scheme must be http or https: %q", backendURL.Scheme)
 	}
 
-	return config{AdminPort: port, FrontendRoot: frontendRoot, BackendURL: backendURL}, nil
+	return config{
+		AdminPort:         port,
+		FrontendRoot:      frontendRoot,
+		BackendURL:        backendURL,
+		RecoveryTokenFile: envOrDefault("NPM_RECOVERY_TOKEN_FILE", defaultRecoveryTokenFile),
+		BackupsDir:        envOrDefault("NPM_BACKUPS_DIR", defaultBackupsDir),
+		DataDir:           envOrDefault("NPM_DATA_DIR", defaultDataDir),
+		LetsEncryptDir:    envOrDefault("NPM_LETSENCRYPT_DIR", defaultLetsEncryptDir),
+		NginxBinary:       envOrDefault("NPM_NGINX_BINARY", defaultNginxBinary),
+		NginxPIDFile:      envOrDefault("NPM_NGINX_PID_FILE", defaultNginxPIDFile),
+	}, nil
 }
 
 func newHandler(cfg config, logger *log.Logger) (http.Handler, error) {
@@ -126,6 +148,15 @@ func newHandler(cfg config, logger *log.Logger) (http.Handler, error) {
 	spa := newSPAHandler(root)
 
 	mux := http.NewServeMux()
+
+	recovery, err := newRecoveryManager(cfg, logger)
+	if err != nil {
+		return nil, err
+	}
+	if recovery != nil {
+		recovery.register(mux)
+	}
+
 	mux.HandleFunc("/__npm_improved/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)

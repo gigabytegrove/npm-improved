@@ -35,6 +35,8 @@ Upstream services
 
 The Node backend remains in place while control-plane responsibilities are migrated incrementally. The important reliability boundary is that Nginx no longer owns the management listener.
 
+The Go process also owns `/recovery/`, a native emergency console that does not require the Node API or compiled administration SPA. Recovery uses a separate credential under `/data/recovery-access.json` so database/backend failure does not remove the operator's emergency access path.
+
 ## Transactional Nginx changes
 
 Generated host configuration follows this sequence:

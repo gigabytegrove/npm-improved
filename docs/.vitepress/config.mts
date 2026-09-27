@@ -42,6 +42,7 @@ export default defineConfig({
 					{ text: "Guide", link: "/guide/" },
 					{ text: "HTTP Protection", link: "/guide/protection" },
 					{ text: "Backup & Disaster Recovery", link: "/guide/disaster-recovery" },
+					{ text: "Native Recovery Console", link: "/guide/recovery-console" },
 					{ text: "Configuration History", link: "/guide/config-history" },
 					{ text: "Architecture", link: "/architecture/" },
 					{ text: "Security", link: "/security/" },
