@@ -173,6 +173,12 @@ case "$ACTION" in
 			exit 1
 		fi
 
+		FREE_KB="$(df -Pk "$ROOT" | awk 'NR == 2 {print $4}')"
+		if [ -z "$FREE_KB" ] || [ "$FREE_KB" -lt 524288 ]; then
+			write_status "failed" "Update preflight failed." "At least 512 MiB of free disk space is required to stage an update." "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+			exit 1
+		fi
+
 		write_status "pulling" "Pulling $TARGET_VERSION from the official NPM Improved registry."
 		if ! docker pull "$TARGET_IMAGE"; then
 			write_status "failed" "Unable to pull the requested update." "Docker could not pull $TARGET_IMAGE." "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
@@ -208,6 +214,15 @@ case "$ACTION" in
 				write_status "rolled_back" "The target did not become healthy; the previous image was restored." "Health verification timed out." "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "$TARGET_DIGEST" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 			else
 				write_status "failed" "The target did not become healthy and rollback failed." "Health verification timed out." "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "$TARGET_DIGEST" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+			fi
+			exit 1
+		fi
+
+		if ! docker exec "$NEW_CID" sh -c 'curl --fail --silent --show-error "http://127.0.0.1:${NPM_ADMIN_PORT:-81}/__npm_improved/health" | jq -e ".status == \"ok\" or .status == \"degraded\"" >/dev/null'; then
+			if restore_previous "The independent control-plane health endpoint did not respond correctly."; then
+				write_status "rolled_back" "Control-plane verification failed; the previous image was restored." "The independent control-plane health endpoint failed." "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "$TARGET_DIGEST" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+			else
+				write_status "failed" "Control-plane verification and automatic rollback failed." "The independent control-plane health endpoint failed." "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "$TARGET_DIGEST" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 			fi
 			exit 1
 		fi
