@@ -1,21 +1,36 @@
-# Certbot dns-plugins
+# Certbot DNS plugins
 
-This file contains info about available Certbot DNS plugins.
-This only works for plugins which use the standard argument structure, so:
---authenticator <plugin-name> --<plugin-name>-credentials <FILE> --<plugin-name>-propagation-seconds <number>
+NPM Improved retains the upstream Certbot DNS-plugin model.
 
-File Structure:
+Provider definitions live in `backend/certbot/dns-plugins.json` and describe plugins that follow the standard Certbot argument pattern:
+
+```text
+--authenticator <plugin-name>
+--<plugin-name>-credentials <FILE>
+--<plugin-name>-propagation-seconds <number>
+```
+
+Each provider entry can define:
 
 ```json
 {
   "cloudflare": {
     "display_name": "Name displayed to the user",
-    "package_name": "Package name in PyPi repo",
-    "version_requirement": "Optional package version requirements (e.g. ==1.3 or >=1.2,<2.0, see https://www.python.org/dev/peps/pep-0440/#version-specifiers)",
-    "dependencies": "Additional dependencies, space separated (as you would pass it to pip install)",
-    "credentials": "Template of the credentials file",
-    "full_plugin_name": "The full plugin name as used in the commandline with certbot, e.g. 'dns-njalla'"
-  },
-  ...
+    "package_name": "PyPI package name",
+    "version_requirement": "Optional PEP 440 version constraint",
+    "dependencies": "Additional pip dependencies",
+    "credentials": "Credential-file template",
+    "full_plugin_name": "Full Certbot plugin name"
+  }
 }
 ```
+
+NPM Improved writes DNS credential files only for the duration of the Certbot operation that needs them and removes them afterward. Do not add provider logic that recreates plaintext credential files during normal backend startup.
+
+When changing plugin definitions:
+
+1. verify the package/version against current Certbot;
+2. check dependency conflicts with other supported DNS plugins;
+3. test issuance and renewal;
+4. avoid logging credential contents;
+5. update the user documentation in `docs/src/certbot/` when behavior changes.

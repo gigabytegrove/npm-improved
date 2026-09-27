@@ -1,30 +1,43 @@
 # Security Policy
 
-## Supported Versions
+## Current support status
 
-Only the latest stable release receives security updates.
-Older versions are not actively maintained.
+NPM Improved is currently pre-1.0 development software.
 
-| Version | Supported |
-| ------- | --------- |
-| 2.16.x (latest) | :white_check_mark: |
-| < 2.16.0 | :x: |
+Until the first stable release is published, security fixes are made against the current `develop` line. There is not yet a supported historical release matrix or an official stable NPM Improved container tag.
 
-Docker images: `jc21/nginx-proxy-manager:latest`, `jc21/nginx-proxy-manager:2`
+| Version / branch | Security support |
+| --- | --- |
+| Current `develop` | Active development |
+| Pre-1.0 snapshots older than current `develop` | No guaranteed backports |
+| Upstream Nginx Proxy Manager releases | Supported by the upstream project, not by this fork |
 
-See all releases: https://github.com/NginxProxyManager/nginx-proxy-manager/releases
+## Reporting a vulnerability
 
-## Reporting a Vulnerability
+**Do not open a public GitHub issue, pull request, or discussion containing an undisclosed vulnerability.**
 
-**Do NOT open a public GitHub Issue to report a security vulnerability.**
+Use GitHub private vulnerability reporting for this repository:
 
-Use GitHub's private vulnerability reporting:
-https://github.com/NginxProxyManager/nginx-proxy-manager/security/advisories/new
+https://github.com/gigabytegrove/npm-improved/security/advisories/new
 
-Please include:
-- Affected version (Docker image tag or release)
-- Description of the vulnerability
-- Steps to reproduce
-- Potential impact
+Please include as much of the following as possible:
 
-Once a fix is available, a public GitHub Security Advisory will be published.
+- affected commit, branch, or image identifier;
+- affected component (control plane, backend API, frontend, Nginx configuration, certificate handling, authentication, etc.);
+- vulnerability description;
+- reproduction steps or proof of concept;
+- expected security impact;
+- relevant logs with credentials/tokens/private keys removed;
+- any suggested mitigation.
+
+## Secrets and sensitive data
+
+Never include real credentials, DNS provider tokens, private certificate keys, JWT material, database passwords, or production access tokens in a public report.
+
+## Upstream vulnerabilities
+
+If the vulnerability exists unchanged in upstream Nginx Proxy Manager, reporters are encouraged to notify the upstream project as well. NPM Improved may still carry its own mitigation or patch when appropriate.
+
+## Disclosure
+
+Security issues will be investigated before public disclosure. Once a fix and reasonable upgrade path are available, the project may publish a GitHub Security Advisory describing the affected versions and remediation.

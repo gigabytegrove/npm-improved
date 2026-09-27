@@ -1,50 +1,50 @@
 # Internationalisation support
 
-## Before you start
+## Development environment
 
-It's highly recommended that you spin up a development instance of this project
-on your docker capable server. It's pretty easy:
+Start the NPM Improved development stack:
 
 ```bash
-git clone https://github.com/NginxProxyManager/nginx-proxy-manager.git
-cd nginx-proxy-manager
+git clone https://github.com/gigabytegrove/npm-improved.git
+cd npm-improved
 ./scripts/start-dev -f
 ```
 
-Then after a while, you can access http://yourserverip:3081
+The development admin UI is exposed on port `3081` by default.
 
-This stack will watch the file system for changes, especially to language files,
-and reload the site you have open in the browser.
+## Adding or updating translations
 
+Edit files under:
 
-## Adding new translations
+```text
+frontend/src/locale/src/
+```
 
-Modify the files in the `src` folder. Follow the conventions already there.
+The development environment recompiles locale data during normal frontend work.
 
-When the development stack is running, it will sort the locale lang files
-for you when you save.
+If you are not running the development stack, compile locales from the `frontend` directory:
 
+```bash
+yarn locale-compile
+```
 
-## After making changes
+## Adding a language
 
-If you're NOT running the development stack, you will need to run
-`yarn locale-compile` in the `frontend` folder for
-the new translations to be compiled into the `lang` folder.
+A new language may require updates to:
 
+- `frontend/src/locale/src/<language>.json`
+- `frontend/src/locale/src/lang-list.json`
+- `frontend/src/locale/src/HelpDoc/<language>/`
+- `frontend/src/locale/src/HelpDoc/index.tsx`
+- `frontend/src/locale/IntlProvider.tsx`
+- `frontend/check-locales.cjs`
 
-## Adding a whole new language
+## Missing translations
 
-There's a fair bit you'll need to touch. Here's a list that may
-not be complete by the time you're reading this:
+From the `frontend` directory:
 
-- frontend/src/locale/src/[yourlang].json
-- frontend/src/locale/src/lang-list.json
-- frontend/src/locale/src/HelpDoc/[yourlang]/*
-- frontend/src/locale/src/HelpDoc/index.tsx
-- frontend/src/locale/IntlProvider.tsx
-- frontend/check-locales.cjs
+```bash
+node check-locales.cjs
+```
 
-
-## Checking for missing translations in languages
-
-Run `node check-locales.cjs` in this frontend folder.
+Inherited translation completeness gaps are currently reported by CI without blocking releases. New/modified English strings should still be added deliberately and kept understandable without relying on upstream branding.

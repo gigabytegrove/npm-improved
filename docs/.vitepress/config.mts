@@ -1,9 +1,8 @@
 import { defineConfig } from "vitepress";
 
-// https://vitepress.dev/reference/site-config
 export default defineConfig({
-	title: "Nginx Proxy Manager",
-	description: "Expose your services easily and securely",
+	title: "NPM Improved",
+	description: "A more resilient, observable, and security-focused Nginx Proxy Manager fork",
 	head: [
 		["link", { rel: "icon", href: "/icon.png" }],
 		[
@@ -11,80 +10,45 @@ export default defineConfig({
 			{
 				name: "description",
 				content:
-					"Docker container and built in Web Application for managing Nginx proxy hosts with a simple, powerful interface, providing free SSL support via Let's Encrypt",
+					"NPM Improved is a compatibility-focused Nginx Proxy Manager fork with an independent management control plane, transactional Nginx configuration, certificate lifecycle management, security observability, and managed HTTP protection.",
 			},
 		],
-		["meta", { property: "og:title", content: "Nginx Proxy Manager" }],
+		["meta", { property: "og:title", content: "NPM Improved" }],
 		[
 			"meta",
 			{
 				property: "og:description",
 				content:
-					"Docker container and built in Web Application for managing Nginx proxy hosts with a simple, powerful interface, providing free SSL support via Let's Encrypt",
+					"Resilient reverse-proxy management with rollback, certificate lifecycle management, logs, security events, and managed HTTP protection.",
 			},
 		],
 		["meta", { property: "og:type", content: "website" }],
-		["meta", { property: "og:url", content: "https://nginxproxymanager.com/" }],
-		[
-			"meta",
-			{
-				property: "og:image",
-				content: "https://nginxproxymanager.com/icon.png",
-			},
-		],
 		["meta", { name: "twitter:card", content: "summary" }],
-		["meta", { name: "twitter:title", content: "Nginx Proxy Manager" }],
-		[
-			"meta",
-			{
-				name: "twitter:description",
-				content:
-					"Docker container and built in Web Application for managing Nginx proxy hosts with a simple, powerful interface, providing free SSL support via Let's Encrypt",
-			},
-		],
-		[
-			"meta",
-			{
-				name: "twitter:image",
-				content: "https://nginxproxymanager.com/icon.png",
-			},
-		],
-		["meta", { name: "twitter:alt", content: "Nginx Proxy Manager" }],
-		// GA
-		[
-			"script",
-			{
-				async: "true",
-				src: "https://www.googletagmanager.com/gtag/js?id=G-TXT8F5WY5B",
-			},
-		],
-		[
-			"script",
-			{},
-			"window.dataLayer = window.dataLayer || [];\nfunction gtag(){dataLayer.push(arguments);}\ngtag('js', new Date());\ngtag('config', 'G-TXT8F5WY5B');",
-		],
+		["meta", { name: "twitter:title", content: "NPM Improved" }],
 	],
-	sitemap: {
-		hostname: "https://nginxproxymanager.com",
-	},
 	metaChunk: true,
 	srcDir: "./src",
 	outDir: "./dist",
 	themeConfig: {
-		// https://vitepress.dev/reference/default-theme-config
 		logo: { src: "/logo.svg", width: 24, height: 24 },
-		nav: [{ text: "Setup", link: "/setup/" }],
+		nav: [
+			{ text: "Guide", link: "/guide/" },
+			{ text: "Architecture", link: "/architecture/" },
+			{ text: "Security", link: "/security/" },
+		],
 		sidebar: [
 			{
 				items: [
-					// { text: 'Home', link: '/' },
 					{ text: "Guide", link: "/guide/" },
-					{ text: "Screenshots", link: "/screenshots/" },
+					{ text: "HTTP Protection", link: "/guide/protection" },
+					{ text: "Architecture", link: "/architecture/" },
+					{ text: "Security", link: "/security/" },
 					{ text: "Setup Instructions", link: "/setup/" },
 					{ text: "Advanced Configuration", link: "/advanced-config/" },
 					{ text: "Upgrading", link: "/upgrading/" },
+					{ text: "Certificates / Certbot", link: "/certbot/" },
+					{ text: "Screenshots", link: "/screenshots/" },
 					{ text: "Frequently Asked Questions", link: "/faq/" },
-					{ text: "Certbot", link: "/certbot/" },
 					{ text: "Third Party", link: "/third-party/" },
 				],
 			},
@@ -92,15 +56,15 @@ export default defineConfig({
 		socialLinks: [
 			{
 				icon: "github",
-				link: "https://github.com/NginxProxyManager/nginx-proxy-manager",
+				link: "https://github.com/gigabytegrove/npm-improved",
 			},
 		],
 		search: {
 			provider: "local",
 		},
 		footer: {
-			message: "Released under the MIT License.",
-			copyright: "Copyright © 2016-present jc21.com",
+			message: "Released under the MIT License. Based on Nginx Proxy Manager.",
+			copyright: "NPM Improved contributors",
 		},
 	},
 });
