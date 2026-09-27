@@ -3,6 +3,15 @@ import net from "node:net";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import _ from "lodash";
+import {
+	activateConfigRevision,
+	beginConfigRevision,
+	captureModelSnapshot,
+	ensureBaselineRevision,
+	failConfigRevision,
+	readConfigIfExists,
+	setRevisionCandidate,
+} from "../lib/config-revision-store.js";
 import errs from "../lib/error.js";
 import { applyConfigTransaction, removeConfigTransaction } from "../lib/nginx-transaction.js";
 import { normalizeHostProtectionProfile } from "../lib/protection.js";
@@ -28,23 +37,52 @@ const internalNginx = {
 	 * @param   {Object}         host
 	 * @returns {Promise}
 	 */
-	configure: async (model, host_type, host) => {
+	configure: async (model, host_type, host, revisionContext = {}) => {
 		// Do not layer a new change on top of an already-invalid Nginx
 		// configuration. A pre-existing failure must be repaired first.
 		await internalNginx.test();
 
 		const configPath = internalNginx.getConfigName(host_type, host.id);
+		const recordRevision = revisionContext.recordRevision !== false;
+		let revision = null;
+
+		if (recordRevision) {
+			await ensureBaselineRevision({
+				objectType: host_type,
+				objectId: host.id,
+				snapshot: revisionContext.previousSnapshot || null,
+				configText: readConfigIfExists(configPath),
+			});
+
+			revision = await beginConfigRevision({
+				userId: revisionContext.userId || 0,
+				objectType: host_type,
+				objectId: host.id,
+				operation: revisionContext.operation || "update",
+				snapshot: await captureModelSnapshot(model, host.id),
+				meta: revisionContext.sourceRevisionId
+					? { source_revision_id: revisionContext.sourceRevisionId }
+					: {},
+			});
+		}
+
 		try {
 			await applyConfigTransaction({
 				livePath: configPath,
 				renderCandidate: async (candidatePath) => {
 					await internalNginx.generateConfig(host_type, host, candidatePath);
+					if (revision) {
+						await setRevisionCandidate(revision.id, readConfigIfExists(candidatePath));
+					}
 				},
 				validate: () => internalNginx.test(),
 				reload: () => internalNginx.reload(),
 				log: (message) => logger.error(message),
 			});
 		} catch (err) {
+			if (revision) {
+				await failConfigRevision(revision.id, err);
+			}
 			const message = err instanceof Error ? err.message : String(err);
 			debug(logger, "Nginx transactional configure failed:", message);
 			throw new errs.ConfigurationError(message, err);
@@ -59,6 +97,16 @@ const internalNginx = {
 			meta: combined_meta,
 		});
 
+		if (revision) {
+			await activateConfigRevision(revision.id, {
+				snapshot: await captureModelSnapshot(model, host.id),
+				configText: readConfigIfExists(configPath),
+				meta: revisionContext.sourceRevisionId
+					? { source_revision_id: revisionContext.sourceRevisionId }
+					: {},
+			});
+		}
+
 		return combined_meta;
 	},
 
@@ -70,17 +118,55 @@ const internalNginx = {
 	 * @param   {Object}  host
 	 * @returns {Promise}
 	 */
-	removeConfigTransactional: async (host_type, host) => {
+	removeConfigTransactional: async (model, host_type, host, revisionContext = {}) => {
 		await internalNginx.test();
 		const configPath = internalNginx.getConfigName(host_type, host.id);
+		const recordRevision = revisionContext.recordRevision !== false;
+		let revision = null;
+
+		if (recordRevision) {
+			await ensureBaselineRevision({
+				objectType: host_type,
+				objectId: host.id,
+				snapshot: revisionContext.previousSnapshot || null,
+				configText: readConfigIfExists(configPath),
+			});
+
+			revision = await beginConfigRevision({
+				userId: revisionContext.userId || 0,
+				objectType: host_type,
+				objectId: host.id,
+				operation: revisionContext.operation || "remove",
+				snapshot: await captureModelSnapshot(model, host.id),
+				meta: revisionContext.sourceRevisionId
+					? { source_revision_id: revisionContext.sourceRevisionId }
+					: {},
+			});
+		}
+
 		try {
-			return await removeConfigTransaction({
+			const result = await removeConfigTransaction({
 				livePath: configPath,
 				validate: () => internalNginx.test(),
 				reload: () => internalNginx.reload(),
 				log: (message) => logger.error(message),
 			});
+
+			if (revision) {
+				await activateConfigRevision(revision.id, {
+					snapshot: await captureModelSnapshot(model, host.id),
+					configText: "",
+					meta: revisionContext.sourceRevisionId
+						? { source_revision_id: revisionContext.sourceRevisionId }
+						: {},
+				});
+			}
+
+			return result;
 		} catch (err) {
+			if (revision) {
+				await failConfigRevision(revision.id, err);
+			}
 			const message = err instanceof Error ? err.message : String(err);
 			throw new errs.ConfigurationError(message, err);
 		}
