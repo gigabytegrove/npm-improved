@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import errs from "../lib/error.js";
+import { isSharedDatabase } from "../lib/config.js";
 import settingModel from "../models/setting.js";
 import pjson from "../package.json" with { type: "json" };
 import { global as logger } from "../logger.js";
@@ -133,6 +134,27 @@ const updateMeta = async (patch) => {
 };
 
 const sanitizedStatus = async () => {
+	if (isSharedDatabase()) {
+		return {
+			enabled: false,
+			nodeId: null,
+			nodeName: os.hostname(),
+			role: "primary",
+			publicUrl: "",
+			primaryUrl: "",
+			intervalSeconds: 60,
+			secretConfigured: false,
+			lastSync: null,
+			lastAttempt: null,
+			lastError: null,
+			primaryStatus: null,
+			peers: [],
+			version: currentVersion(),
+			buildCommit: process.env.NPM_BUILD_COMMIT || null,
+			buildDate: process.env.NPM_BUILD_DATE || null,
+			sharedDatabaseMode: true,
+		};
+	}
 	const row = await getRow();
 	const meta = row.meta || {};
 	return {
@@ -200,6 +222,11 @@ const internalInstanceSync = {
 	getStatus: sanitizedStatus,
 
 	updateSettings: async (data) => {
+		if (isSharedDatabase()) {
+			throw new errs.ValidationError(
+				"Instance Synchronization is not used in Shared MySQL mode. Manage the shared database cluster under Settings → Database & Cluster.",
+			);
+		}
 		const row = await getRow();
 		const current = row.meta || {};
 		const enabled = typeof data.enabled === "boolean" ? data.enabled : row.value === "enabled";
@@ -259,6 +286,11 @@ const internalInstanceSync = {
 	},
 
 	promote: async () => {
+		if (isSharedDatabase()) {
+			throw new errs.ValidationError(
+				"Use Database & Cluster to promote a Shared MySQL node.",
+			);
+		}
 		const row = await getRow();
 		const meta = {
 			...(row.meta || {}),
@@ -302,6 +334,9 @@ const internalInstanceSync = {
 	},
 
 	createPeerSnapshot: async () => {
+		if (isSharedDatabase()) {
+			throw new errs.ValidationError("Peer snapshots are not used in Shared MySQL mode");
+		}
 		const status = await sanitizedStatus();
 		if (!status.enabled || status.role !== "primary") {
 			throw new errs.ValidationError("This node is not an enabled primary synchronization node");
@@ -314,6 +349,9 @@ const internalInstanceSync = {
 	},
 
 	recordHeartbeat: async (data, remoteAddress = null) => {
+		if (isSharedDatabase()) {
+			throw new errs.ValidationError("Instance Sync heartbeats are not used in Shared MySQL mode");
+		}
 		const row = await getRow();
 		const meta = row.meta || {};
 		if (row.value !== "enabled" || meta.role !== "primary") {
@@ -349,6 +387,9 @@ const internalInstanceSync = {
 	},
 
 	syncNow: async () => {
+		if (isSharedDatabase()) {
+			throw new errs.ValidationError("Shared MySQL nodes reconcile from the common database automatically");
+		}
 		if (syncRunning) {
 			throw new errs.ValidationError("An instance synchronization is already running");
 		}
@@ -432,12 +473,17 @@ const internalInstanceSync = {
 	},
 
 	isSecondaryReadOnly: async () => {
+		if (isSharedDatabase()) return false;
 		const row = await getRow();
 		return row.value === "enabled" && row.meta?.role === "secondary";
 	},
 
 	writeGuard: async (req, _res, next) => {
 		try {
+			if (isSharedDatabase()) {
+				next();
+				return;
+			}
 			if (["GET", "HEAD", "OPTIONS"].includes(req.method)) {
 				next();
 				return;
@@ -493,6 +539,10 @@ const internalInstanceSync = {
 	},
 
 	initTimer: () => {
+		if (isSharedDatabase()) {
+			logger.info("Instance Synchronization timer disabled because Shared MySQL mode is active");
+			return;
+		}
 		internalInstanceSync.reschedule(30_000);
 	},
 };
