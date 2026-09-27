@@ -8,7 +8,7 @@ cd "${ROOT_DIR}"
 usage() {
 	cat <<'EOF'
 Usage:
-  ./scripts/install-docker [sqlite|mysql|postgres] [--check-only]
+  ./scripts/install-docker [sqlite|mysql|postgres] [--check-only] [--auto-ports]
 
 Examples:
   ./scripts/install-docker
@@ -16,15 +16,18 @@ Examples:
   ./scripts/install-docker mysql
   ./scripts/install-docker postgres
   ./scripts/install-docker sqlite --check-only
+  ./scripts/install-docker sqlite --auto-ports
 
 The installer creates .env from .env.example when needed, validates Docker
 Compose, checks host port availability before building, starts the selected
-stack, and waits for the application healthcheck.
+stack, and waits for the application healthcheck. Use --auto-ports to replace
+occupied host port mappings with free alternatives automatically.
 EOF
 }
 
 MODE="sqlite"
 CHECK_ONLY=0
+AUTO_PORTS=0
 
 for arg in "$@"; do
 	case "$arg" in
@@ -33,6 +36,9 @@ for arg in "$@"; do
 			;;
 		--check-only)
 			CHECK_ONLY=1
+			;;
+		--auto-ports)
+			AUTO_PORTS=1
 			;;
 		-h|--help)
 			usage
@@ -158,6 +164,69 @@ show_port_owner() {
 	docker ps --format '  {{.Names}}\t{{.Ports}}' 2>/dev/null 		| grep -E "(:|^)${port}->|0\.0\.0\.0:${port}|\[::\]:${port}" || true
 }
 
+set_env() {
+	local key="$1"
+	local value="$2"
+
+	if grep -q "^${key}=" .env; then
+		sed -i "s|^${key}=.*|${key}=${value}|" .env
+	else
+		printf '%s=%s\n' "$key" "$value" >> .env
+	fi
+}
+
+find_free_port() {
+	local candidate="$1"
+	shift
+	local taken
+	local reserved
+
+	while [ "$candidate" -le 65535 ]; do
+		reserved=0
+		for taken in "$@"; do
+			if [ "$candidate" = "$taken" ]; then
+				reserved=1
+				break
+			fi
+		done
+
+		if [ "$reserved" -eq 0 ] && ! port_in_use "$candidate"; then
+			printf '%s' "$candidate"
+			return 0
+		fi
+
+		candidate=$((candidate + 1))
+	done
+
+	return 1
+}
+
+choose_available_ports() {
+	local reserved=()
+
+	SUGGEST_HTTP="$HTTP_PORT"
+	SUGGEST_ADMIN="$ADMIN_PORT"
+	SUGGEST_HTTPS="$HTTPS_PORT"
+
+	if ! port_in_use "$HTTP_PORT"; then reserved+=("$HTTP_PORT"); fi
+	if ! port_in_use "$ADMIN_PORT"; then reserved+=("$ADMIN_PORT"); fi
+	if ! port_in_use "$HTTPS_PORT"; then reserved+=("$HTTPS_PORT"); fi
+
+	if port_in_use "$HTTP_PORT"; then
+		SUGGEST_HTTP="$(find_free_port 8080 "${reserved[@]}")" || return 1
+		reserved+=("$SUGGEST_HTTP")
+	fi
+
+	if port_in_use "$ADMIN_PORT"; then
+		SUGGEST_ADMIN="$(find_free_port 8181 "${reserved[@]}")" || return 1
+		reserved+=("$SUGGEST_ADMIN")
+	fi
+
+	if port_in_use "$HTTPS_PORT"; then
+		SUGGEST_HTTPS="$(find_free_port 8443 "${reserved[@]}")" || return 1
+		reserved+=("$SUGGEST_HTTPS")
+	fi
+}
 HTTP_PORT="$(read_env HTTP_PORT 80)"
 ADMIN_PORT="$(read_env ADMIN_PORT 81)"
 HTTPS_PORT="$(read_env HTTPS_PORT 443)"
@@ -184,23 +253,47 @@ for entry in "HTTP_PORT:$HTTP_PORT" "ADMIN_PORT:$ADMIN_PORT" "HTTPS_PORT:$HTTPS_
 done
 
 if [ "$conflicts" -ne 0 ]; then
-	cat >&2 <<EOF
+	if ! choose_available_ports; then
+		echo "ERROR: Could not find a complete set of free alternative host ports." >&2
+		exit 2
+	fi
+
+	if [ "$AUTO_PORTS" -eq 1 ]; then
+		echo
+		echo "Occupied host ports detected. Applying free host-side mappings:"
+		echo "  HTTP_PORT=$SUGGEST_HTTP"
+		echo "  ADMIN_PORT=$SUGGEST_ADMIN"
+		echo "  HTTPS_PORT=$SUGGEST_HTTPS"
+
+		set_env HTTP_PORT "$SUGGEST_HTTP"
+		set_env ADMIN_PORT "$SUGGEST_ADMIN"
+		set_env HTTPS_PORT "$SUGGEST_HTTPS"
+
+		HTTP_PORT="$SUGGEST_HTTP"
+		ADMIN_PORT="$SUGGEST_ADMIN"
+		HTTPS_PORT="$SUGGEST_HTTPS"
+	else
+		cat >&2 <<EOF
 
 NPM Improved was not started because one or more host ports are occupied.
 
-If this is a parallel/test installation, edit .env and choose unused host ports,
-for example:
+Free host-side mappings detected on this machine:
 
-  HTTP_PORT=8080
-  ADMIN_PORT=8181
-  HTTPS_PORT=8443
+  HTTP_PORT=$SUGGEST_HTTP
+  ADMIN_PORT=$SUGGEST_ADMIN
+  HTTPS_PORT=$SUGGEST_HTTPS
 
-Then run this installer again.
+To apply those ports automatically and continue:
+
+  ./scripts/install-docker $MODE --auto-ports
+
+Or edit .env manually and rerun the installer.
 
 If NPM Improved is replacing the service that owns 80/81/443, stop that service
 deliberately first. The installer will never stop an existing service for you.
 EOF
-	exit 2
+		exit 2
+	fi
 fi
 
 compose=(docker compose -f "$COMPOSE_FILE")
