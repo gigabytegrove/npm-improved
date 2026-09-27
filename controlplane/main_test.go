@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"io"
 	"log"
 	"net/http"
@@ -37,6 +38,17 @@ func TestHealthIndependentOfBackend(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `"component":"control-plane"`) {
 		t.Fatalf("unexpected health body: %s", rec.Body.String())
+	}
+
+	var health healthResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &health); err != nil {
+		t.Fatalf("health response is not valid JSON: %v", err)
+	}
+	if health.Checks["controlPlane"].Status != "ok" {
+		t.Fatalf("control plane must report itself healthy: %#v", health.Checks["controlPlane"])
+	}
+	if health.Checks["backend"].Status == "ok" {
+		t.Fatalf("unreachable backend must not report healthy: %#v", health.Checks["backend"])
 	}
 }
 

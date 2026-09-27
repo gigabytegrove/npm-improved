@@ -184,10 +184,28 @@ const internalNginx = {
 	 * @returns {Promise}
 	 */
 	reload: () => {
-		return internalNginx.test().then(() => {
+		return internalNginx.test().then(async () => {
 			logger.info("Reloading Nginx");
-			return utils.execFile("/usr/sbin/nginx", ["-s", "reload"]);
+			const result = await utils.execFile("/usr/sbin/nginx", ["-s", "reload"]);
+			try {
+				fs.writeFileSync("/data/nginx/.last-reload", new Date().toISOString(), { encoding: "utf8" });
+			} catch (err) {
+				logger.warn(`Nginx reloaded but last-reload timestamp could not be persisted: ${err.message}`);
+			}
+			return result;
 		});
+	},
+
+	getLastReload: () => {
+		try {
+			const value = fs.readFileSync("/data/nginx/.last-reload", { encoding: "utf8" }).trim();
+			return value || null;
+		} catch (err) {
+			if (err.code !== "ENOENT") {
+				debug(logger, "Could not read Nginx last-reload timestamp:", err.message);
+			}
+			return null;
+		}
 	},
 
 	/**
