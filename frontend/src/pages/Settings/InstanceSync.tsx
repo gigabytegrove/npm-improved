@@ -49,6 +49,20 @@ export default function InstanceSync() {
 		);
 	}
 
+	if (data.sharedDatabaseMode) {
+		return (
+			<div className="card-body">
+				<div className="d-flex align-items-center gap-2 mb-2">
+					<IconTopologyStar3 size={24} />
+					<h3 className="mb-0">Instance Synchronization</h3>
+				</div>
+				<Alert variant="info" className="mb-0">
+					This server is using <strong>Shared MySQL</strong>. Snapshot-based Instance Synchronization is disabled because all NPMi nodes already read the same database. Manage node roles, failover, and database migration under <strong>Database &amp; Cluster</strong>.
+				</Alert>
+			</div>
+		);
+	}
+
 	const peers = data.role === "primary"
 		? data.peers || []
 		: data.primaryStatus
