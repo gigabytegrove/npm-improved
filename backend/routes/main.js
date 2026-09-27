@@ -35,16 +35,21 @@ router.use(logRequest);
  * GET /api
  */
 router.get("/", async (_, res /*, next*/) => {
-	const version = pjson.version.split("-").shift().split(".");
+	const displayVersion = (process.env.NPM_BUILD_VERSION || pjson.version || "0.0.0").trim();
+	const normalizedVersion = displayVersion.replace(/^v/, "").split("-").shift();
+	const versionParts = normalizedVersion.split(".").map((part) => Number.parseInt(part, 10) || 0);
 	const setup = await isSetup();
 
 	res.status(200).send({
 		status: "OK",
 		setup,
 		version: {
-			major: Number.parseInt(version.shift(), 10),
-			minor: Number.parseInt(version.shift(), 10),
-			revision: Number.parseInt(version.shift(), 10),
+			major: versionParts[0] || 0,
+			minor: versionParts[1] || 0,
+			revision: versionParts[2] || 0,
+			display: displayVersion.startsWith("v") ? displayVersion : `v${displayVersion}`,
+			build_commit: process.env.NPM_BUILD_COMMIT || null,
+			build_date: process.env.NPM_BUILD_DATE || null,
 		},
 	});
 });
