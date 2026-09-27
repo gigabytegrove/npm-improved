@@ -4,6 +4,9 @@ import path from "node:path";
 import authModel from "../models/auth.js";
 import errs from "../lib/error.js";
 import internalAuditLog from "./audit-log.js";
+import internalDatabaseManager from "./database-manager.js";
+import internalDisasterRecovery from "./disaster-recovery.js";
+import internalInstanceSync from "./instance-sync.js";
 
 const DOCKER_SOCKET = "/var/run/docker.sock";
 const STATUS_FILE = "/data/update-status.json";
@@ -133,6 +136,37 @@ const assertIdle = () => {
 	}
 };
 
+const verifyOperationalSafety = async (access) => {
+	const database = await internalDatabaseManager.status(access);
+	if (database.migrationInProgress) {
+		throw new errs.ValidationError("A database migration is in progress. Wait for it to finish before updating.");
+	}
+	if (database.mysqlSharedMode) {
+		throw new errs.ValidationError(
+			"Automatic single-node updates are disabled while Shared MySQL mode is active. Coordinate the same NPM Improved version across every shared-database node before updating.",
+		);
+	}
+
+	const sync = await internalInstanceSync.getStatus();
+	if (sync.enabled) {
+		throw new errs.ValidationError(
+			"Automatic updates are disabled while Instance Synchronization is enabled. Update synchronized nodes together during a maintenance window.",
+		);
+	}
+
+	const recovery = await internalDisasterRecovery.status(access);
+	if (recovery.restoreInProgress) {
+		throw new errs.ValidationError("A backup restore is in progress. Wait for it to finish before updating.");
+	}
+
+	return {
+		database_engine: database.current?.engine || "unknown",
+		shared_mysql: Boolean(database.mysqlSharedMode),
+		instance_sync: Boolean(sync.enabled),
+		restore_in_progress: Boolean(recovery.restoreInProgress),
+	};
+};
+
 const verifyCurrentPassword = async (access, password) => {
 	if (typeof password !== "string" || password.length < 1) {
 		throw new errs.ValidationError("Current administrator password is required.");
@@ -204,6 +238,7 @@ const startUpdate = async (access, release, password) => {
 	await access.can("settings:update");
 	await verifyCurrentPassword(access, password);
 	assertIdle();
+	const safety = await verifyOperationalSafety(access);
 
 	if (!release?.latest || !release.update_available) {
 		throw new errs.ValidationError("No newer stable NPM Improved release is available.");
@@ -247,6 +282,7 @@ const startUpdate = async (access, release, password) => {
 				target_version: targetVersion,
 				target_image: targetImage,
 				helper_id: helper.helper_id,
+				preflight: safety,
 			},
 		});
 		return { ...getStatus(), helper };
@@ -266,6 +302,7 @@ const rollback = async (access, password) => {
 	await access.can("settings:update");
 	await verifyCurrentPassword(access, password);
 	assertIdle();
+	await verifyOperationalSafety(access);
 
 	const status = getStatus();
 	if (!status.previous_image) {
@@ -312,6 +349,7 @@ const restart = async (access, password) => {
 	await access.can("settings:update");
 	await verifyCurrentPassword(access, password);
 	assertIdle();
+	await verifyOperationalSafety(access);
 
 	const sourceVersion = process.env.NPM_BUILD_VERSION || "unknown";
 	writeJsonFile(STATUS_FILE, {
