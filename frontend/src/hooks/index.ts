@@ -21,6 +21,7 @@ export * from "./useRedirectionHost";
 export * from "./useRedirectionHosts";
 export * from "./useSetting";
 export * from "./useStream";
+export * from "./useSystemHealth";
 export * from "./useStreams";
 export * from "./useTheme";
 export * from "./useUser";
