@@ -137,6 +137,10 @@ If those nodes sign login tokens with different keys, a login created by one ser
 
 In Shared MySQL mode, NPM Improved coordinates the JWT signing identity through the shared database. A joining node adopts the established cluster signing identity and restarts its backend before serving normal API traffic.
 
+### Certificate maintenance coordination
+
+Automatic Let's Encrypt renewal and certificate-lifecycle maintenance are serialized with a MySQL advisory lock. That prevents every NPM Improved server in the shared database from running the same scheduled certificate maintenance at the same time.
+
 ### Node presence
 
 Shared-database nodes publish a small heartbeat in the common database.
@@ -156,11 +160,18 @@ The database contains certificate records, but the certificate files themselves 
 
 For several NPM Improved servers to terminate the same HTTPS sites, every node must have the same certificate material.
 
-At minimum, share or replicate:
+At minimum, share or replicate certificate material:
 
 ```text
 /etc/letsencrypt
 /data/custom_ssl
+```
+
+If you use custom Nginx snippets or a custom Default Site, also share or replicate those user-managed assets:
+
+```text
+/data/nginx/custom
+/data/nginx/default_www
 ```
 
 Common approaches include:
