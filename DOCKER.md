@@ -31,23 +31,15 @@ The default deployment uses SQLite at `/data/database.sqlite`.
 
 ## Port conflicts
 
-The installer checks the configured host ports before building. It never stops an existing service automatically.
+The installer checks the configured host ports before building. It never stops an existing service automatically. When a port is occupied it detects free alternatives on that specific host instead of suggesting fixed port numbers.
 
-If ports 80, 81, or 443 are already in use because NPM Improved is being tested alongside another reverse proxy, edit `.env` and choose unused host-side ports, for example:
-
-```dotenv
-HTTP_PORT=8080
-ADMIN_PORT=8181
-HTTPS_PORT=8443
-```
-
-Then rerun:
+If configured ports are already in use because NPM Improved is being tested alongside another reverse proxy, the installer prints free host-side mappings it found. To apply those detected mappings automatically and continue:
 
 ```bash
-./scripts/install-docker sqlite
+./scripts/install-docker sqlite --auto-ports
 ```
 
-The internal container ports remain 80, 81, and 443.
+The selected ports are written to `.env`. The internal container ports remain 80, 81, and 443.
 
 To inspect a conflict manually:
 
