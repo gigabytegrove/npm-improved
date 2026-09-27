@@ -76,3 +76,5 @@ export * from "./inspectDisasterRecoveryBackup";
 export * from "./restoreDisasterRecoveryBackup";
 
 export * from "./instanceSync";
+
+export * from "./database";
