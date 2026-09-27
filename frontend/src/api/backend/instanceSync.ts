@@ -21,7 +21,7 @@ export interface InstanceSyncPeer {
 
 export interface InstanceSyncStatus {
 	enabled: boolean;
-	nodeId: string;
+	nodeId: string | null;
 	nodeName: string;
 	role: "primary" | "secondary";
 	publicUrl: string;
@@ -36,6 +36,7 @@ export interface InstanceSyncStatus {
 	version: string;
 	buildCommit: string | null;
 	buildDate: string | null;
+	sharedDatabaseMode?: boolean;
 }
 
 export interface InstanceSyncSettings {
