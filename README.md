@@ -2,186 +2,374 @@
   <img src="docs/src/public/npm-improved-logo.webp" alt="Nginx Proxy Manager Improved" width="720">
 </p>
 
-# NPM Improved
+<h1 align="center">NPM Improved</h1>
 
-**NPM Improved** is a compatibility-focused fork of [Nginx Proxy Manager](https://github.com/NginxProxyManager/nginx-proxy-manager) that keeps the familiar reverse-proxy workflow while fixing reliability, recovery, certificate lifecycle, observability, and security gaps that are difficult to solve as small upstream UI changes.
+<p align="center">
+  <strong>Reverse proxy management built for real-world reliability.</strong><br>
+  Publish your self-hosted apps, manage HTTPS, add failover, recover from bad changes, and keep multiple proxy servers in sync from one friendly control center.
+</p>
 
-Repository: https://github.com/gigabytegrove/npm-improved
+<p align="center">
+  <a href="https://www.gigabytegrove.com/projects">Project page</a>
+  ·
+  <a href="https://github.com/gigabytegrove/npm-improved">GitHub</a>
+  ·
+  <a href="docs/src/guide/index.md">Documentation</a>
+  ·
+  <a href="SECURITY.md">Security</a>
+</p>
 
-Project page: https://www.gigabytegrove.com/projects
+---
 
-> **Development status:** NPM Improved is currently pre-1.0. The `develop` branch is the integration branch and should be treated as development software until a stable release is published.
+> **Development status**
+>
+> NPM Improved is currently **pre-1.0**. The `develop` branch is the active integration branch. It is usable for testing and active development, but a stable published container image has not been released yet. For now, NPM Improved builds directly from this repository.
 
-## Why NPM Improved exists
+## What is NPM Improved?
 
-The project keeps Nginx as the traffic engine, but moves toward a safer control-plane/data-plane design.
+NPM Improved is a modernized fork of [Nginx Proxy Manager](https://github.com/NginxProxyManager/nginx-proxy-manager).
 
-The major goals are:
+If you already know Nginx Proxy Manager, the basic idea is familiar: you point a domain name at an app or service, choose where the traffic should go, enable HTTPS, and manage it from a web interface.
 
-- keep the management interface available when Nginx traffic configuration is broken;
-- never replace a working Nginx host configuration with an invalid one;
-- automatically restore the last-known-good configuration when validation or reload fails;
-- keep database state aligned with the configuration that actually went live;
-- make certificate ownership, usage, quarantine, renewal, and cleanup visible;
-- expose access/error logs and structured security events in the UI;
-- add polished application-layer request/connection protection without requiring users to write raw Nginx directives;
-- retain practical compatibility with Nginx Proxy Manager configuration and workflows where possible.
+NPM Improved keeps that simple workflow, but adds the things that become important when your reverse proxy is no longer "just a test box":
 
-## Current NPM Improved features
+- safer configuration changes;
+- automatic rollback when a change breaks Nginx;
+- high availability for backend applications;
+- synchronization between multiple NPM Improved servers;
+- encrypted backup and disaster recovery;
+- configuration history;
+- a recovery console that can stay available when the normal app is unhealthy;
+- certificate lifecycle management;
+- system-health monitoring;
+- logs and security-event visibility;
+- built-in HTTP protection controls;
+- a redesigned management interface intended for day-to-day operations.
 
-### Independent management control plane
+You do **not** need to understand raw Nginx configuration files to use these features.
 
-The admin listener on port `81` is served by a standalone Go control-plane process instead of the Nginx traffic process.
+## A few terms in plain English
 
-The existing Node API remains behind that control plane while the backend is migrated incrementally. This separation means a broken site configuration or stopped Nginx data plane does not have to make the management listener disappear with it.
+If you are new to reverse proxies, these are the main terms you will see:
 
-Control-plane health endpoint:
+| Term | What it means |
+| --- | --- |
+| **Proxy Host** | A public or internal hostname such as `photos.example.com` that NPM Improved sends to one or more apps behind it. |
+| **Backend / Upstream** | The actual server running your app, such as `192.168.1.50:8080`. |
+| **Reverse Proxy** | The server that receives the user's web request first, handles things like HTTPS, then passes the request to the correct app. |
+| **Certificate** | The TLS/SSL certificate that gives a site HTTPS. |
+| **Control Center** | The NPM Improved web interface where you manage hosts, certificates, users, logs, backups, and health. |
+| **Failover** | Automatically using another server when the preferred server is unavailable. |
+| **Synchronization** | Keeping two or more NPM Improved servers on the same configuration. |
+
+## What can NPM Improved do?
+
+### Publish self-hosted apps without writing Nginx by hand
+
+Create a Proxy Host, enter a domain, choose the backend server and port, and NPM Improved generates the Nginx configuration for you.
+
+Typical examples include:
+
+- Home Assistant;
+- Jellyfin or Plex web interfaces;
+- Immich;
+- Nextcloud;
+- Docker-hosted web apps;
+- internal dashboards;
+- web admin panels;
+- development services;
+- APIs;
+- business applications.
+
+NPM Improved also supports redirects, 404 hosts, TCP/UDP streams, access lists, custom locations, WebSockets, certificates, and advanced Nginx options.
+
+### Use more than one backend for the same hostname
+
+A normal reverse-proxy rule often points to one server:
+
+```text
+app.example.com
+        ↓
+192.168.1.50:8080
+```
+
+NPM Improved can point the same hostname at a pool of servers instead:
+
+```text
+                     ┌─ App Server 1
+app.example.com ─────┼─ App Server 2
+                     └─ App Server 3
+```
+
+That lets you build redundancy directly into the Proxy Host.
+
+Available modes include:
+
+- **Round robin** — spread requests across available servers.
+- **Least connections** — prefer the server currently handling the fewest active connections.
+- **Client IP affinity** — try to keep the same client on the same backend.
+- **Primary + failover** — use one preferred server and automatically fall back to backup servers.
+
+Each backend can have its own hostname/IP, port, weight, failure limit, failure timeout, label, and enabled state.
+
+Nginx can retry another available backend when it encounters connection errors, timeouts, invalid upstream responses, or common server-error responses.
+
+[Read the Proxy Host high-availability guide](docs/src/guide/high-availability.md).
+
+## High availability at two different levels
+
+NPM Improved supports two separate kinds of redundancy because they solve different problems.
+
+### 1. Backend high availability
+
+This protects you when the **application server** fails.
+
+For example:
+
+```text
+Internet
+   ↓
+NPM Improved
+   ↓
+┌──────────────┬──────────────┬──────────────┐
+App Server 1   App Server 2   App Server 3
+```
+
+If one app server is unavailable, Nginx can use another member of the upstream pool.
+
+### 2. NPM Improved server high availability
+
+This protects you when the **reverse proxy server itself** fails.
+
+For example:
+
+```text
+                   ┌─ NPMi Primary ───────┐
+Users / DNS / LB ──┤                      ├─ Your apps
+                   └─ NPMi Secondary ─────┘
+```
+
+NPM Improved can synchronize two or more installations using a **Primary / Secondary** model.
+
+The Primary is the server where configuration changes are made. Secondary servers periodically pull an encrypted copy of that configuration and keep their own Nginx service ready to handle traffic.
+
+If the Primary is lost, a Secondary can be promoted.
+
+This gives you multiple possible proxy entry points without allowing two independent servers to silently overwrite each other's configuration.
+
+[Read the Instance Synchronization guide](docs/src/guide/instance-sync.md).
+
+## Safer configuration changes
+
+A reverse proxy is often the front door to many applications. A single bad configuration should not take everything down.
+
+NPM Improved treats important Nginx changes like a transaction:
+
+```text
+Create the new configuration
+          ↓
+Test it with nginx -t
+          ↓
+Activate it
+          ↓
+Reload Nginx
+          ↓
+Keep the change only if it worked
+```
+
+If validation or reload fails, NPM Improved restores the previous working configuration instead of leaving the server in a broken state.
+
+For Proxy Hosts, Redirection Hosts, 404 Hosts, Streams, and related settings, the matching database change is also rolled back when the Nginx change cannot safely go live.
+
+## Configuration History
+
+NPM Improved keeps a history of configuration revisions.
+
+That means you can see more than just "what the host looks like now." You can also inspect previous states and failed attempts.
+
+Revisions can be:
+
+- **Pending** — waiting to finish activation;
+- **Active** — currently in use;
+- **Superseded** — an older working configuration;
+- **Failed** — a candidate that did not activate successfully.
+
+Known-good older revisions can be restored through the same safe validation process.
+
+Failed configurations are kept for troubleshooting, but they are not treated as safe restore points.
+
+[Read about Configuration History](docs/src/guide/config-history.md).
+
+## The management interface can survive traffic problems
+
+Traditional reverse-proxy designs can make the management interface depend on the same traffic process you are trying to repair.
+
+NPM Improved separates the management listener from the normal Nginx traffic process.
+
+The Control Center on port `81` is served by an independent control-plane service. This means a broken Proxy Host or an unhealthy Nginx data plane does not automatically have to make the management interface disappear too.
+
+The independent health endpoint is:
 
 ```text
 /__npm_improved/health
 ```
 
-The endpoint is independent of the Node management API and reports safe component state for the control plane, frontend bundle, backend reachability, and Nginx process/config validity. It remains available in degraded mode so the UI can explain what failed instead of disappearing behind a generic API error.
+The UI can use that independent status source to show what is still healthy when the normal backend is unavailable.
 
-### System Health and degraded-mode diagnostics
+## System Health
 
-Administrators have a **System Health** workspace covering:
+The **System Health** workspace gives administrators a single place to see whether the important pieces of NPM Improved are working.
 
-- independent control plane;
-- Nginx process, configuration validity, PID, and last successful reload;
+It includes visibility into:
+
+- the independent management control plane;
+- Nginx process state;
+- Nginx configuration validity;
+- the last successful Nginx reload;
 - database connectivity and query latency;
-- certificate renewal/lifecycle schedulers;
-- log storage read/write health;
-- Configuration History revision engine and pending/failed counts.
+- certificate renewal and lifecycle services;
+- log storage;
+- Configuration History processing.
 
-When the normal Node API is unavailable, the frontend falls back to the independent Go health endpoint and still shows control-plane, backend, and Nginx status.
+The goal is to answer "what is actually broken?" instead of only returning a generic error page.
 
-### Transactional Nginx configuration
+## Backup & disaster recovery
 
-HTTP hosts and streams use a last-known-good transaction model:
+NPM Improved uses encrypted `.npmibak` backup files.
+
+There are two backup styles.
+
+### Configuration backup
+
+Use this when you want to move or restore the configuration without replacing the destination server's local user identity.
+
+It includes items such as:
+
+- Proxy Hosts;
+- Redirection Hosts;
+- 404 Hosts;
+- Streams;
+- Access Lists;
+- application settings;
+- Configuration History;
+- certificate records and certificate files;
+- Let's Encrypt state;
+- custom Nginx configuration;
+- custom Default Site files.
+
+### Full disaster recovery backup
+
+Use this when you want to rebuild the **same NPM Improved installation** after server, disk, or container loss.
+
+It includes the configuration backup contents plus items such as:
+
+- users;
+- permissions;
+- authentication and two-factor state;
+- JWT identity;
+- recovery credentials;
+- cluster secret;
+- audit history.
+
+Backups are encrypted using **AES-256-GCM** and require a passphrase.
+
+Before restore, NPM Improved can inspect a backup and show what it contains without changing the current installation.
+
+When a restore is actually performed, NPM Improved takes a rollback snapshot first, rebuilds the Nginx configuration, validates it, and returns to the old state if the restored configuration cannot safely start.
+
+[Read the Backup & Disaster Recovery guide](docs/src/guide/disaster-recovery.md).
+
+## Emergency recovery console
+
+NPM Improved includes a separate recovery console at:
 
 ```text
-render candidate
-      ↓
-validate with nginx -t
-      ↓
-activate candidate
-      ↓
-reload Nginx
-      ↓
-commit
+http://<npm-improved-host>:81/recovery/
 ```
 
-If validation or reload fails, the previous working configuration is restored automatically and the failed candidate is retained for diagnostics.
+It is designed for the situation where the normal management application is unhealthy but the independent control plane is still available.
 
-Database changes for proxy hosts, redirection hosts, 404 hosts, and streams are also restored when the Nginx transaction does not commit.
+The recovery console can help with tasks such as:
 
-Settings that regenerate Nginx configuration use the same rollback model.
+- checking control-plane, backend, Nginx, and storage health;
+- running `nginx -t`;
+- performing a validated Nginx reload;
+- reviewing failed configuration candidates;
+- downloading retained encrypted backups;
+- restoring a full disaster-recovery backup when the normal API is unavailable.
 
-### Configuration History
+It uses its own recovery credential rather than the normal application login.
 
-NPM Improved records durable configuration revisions for Proxy Hosts, Redirection Hosts, 404 Hosts, and Streams.
+[Read the Recovery Console guide](docs/src/guide/recovery-console.md).
 
-Each revision records the operation, actor, database snapshot, generated Nginx configuration, state, exact activation error when applicable, and restore ancestry. Revisions move through **Pending**, **Active**, **Superseded**, or **Failed** states.
+## HTTPS and certificate lifecycle
 
-Existing hosts receive a baseline revision automatically before their first post-upgrade change. Failed candidates remain inspectable but cannot be restored. Superseded known-good revisions can be restored by an administrator; a restore regenerates and validates Nginx through the normal transactional path and creates a new active revision rather than rewriting history.
+NPM Improved keeps the familiar certificate workflow while adding more visibility around certificate ownership and cleanup.
 
-### Native recovery console
+It can track where certificates are being used across supported host types.
 
-The standalone Go control plane exposes an emergency console at `/recovery/`. It remains available independently of the Node management API and normal React application.
+Unused certificates can enter a configurable quarantine period before cleanup instead of disappearing immediately, and certificates that are still referenced by a host are protected from being removed underneath that host.
 
-The console uses a separate recovery token stored under `/data/recovery-access.json` with mode `0600`; the token is never emitted to application logs. It can report control-plane/backend/Nginx/storage health, run `nginx -t`, perform a validated Nginx reload, show failed configuration candidates, and download retained encrypted recovery backups.
+This makes certificate maintenance safer on systems that change frequently.
 
-See [Native Recovery Console](docs/src/guide/recovery-console.md).
+## Logs and security visibility
 
-### Backup & disaster recovery
+NPM Improved brings important logs into the web interface so you do not have to start with shell access every time something goes wrong.
 
-Settings → **Backup & Recovery** can create encrypted, versioned `.npmibak` bundles.
+The UI includes access to:
 
-**Configuration backups** are portable and contain hosts, streams, access lists, settings, configuration history, certificate records/material, Let's Encrypt state, and custom Nginx/default-site files while leaving destination user/JWT identity intact.
+- system logs;
+- Let's Encrypt logs;
+- access logs;
+- error logs;
+- structured HTTP security events.
 
-**Full disaster recovery backups** additionally preserve users, permissions, authentication/2FA records, configuration history, the instance JWT keys, and the native recovery credential so the same NPM Improved installation can be rebuilt after host or storage loss.
+Security-event classification can highlight request patterns commonly associated with things such as:
 
-Backups require a passphrase and are encrypted with AES-256-GCM. Restore supports a non-destructive inspection step first, takes a local rollback snapshot before applying changes, regenerates all Nginx configuration, and automatically restores the prior database/filesystem state if `nginx -t` or reload fails.
-
-See [Backup & Disaster Recovery](docs/src/guide/disaster-recovery.md).
-
-### Certificate lifecycle management
-
-Certificates are separated into active and unused states.
-
-NPM Improved tracks certificate references across proxy hosts, redirection hosts, 404 hosts, and streams. Unused certificates enter a configurable quarantine before automatic cleanup, and referenced certificates cannot be deleted underneath a host.
-
-### Logs and security observability
-
-The UI includes raw system, Let's Encrypt, access, and error log viewing plus structured HTTP security events derived from recent access logs.
-
-Security-event classification includes common probes such as:
-
-- sensitive-file and `.env` requests;
-- source/config disclosure attempts;
-- path traversal patterns;
+- attempts to access `.env` or sensitive files;
+- path traversal;
 - SQL-injection-shaped requests;
 - XSS-shaped requests;
 - exploit endpoint probes;
-- CMS/admin scanning;
-- web-shell filename probes.
+- CMS/admin scans;
+- web-shell filename probes;
+- rate-limit enforcement.
 
-These classifications describe observed request patterns; they are not presented as proof of attacker intent.
+These are **request-pattern classifications**, not claims that NPM Improved knows a visitor's intent.
 
-### HTTP Protection
+## Built-in HTTP protection
 
-NPM Improved provides managed application-layer protection profiles for HTTP proxy, redirection, and 404 hosts:
+NPM Improved includes managed HTTP protection profiles so common rate and connection controls can be enabled without hand-writing Nginx directives.
 
-- **Off** — no managed request/connection limiting;
-- **Standard** — 30 requests/second per client per host, burst 60, up to 40 concurrent connections, and conservative slow-client timeouts;
-- **Aggressive** — 10 requests/second per client per host, burst 20, up to 15 concurrent connections, and tighter slow-client timeouts;
-- **Inherit** — per-host option that uses the global policy.
+Available choices include:
 
-The global profile is managed from **Settings → Protection**. Hosts can override it individually without raw Nginx directives. Trusted IPv4/IPv6 addresses and CIDR networks can bypass managed request/connection accounting.
+- **Off**
+- **Standard**
+- **Aggressive**
+- **Inherit the global setting**
 
-The policy is generated under `/data/nginx/protection/policy.conf` and changed transactionally: a new policy must pass `nginx -t` and reload successfully or the previous policy and database setting are restored.
+The profiles can limit excessive requests and concurrent connections and can reduce resource use from slow clients.
 
-Protection uses native Nginx request-rate, concurrent-connection, timeout, and timed-out-connection controls. It is intended to reduce application-layer floods and resource exhaustion. It cannot stop a volumetric DDoS attack that saturates the network connection before packets reach Nginx.
+Trusted IP addresses or networks can be excluded from those counters.
 
+This protection is useful against application-layer abuse that reaches Nginx. It is **not** a replacement for upstream DDoS protection when an attack is large enough to saturate your Internet connection before Nginx ever sees the traffic.
 
-### Backup and disaster recovery
+[Read the HTTP Protection guide](docs/src/guide/protection.md).
 
-NPM Improved can export encrypted portable configuration backups or full-instance disaster-recovery bundles. Restores are inspected before activation, create a pre-restore safety backup, regenerate Nginx configuration, and roll back automatically if validation or reload fails.
+## Quick start with Docker
 
-Optional scheduled encrypted backups can be retained under `/data/backups` using deployment environment variables. The backup passphrase is not stored in the application database, and retained bundles remain downloadable from the native recovery console when the normal management API is unavailable.
+### Requirements
 
+You need:
 
+- Docker Engine 24 or newer;
+- Docker Compose v2;
+- Git;
+- available host ports for the services you want to expose.
 
-### Proxy Host high availability
+### SQLite quick start
 
-A Proxy Host can use multiple backend targets instead of a single scheme/host/port destination. NPM Improved generates native Nginx upstream pools with:
-
-- weighted round-robin;
-- least-connections balancing;
-- client-IP affinity;
-- ordered primary/failover mode;
-- per-target passive failure thresholds and timeouts;
-- automatic retry on connection errors, timeouts, invalid headers, and HTTP 500/502/503/504 responses.
-
-Existing single-target hosts and legacy API clients remain compatible. See [Proxy Host High Availability](docs/src/guide/high-availability.md).
-
-### Instance synchronization
-
-Two or more NPM Improved installations can share the same operational configuration through a primary/secondary synchronization model.
-
-Secondaries periodically pull an authenticated, AES-256-GCM encrypted configuration snapshot from the primary, apply it transactionally, regenerate Nginx configuration, run `nginx -t`, and roll back if activation fails. Synchronized secondaries remain independent HTTP/HTTPS proxy entry points but are read-only for synchronized configuration until explicitly promoted.
-
-NPM Improved intentionally permits only one writable primary at a time to avoid split-brain changes. DNS, a load balancer, or an external virtual-IP mechanism can direct clients to multiple synchronized NPM Improved nodes.
-
-See [Instance Synchronization](docs/src/guide/instance-sync.md).
-
-
-## Docker installation
-
-Production Docker Compose files now live at the repository root.
-
-SQLite quick start:
+For the simplest single-server setup:
 
 ```bash
 git clone https://github.com/gigabytegrove/npm-improved.git
@@ -189,113 +377,189 @@ cd npm-improved
 ./scripts/install-docker sqlite
 ```
 
-The installer creates `.env` on first run, validates the Compose stack, checks that the configured host ports are free before building, starts the service, and waits for the container healthcheck. If the host already uses the configured ports, rerun it with `--auto-ports` to select and persist free host-side mappings automatically. The default stack persists `/data` and `/etc/letsencrypt` in local bind-mounted directories and exposes HTTP on port 80, the independent management control plane on port 81, and HTTPS on port 443.
+The installer:
 
-Database alternatives are included:
+1. creates `.env` when needed;
+2. checks Docker and Compose;
+3. validates the Compose configuration;
+4. checks whether the configured host ports are available;
+5. builds NPM Improved from the checked-out source;
+6. starts the stack;
+7. waits for the application health check.
 
-```bash
-docker compose -f compose.mysql.yaml up -d --build
-docker compose -f compose.postgres.yaml up -d --build
+When startup finishes, open:
+
+```text
+http://<your-server>:81
 ```
 
-The production Dockerfile is self-contained and builds the frontend and Go control plane during the image build, so a clean checkout does not require a separate frontend build first.
+and continue through the NPM Improved setup/login experience.
 
-See [DOCKER.md](DOCKER.md) and the [Setup documentation](docs/src/setup/index.md) for environment variables, persistent storage, backup settings, updates, health checks, and database-specific instructions.
+### If ports 80, 81, or 443 are already being used
 
-## Development environment
+NPM Improved checks before building and will not stop another service automatically.
 
-The repository retains the upstream development stack and scripts.
-
-Requirements include Docker, Docker Compose, Git, and `jq`.
-
-Start the development environment:
+To let the installer find and save free host-side ports:
 
 ```bash
-git clone https://github.com/gigabytegrove/npm-improved.git
-cd npm-improved
-./scripts/start-dev
+./scripts/install-docker sqlite --auto-ports
 ```
 
-The development script reports the local URLs when startup completes. By default the development admin UI is exposed on port `3081`, with the Nginx traffic listener on port `3080`.
-
-Stop the development stack with:
+### MySQL / MariaDB
 
 ```bash
-./scripts/stop-dev
+cp .env.example .env
+# Set MYSQL_PASSWORD and MYSQL_ROOT_PASSWORD in .env
+./scripts/install-docker mysql
 ```
 
-## Building the production image
-
-NPM Improved does not currently advertise a stable published container image. The production Compose files build `npm-improved:local` directly from the checkout.
-
-To build only the image with the repository buildx script:
+### PostgreSQL
 
 ```bash
-./scripts/buildx --load -t npm-improved:dev
+cp .env.example .env
+# Set the PostgreSQL values required by the compose file
+./scripts/install-docker postgres
 ```
 
-The production Dockerfile now builds the frontend and standalone Go control plane itself; `frontend/dist` does not need to exist on the host before the build begins.
+For storage paths, environment variables, database configuration, port mapping, backups, health checks, and update behavior, see [DOCKER.md](DOCKER.md).
 
-For multi-platform publishing, pass the appropriate buildx output/push arguments instead of `--load`.
+## Default ports
 
-Do not substitute the upstream `jc21/nginx-proxy-manager` image when testing NPM Improved features; that image is the upstream project and does not contain this fork's changes.
+The normal container-side ports are:
 
-## Ports and persistent data
+| Port | Used for |
+| ---: | --- |
+| **80** | HTTP web traffic |
+| **81** | NPM Improved Control Center |
+| **443** | HTTPS web traffic |
 
-The production container architecture continues to use the familiar ports:
+The host-side ports can be changed in `.env` when needed.
 
-| Port | Purpose |
-| --- | --- |
-| 80 | HTTP traffic |
-| 81 | NPM Improved management control plane |
-| 443 | HTTPS traffic |
+## Persistent data
 
-Persistent data remains under:
+The important persistent locations are:
 
 ```text
 /data
 /etc/letsencrypt
 ```
 
-Back up both locations before testing upgrades.
+Keep both locations on persistent storage.
 
-## Compatibility and upgrades
+Even though NPM Improved includes application-level backups, infrastructure-level backups or snapshots of these locations are still recommended.
 
-NPM Improved is intentionally based on Nginx Proxy Manager and preserves its existing host types, database model, certificate workflow, and API patterns where practical.
+## Updating an existing source-based installation
 
-However, this fork introduces new generated configuration, settings, control-plane services, certificate lifecycle behavior, and security features. Until a stable migration contract is published:
+The current development workflow builds NPM Improved from the repository.
 
-1. back up `/data` and `/etc/letsencrypt`;
-2. test upgrades on a copy of the deployment first;
-3. do not assume downgrade compatibility after the fork writes new state;
-4. verify the admin control plane, proxy hosts, certificates, streams, and logs after each upgrade.
+For a typical SQLite installation:
 
-See the documentation under `docs/src/upgrading/` for current upgrade notes.
+```bash
+cd ~/npm-improved
+git checkout develop
+git pull --ff-only
+./scripts/install-docker sqlite --clean-build
+```
 
-## Security
+Because NPM Improved is still pre-1.0:
 
-Please do **not** open public issues for security vulnerabilities.
+- keep a current backup before upgrading;
+- review upgrade notes;
+- test important deployments before relying on a new development snapshot;
+- verify Proxy Hosts, certificates, streams, logs, health, and synchronization after upgrading.
 
-See [SECURITY.md](SECURITY.md) for private reporting instructions and current support status.
+## Compatibility with Nginx Proxy Manager
+
+NPM Improved is based on Nginx Proxy Manager and intentionally keeps familiar concepts and workflows where practical.
+
+Existing users should recognize:
+
+- Proxy Hosts;
+- Redirection Hosts;
+- 404 Hosts;
+- Streams;
+- Access Lists;
+- certificates;
+- users;
+- the general reverse-proxy workflow.
+
+At the same time, NPM Improved adds its own generated configuration, database fields, management services, recovery features, high-availability behavior, synchronization, and UI.
+
+Because of those differences, do not assume that a database or state written by NPM Improved can always be safely downgraded back to an older upstream Nginx Proxy Manager installation.
+
+Back up first and test migrations deliberately.
+
+## What NPM Improved does not try to be
+
+NPM Improved is intentionally focused on reverse-proxy management.
+
+It does not try to replace:
+
+- your DNS provider;
+- your router or firewall;
+- your ISP;
+- a CDN;
+- upstream volumetric DDoS mitigation;
+- a full distributed database cluster;
+- a load balancer or virtual-IP system used to place multiple NPM Improved nodes behind one address.
+
+For multi-node deployments, NPM Improved keeps the proxy configuration synchronized. Your DNS, load balancer, or virtual-IP layer decides how clients reach those nodes.
+
+## Project status and releases
+
+NPM Improved currently uses its own pre-1.0 version line.
+
+The active integration branch is:
+
+```text
+develop
+```
+
+There is not yet a stable published NPM Improved container image. The current supported testing workflow is to build from this repository using the included Docker installer/Compose files.
+
+Do **not** use the upstream `jc21/nginx-proxy-manager` image when testing NPM Improved features. That image is the upstream project and does not contain NPM Improved changes.
 
 ## Documentation
 
-Project documentation lives in `docs/` and is built with VitePress.
+Start with the [NPM Improved Guide](docs/src/guide/index.md).
 
-Build it locally with:
+Useful guides include:
 
-```bash
-./scripts/docs-build
-```
+- [Docker installation](DOCKER.md)
+- [Proxy Host high availability](docs/src/guide/high-availability.md)
+- [Instance Synchronization](docs/src/guide/instance-sync.md)
+- [Backup & Disaster Recovery](docs/src/guide/disaster-recovery.md)
+- [Native Recovery Console](docs/src/guide/recovery-console.md)
+- [Configuration History](docs/src/guide/config-history.md)
+- [HTTP Protection](docs/src/guide/protection.md)
+
+Project page:
+
+**https://www.gigabytegrove.com/projects**
+
+## Security
+
+Please do **not** open a public GitHub issue for a security vulnerability.
+
+Use the private reporting instructions in [SECURITY.md](SECURITY.md).
 
 ## Contributing
 
-Changes should target the `develop` branch through pull requests and must pass the repository's required checks.
+NPM Improved uses `develop` as its active integration branch.
 
-NPM Improved intentionally keeps attribution to the upstream Nginx Proxy Manager project. The upstream project is licensed under the MIT License; this fork remains under the repository's included MIT license.
+Changes should be submitted through pull requests and must pass the repository's required checks before they are merged.
 
-## Upstream project
+If you are changing behavior, include or update the matching documentation so users do not have to discover the feature from source code.
 
-NPM Improved would not exist without Nginx Proxy Manager and its contributors:
+## Upstream project and license
 
-https://github.com/NginxProxyManager/nginx-proxy-manager
+NPM Improved is based on [Nginx Proxy Manager](https://github.com/NginxProxyManager/nginx-proxy-manager) and would not exist without the work of its maintainers and contributors.
+
+The upstream project is licensed under the MIT License, and NPM Improved retains the applicable upstream attribution and MIT licensing in this repository.
+
+---
+
+<p align="center">
+  <strong>NPM Improved</strong><br>
+  A Gigabyte Grove project · <a href="https://www.gigabytegrove.com/projects">gigabytegrove.com/projects</a>
+</p>
