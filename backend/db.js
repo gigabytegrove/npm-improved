@@ -3,14 +3,10 @@ import { configGet, configHas } from "./lib/config.js";
 
 let instance = null;
 
-const generateDbConfig = () => {
-	if (!configHas("database")) {
-		throw new Error(
-			"Database config does not exist! Please read the instructions: https://nginxproxymanager.com/setup/",
-		);
+const generateDbConfigFor = (cfg) => {
+	if (!cfg) {
+		throw new Error("Database config does not exist");
 	}
-
-	const cfg = configGet("database");
 
 	if (cfg.engine === "knex-native") {
 		return cfg.knex;
@@ -32,6 +28,17 @@ const generateDbConfig = () => {
 	};
 };
 
+const generateDbConfig = () => {
+	if (!configHas("database")) {
+		throw new Error(
+			"Database config does not exist! Please read the instructions: https://nginxproxymanager.com/setup/",
+		);
+	}
+
+	const cfg = configGet("database");
+	return generateDbConfigFor(cfg);
+};
+
 const getInstance = () => {
 	if (!instance) {
 		instance = knex(generateDbConfig());
@@ -39,4 +46,5 @@ const getInstance = () => {
 	return instance;
 };
 
+export { generateDbConfigFor };
 export default getInstance;
