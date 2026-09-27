@@ -26,3 +26,5 @@ export * from "./useStreams";
 export * from "./useTheme";
 export * from "./useUser";
 export * from "./useUsers";
+
+export * from "./useInstanceSync";
