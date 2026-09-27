@@ -91,8 +91,7 @@ func newRecoveryManager(cfg config, logger *log.Logger) (*recoveryManager, error
 	}
 
 	if created {
-		logger.Printf("RECOVERY ACCESS TOKEN CREATED: %s", token)
-		logger.Printf("recovery token is stored at %s with mode 0600", cfg.RecoveryTokenFile)
+		logger.Printf("recovery credential created at %s with mode 0600", cfg.RecoveryTokenFile)
 	}
 
 	return manager, nil
