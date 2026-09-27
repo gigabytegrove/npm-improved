@@ -1,0 +1,256 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+cd "${ROOT_DIR}"
+
+usage() {
+	cat <<'EOF'
+Usage:
+  ./scripts/install-docker [sqlite|mysql|postgres] [--check-only]
+
+Examples:
+  ./scripts/install-docker
+  ./scripts/install-docker sqlite
+  ./scripts/install-docker mysql
+  ./scripts/install-docker postgres
+  ./scripts/install-docker sqlite --check-only
+
+The installer creates .env from .env.example when needed, validates Docker
+Compose, checks host port availability before building, starts the selected
+stack, and waits for the application healthcheck.
+EOF
+}
+
+MODE="sqlite"
+CHECK_ONLY=0
+
+for arg in "$@"; do
+	case "$arg" in
+		sqlite|mysql|postgres)
+			MODE="$arg"
+			;;
+		--check-only)
+			CHECK_ONLY=1
+			;;
+		-h|--help)
+			usage
+			exit 0
+			;;
+		*)
+			echo "ERROR: Unknown argument: $arg" >&2
+			usage >&2
+			exit 2
+			;;
+	esac
+done
+
+case "$MODE" in
+	sqlite) COMPOSE_FILE="compose.yaml" ;;
+	mysql) COMPOSE_FILE="compose.mysql.yaml" ;;
+	postgres) COMPOSE_FILE="compose.postgres.yaml" ;;
+esac
+
+if ! command -v docker >/dev/null 2>&1; then
+	echo "ERROR: docker is not installed or is not in PATH." >&2
+	exit 1
+fi
+
+if ! docker compose version >/dev/null 2>&1; then
+	echo "ERROR: Docker Compose v2 is required ('docker compose')." >&2
+	exit 1
+fi
+
+if ! docker info >/dev/null 2>&1; then
+	echo "ERROR: Docker daemon is not reachable for the current user." >&2
+	exit 1
+fi
+
+if [ ! -f ".env" ]; then
+	cp .env.example .env
+	echo "Created .env from .env.example"
+fi
+
+read_env() {
+	local key="$1"
+	local fallback="$2"
+	local raw=""
+
+	raw="$(awk -F= -v k="$key" '$1 == k {sub(/^[^=]*=/, ""); print; found=1} END {if (!found) exit 0}' .env | tail -n 1)"
+	raw="${raw%$'\r'}"
+
+	if [[ "$raw" == \"*\" && "$raw" == *\" ]]; then
+		raw="${raw:1:${#raw}-2}"
+	elif [[ "$raw" == \'*\' && "$raw" == *\' ]]; then
+		raw="${raw:1:${#raw}-2}"
+	fi
+
+	if [ -z "$raw" ]; then
+		raw="$fallback"
+	fi
+
+	printf '%s' "$raw"
+}
+
+validate_port() {
+	local label="$1"
+	local port="$2"
+
+	if ! [[ "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
+		echo "ERROR: ${label} must be a TCP port from 1 to 65535; got '${port}'." >&2
+		exit 1
+	fi
+}
+
+port_in_use() {
+	local port="$1"
+
+	if command -v ss >/dev/null 2>&1; then
+		ss -H -ltn 2>/dev/null | awk -v p="$port" '
+			{
+				addr=$4
+				sub(/^.*:/, "", addr)
+				gsub(/\]/, "", addr)
+				if (addr == p) {
+					found=1
+					exit
+				}
+			}
+			END { exit found ? 0 : 1 }
+		'
+		return
+	fi
+
+	if command -v netstat >/dev/null 2>&1; then
+		netstat -ltn 2>/dev/null | awk -v p="$port" '
+			NR > 2 {
+				addr=$4
+				sub(/^.*:/, "", addr)
+				if (addr == p) {
+					found=1
+					exit
+				}
+			}
+			END { exit found ? 0 : 1 }
+		'
+		return
+	fi
+
+	docker ps --format '{{.Ports}}' 2>/dev/null | grep -Eq "(^|[,[:space:]])([^,]*:)?${port}->"
+}
+
+show_port_owner() {
+	local port="$1"
+
+	if command -v ss >/dev/null 2>&1; then
+		ss -H -ltnp 2>/dev/null | awk -v p="$port" '
+			{
+				addr=$4
+				test=addr
+				sub(/^.*:/, "", test)
+				gsub(/\]/, "", test)
+				if (test == p) print
+			}
+		' || true
+	fi
+
+	docker ps --format '  {{.Names}}\t{{.Ports}}' 2>/dev/null 		| grep -E "(:|^)${port}->|0\.0\.0\.0:${port}|\[::\]:${port}" || true
+}
+
+HTTP_PORT="$(read_env HTTP_PORT 80)"
+ADMIN_PORT="$(read_env ADMIN_PORT 81)"
+HTTPS_PORT="$(read_env HTTPS_PORT 443)"
+
+validate_port HTTP_PORT "$HTTP_PORT"
+validate_port ADMIN_PORT "$ADMIN_PORT"
+validate_port HTTPS_PORT "$HTTPS_PORT"
+
+if [ "$HTTP_PORT" = "$ADMIN_PORT" ] || [ "$HTTP_PORT" = "$HTTPS_PORT" ] || [ "$ADMIN_PORT" = "$HTTPS_PORT" ]; then
+	echo "ERROR: HTTP_PORT, ADMIN_PORT, and HTTPS_PORT must be unique host ports." >&2
+	exit 1
+fi
+
+conflicts=0
+for entry in "HTTP_PORT:$HTTP_PORT" "ADMIN_PORT:$ADMIN_PORT" "HTTPS_PORT:$HTTPS_PORT"; do
+	label="${entry%%:*}"
+	port="${entry##*:}"
+
+	if port_in_use "$port"; then
+		echo "ERROR: ${label}=${port} is already in use on this host." >&2
+		show_port_owner "$port" >&2
+		conflicts=1
+	fi
+done
+
+if [ "$conflicts" -ne 0 ]; then
+	cat >&2 <<EOF
+
+NPM Improved was not started because one or more host ports are occupied.
+
+If this is a parallel/test installation, edit .env and choose unused host ports,
+for example:
+
+  HTTP_PORT=8080
+  ADMIN_PORT=8181
+  HTTPS_PORT=8443
+
+Then run this installer again.
+
+If NPM Improved is replacing the service that owns 80/81/443, stop that service
+deliberately first. The installer will never stop an existing service for you.
+EOF
+	exit 2
+fi
+
+compose=(docker compose -f "$COMPOSE_FILE")
+
+echo "Validating ${COMPOSE_FILE} ..."
+"${compose[@]}" config --quiet
+
+if [ "$CHECK_ONLY" -eq 1 ]; then
+	echo "Docker preflight passed for ${MODE}."
+	exit 0
+fi
+
+echo "Building and starting NPM Improved (${MODE}) ..."
+"${compose[@]}" up -d --build
+
+container_id="$("${compose[@]}" ps -q app)"
+if [ -z "$container_id" ]; then
+	echo "ERROR: NPM Improved application container was not created." >&2
+	"${compose[@]}" ps >&2 || true
+	exit 1
+fi
+
+healthy=0
+for _ in $(seq 1 60); do
+	state="$(docker inspect --format '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' "$container_id" 2>/dev/null || true)"
+
+	case "$state" in
+		*" healthy")
+			healthy=1
+			break
+			;;
+		exited*|dead*)
+			echo "ERROR: NPM Improved exited before becoming healthy." >&2
+			"${compose[@]}" logs --tail=200 app >&2 || true
+			exit 1
+			;;
+	esac
+
+	sleep 2
+done
+
+if [ "$healthy" -ne 1 ]; then
+	echo "ERROR: NPM Improved did not become healthy within the startup window." >&2
+	"${compose[@]}" ps >&2 || true
+	"${compose[@]}" logs --tail=200 app >&2 || true
+	exit 1
+fi
+
+echo
+echo "NPM Improved is healthy."
+echo "Management UI: http://<host>:${ADMIN_PORT}"
+echo
+"${compose[@]}" ps
