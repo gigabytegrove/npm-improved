@@ -21,9 +21,9 @@
 
 ---
 
-> **Development status**
+> **Current release**
 >
-> NPM Improved is currently **pre-1.0**. The `develop` branch is the active integration branch. It is usable for testing and active development, but a stable published container image has not been released yet. For now, NPM Improved builds directly from this repository.
+> NPM Improved **v1.0.0** is the first stable release. The `develop` branch remains the active integration branch. Current deployments build directly from this repository with the included Docker installer; a pre-built container image is not published yet.
 
 ## What is NPM Improved?
 
@@ -477,12 +477,12 @@ git pull --ff-only
 ./scripts/install-docker sqlite --clean-build
 ```
 
-Because NPM Improved is still pre-1.0:
+For v1.x upgrades:
 
 - keep a current backup before upgrading;
 - review upgrade notes;
-- test important deployments before relying on a new development snapshot;
-- verify Proxy Hosts, certificates, streams, logs, health, and synchronization after upgrading.
+- test important deployments before relying on a new release;
+- verify Proxy Hosts, certificates, streams, logs, health, database state, and synchronization after upgrading.
 
 ## Compatibility with Nginx Proxy Manager
 
@@ -523,7 +523,7 @@ For multi-node deployments, NPM Improved keeps the proxy configuration synchroni
 
 ## Project status and releases
 
-NPM Improved currently uses its own pre-1.0 version line.
+NPM Improved is on the stable **1.x** version line. **v1.0.0** is the first stable release.
 
 The active integration branch is:
 
@@ -531,7 +531,7 @@ The active integration branch is:
 develop
 ```
 
-There is not yet a stable published NPM Improved container image. The current supported testing workflow is to build from this repository using the included Docker installer/Compose files.
+A pre-built NPM Improved container image is not published yet. The supported deployment workflow is to build from this repository using the included Docker installer/Compose files.
 
 Do **not** use the upstream `jc21/nginx-proxy-manager` image when testing NPM Improved features. That image is the upstream project and does not contain NPM Improved changes.
 
