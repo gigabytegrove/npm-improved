@@ -96,3 +96,63 @@ jobs:
         continue-on-error: true
         working-directory: frontend
         run: node check-locales.cjs
+
+      - name: Install documentation dependencies
+        working-directory: docs
+        run: yarn install --frozen-lockfile
+
+      - name: Build documentation
+        working-directory: docs
+        run: yarn build
+
+      - name: Build production container
+        working-directory: .
+        run: |
+          docker buildx build \
+            --load \
+            --platform linux/amd64 \
+            --build-arg BUILD_VERSION=ci \
+            --build-arg BUILD_COMMIT="${GITHUB_SHA}" \
+            --build-arg BUILD_DATE="$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+            -f docker/Dockerfile \
+            -t npm-improved:ci \
+            .
+
+      - name: Smoke test production container
+        working-directory: .
+        run: |
+          set -euo pipefail
+
+          mkdir -p /tmp/npm-improved-smoke/data /tmp/npm-improved-smoke/letsencrypt
+
+          docker run -d \
+            --name npm-improved-smoke \
+            -e INITIAL_ADMIN_EMAIL=ci@example.invalid \
+            -e INITIAL_ADMIN_PASSWORD=ci-only-password-not-a-secret \
+            -v /tmp/npm-improved-smoke/data:/data \
+            -v /tmp/npm-improved-smoke/letsencrypt:/etc/letsencrypt \
+            npm-improved:ci
+
+          cleanup() {
+            docker logs npm-improved-smoke || true
+            docker rm -f npm-improved-smoke >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          healthy=0
+          for _ in $(seq 1 60); do
+            if docker exec npm-improved-smoke /usr/bin/check-health >/dev/null 2>&1; then
+              healthy=1
+              break
+            fi
+            sleep 2
+          done
+
+          if [ "$healthy" -ne 1 ]; then
+            echo "Container did not become healthy" >&2
+            exit 1
+          fi
+
+          docker exec npm-improved-smoke /usr/sbin/nginx -t
+          docker exec npm-improved-smoke curl --fail --silent --show-error \
+            http://127.0.0.1:81/__npm_improved/health

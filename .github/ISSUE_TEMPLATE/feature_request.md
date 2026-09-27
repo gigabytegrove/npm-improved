@@ -1,32 +1,35 @@
 ---
 name: Feature request
-about: Suggest an idea for this project
+about: Propose an NPM Improved enhancement
 title: ''
 labels: enhancement
 assignees: ''
-
 ---
 
-<!--
+## Problem
 
-Are you in the right place?
-- If you are looking for support on how to get your upstream server forwarding, please consider asking the community on Reddit.
-- If you are writing code changes to contribute and need to ask about the internals of the software, Gitter is the best place to ask.
-- If you think you found a bug with NPM (not Nginx, or your upstream server or MySql) then you are in the *right place.*
+What concrete problem should this solve?
 
--->
+## Proposed behavior
 
-**Is your feature request related to a problem? Please describe.**
-<!-- A clear and concise description of what the problem is. Ex. I'm always frustrated when [...] -->
+Describe the behavior from an administrator/user perspective.
 
+## Compatibility impact
 
-**Describe the solution you'd like**
-<!-- A clear and concise description of what you want to happen. -->
+Does this affect:
 
+- upstream NPM compatibility;
+- API behavior;
+- persistent database state;
+- generated Nginx configuration;
+- Docker/runtime permissions;
+- certificates;
+- rollback/recovery behavior?
 
-**Describe alternatives you've considered**
-<!-- A clear and concise description of any alternative solutions or features you've considered. -->
+## Safety and failure behavior
 
+What should happen if the feature fails midway? NPM Improved features that modify live traffic should preserve the last-known-good state wherever practical.
 
-**Additional context**
-<!-- Add any other context or screenshots about the feature request here. -->
+## Additional context
+
+Screenshots, example workflows, or relevant upstream behavior.

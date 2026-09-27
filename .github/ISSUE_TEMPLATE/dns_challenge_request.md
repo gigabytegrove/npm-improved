@@ -1,18 +1,25 @@
 ---
 name: DNS challenge provider request
-about: Suggest a new provider to be available for a certificate DNS challenge
+about: Request a Certbot DNS provider for NPM Improved
 title: ''
 labels: dns provider request
 assignees: ''
-
 ---
 
-**What provider would you like to see added to NPM?**
-<!-- What is this provider called? -->
+## Provider
 
+What DNS provider should NPM Improved support?
 
-**Have you checked if a certbot plugin exists?**
-<!-- 
-Currently NPM only supports DNS challenge providers for which a certbot plugin exists. 
-You can visit pypi.org, and search for a package with the name `certbot-dns-<privider>`.
--->
+## Certbot plugin
+
+Link to the maintained Certbot DNS plugin / PyPI package.
+
+NPM Improved currently supports DNS challenge providers through compatible Certbot plugins.
+
+## Credentials format
+
+List the credential fields required by the plugin. Do not include real credentials.
+
+## Compatibility notes
+
+Include known Python/Certbot version constraints, propagation requirements, or plugin dependency conflicts.

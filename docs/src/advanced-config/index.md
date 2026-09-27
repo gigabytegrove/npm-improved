@@ -4,265 +4,146 @@ outline: deep
 
 # Advanced Configuration
 
-## Running processes as a user/group
+## Runtime user/group
 
-By default, the services (nginx etc) will run as `root` user inside the docker container.
-You can change this behaviour by setting the following environment variables.
-Not only will they run the services as this user/group, they will change the ownership
-on the `data` and `letsencrypt` folders at startup.
+The container starts as root for initialization and can run services under the configured PUID/PGID afterward.
 
-```yml
+```yaml
 services:
   app:
-    image: 'jc21/nginx-proxy-manager:{{VERSION}}'
+    image: npm-improved:dev
     environment:
       PUID: 1000
       PGID: 1000
-    # ...
 ```
 
-This may have the side effect of a failed container start due to permission denied trying
-to open port 80 on some systems. The only course to fix that is to remove the variables
-and run as the default root user.
+Startup adjusts ownership of required persistent/runtime paths. Test custom IDs before using them on production data.
 
-## Best Practice: Use a Docker network
+## Docker network best practice
 
-For those who have a few of their upstream services running in Docker on the same Docker
-host as NPM, here's a trick to secure things a bit better. By creating a custom Docker network,
-you don't need to publish ports for your upstream services to all of the Docker host's interfaces.
-
-Create a network, ie "scoobydoo":
+When upstream applications run on the same Docker host, place them on a private Docker network and proxy to service names instead of publishing every upstream port on the host.
 
 ```bash
-docker network create scoobydoo
+docker network create proxy
 ```
 
-Then add the following to the `docker-compose.yml` file for both NPM and any other
-services running on this Docker host:
+Then attach NPM Improved and the upstream application to that external network.
 
-```yml
+```yaml
 networks:
   default:
     external: true
-    name: scoobydoo
+    name: proxy
 ```
 
-Let's look at a Portainer example:
+## Docker file secrets
 
-```yml
-services:
+Environment variables can be populated from files by appending `__FILE` to the variable name.
 
-  portainer:
-    image: portainer/portainer
-    privileged: true
-    volumes:
-      - './data:/data'
-      - '/var/run/docker.sock:/var/run/docker.sock'
-    restart: unless-stopped
+Example:
 
-networks:
-  default:
-    external: true
-    name: scoobydoo
-```
-
-Now in the NPM UI you can create a proxy host with `portainer` as the hostname,
-and port `9000` as the port. Even though this port isn't listed in the docker-compose
-file, it's "exposed" by the Portainer Docker image for you and not available on
-the Docker host outside of this Docker network. The service name is used as the
-hostname, so make sure your service names are unique when using the same network.
-
-## Docker Healthcheck
-
-The `Dockerfile` that builds this project does not include a `HEALTHCHECK` but you can opt in to this
-feature by adding the following to the service in your `docker-compose.yml` file:
-
-```yml
-healthcheck:
-  test: ["CMD", "/usr/bin/check-health"]
-  interval: 10s
-  timeout: 3s
-```
-
-## Docker File Secrets
-
-This image supports the use of Docker secrets to import from files and keep sensitive usernames or passwords from being passed or preserved in plaintext.
-
-You can set any environment variable from a file by appending `__FILE` (double-underscore FILE) to the environmental variable name.
-
-```yml
+```yaml
 secrets:
-  # Secrets are single-line text files where the sole content is the secret
-  # Paths in this example assume that secrets are kept in local folder called ".secrets"
-  DB_ROOT_PWD:
-    file: .secrets/db_root_pwd.txt
-  MYSQL_PWD:
-    file: .secrets/mysql_pwd.txt
+  mysql_password:
+    file: .secrets/mysql_password
 
 services:
   app:
-    image: 'jc21/nginx-proxy-manager:{{VERSION}}'
-    restart: unless-stopped
-    ports:
-      # Public HTTP Port:
-      - '80:80'
-      # Public HTTPS Port:
-      - '443:443'
-      # Admin Web Port:
-      - '81:81'
+    image: npm-improved:dev
     environment:
-      # These are the settings to access your db
-      DB_MYSQL_HOST: "db"
-      DB_MYSQL_PORT: 3306
-      DB_MYSQL_USER: "npm"
-      # DB_MYSQL_PASSWORD: "npm"  # use secret instead
-      DB_MYSQL_PASSWORD__FILE: /run/secrets/MYSQL_PWD
-      DB_MYSQL_NAME: "npm"
-      # If you would rather use Sqlite, remove all DB_MYSQL_* lines above
-      # Uncomment this if IPv6 is not enabled on your host
-      # DISABLE_IPV6: 'true'
-    volumes:
-      - ./data:/data
-      - ./letsencrypt:/etc/letsencrypt
+      DB_MYSQL_HOST: db
+      DB_MYSQL_USER: npm
+      DB_MYSQL_PASSWORD__FILE: /run/secrets/mysql_password
+      DB_MYSQL_NAME: npm
     secrets:
-      - MYSQL_PWD
-    depends_on:
-      - db
-
-  db:
-    image: 'linuxserver/mariadb'
-    restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD__FILE: /run/secrets/DB_ROOT_PWD
-      MYSQL_DATABASE: 'npm'
-      MYSQL_USER: 'npm'
-      MYSQL_PASSWORD__FILE: /run/secrets/MYSQL_PWD
-      TZ: 'Australia/Brisbane'
-    volumes:
-      - ./mariadb:/config
-    secrets:
-      - DB_ROOT_PWD
-      - MYSQL_PWD
+      - mysql_password
 ```
 
+## IPv6
 
-## Disabling IPv6
+If IPv6 is unavailable on the Docker host:
 
-On some Docker hosts IPv6 may not be enabled. In these cases, the following message may be seen in the log:
-
-> Address family not supported by protocol
-
-The easy fix is to add a Docker environment variable to the Nginx Proxy Manager stack:
-
-```yml
-    environment:
-      DISABLE_IPV6: 'true'
+```yaml
+environment:
+  DISABLE_IPV6: "true"
 ```
 
-## Disabling IP Ranges Fetch
+## Disable dynamic resolver generation
 
-By default, NPM fetches IP ranges from CloudFront and Cloudflare during application startup. In environments with limited internet access or to speed up container startup, this fetch can be disabled:
-
-```yml
-    environment:
-      IP_RANGES_FETCH_ENABLED: 'false'
+```yaml
+environment:
+  DISABLE_RESOLVER: "true"
 ```
 
-## Custom Nginx Configurations
+When disabled, Nginx falls back to the container's normal host/resolver behavior.
 
-If you are a more advanced user, you might be itching for extra Nginx customizability.
+## IP range fetch
 
-NPM has the ability to include different custom configuration snippets in different places.
+The inherited CDN IP-range update can be disabled in restricted environments:
 
-You can add your custom configuration snippet files at `/data/nginx/custom` as follow:
+```yaml
+environment:
+  IP_RANGES_FETCH_ENABLED: "false"
+```
 
- - `/data/nginx/custom/root_top.conf`: Included at the top of nginx.conf
- - `/data/nginx/custom/root.conf`: Included at the very end of nginx.conf
- - `/data/nginx/custom/http_top.conf`: Included at the top of the main http block
- - `/data/nginx/custom/http.conf`: Included at the end of the main http block
- - `/data/nginx/custom/events.conf`: Included at the end of the events block
- - `/data/nginx/custom/stream.conf`: Included at the end of the main stream block
- - `/data/nginx/custom/server_proxy.conf`: Included at the end of every proxy server block
- - `/data/nginx/custom/server_redirect.conf`: Included at the end of every redirection server block
- - `/data/nginx/custom/server_stream.conf`: Included at the end of every stream server block
- - `/data/nginx/custom/server_stream_tcp.conf`: Included at the end of every TCP stream server block
- - `/data/nginx/custom/server_stream_udp.conf`: Included at the end of every UDP stream server block
- - `/data/nginx/custom/server_dead.conf`: Included at the end of every 404 server block
+## Custom Nginx configuration
+
+Custom snippets remain available under `/data/nginx/custom`.
+
+Supported include points include:
+
+- `root_top.conf`
+- `root.conf`
+- `http_top.conf`
+- `http.conf`
+- `events.conf`
+- `stream.conf`
+- `server_proxy.conf`
+- `server_redirect.conf`
+- `server_stream.conf`
+- `server_stream_tcp.conf`
+- `server_stream_udp.conf`
+- `server_dead.conf`
 
 Every file is optional.
 
+::: warning
+Custom Nginx directives can override or conflict with managed configuration. NPM Improved validates generated changes before commit, but advanced directives remain the administrator's responsibility.
+:::
 
-## X-FRAME-OPTIONS Header
+## Managed HTTP Protection
 
-You can configure the [`X-FRAME-OPTIONS`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options) header
-value by specifying it as a Docker environment variable. The default if not specified is `deny`.
+NPM Improved writes the global generated policy to:
 
-```yml
-  ...
-  environment:
-    X_FRAME_OPTIONS: "sameorigin"
-  ...
+```text
+/data/nginx/protection/policy.conf
 ```
 
-## Customising logrotate settings
+Do not edit that file manually; Settings → Protection owns it and updates it transactionally.
 
-By default, NPM rotates the access- and error logs weekly and keeps 4 and 10 log files respectively.
-Depending on the usage, this can lead to large log files, especially access logs.
-You can customise the logrotate configuration through a mount (if your custom config is `logrotate.custom`):
+For supported controls and per-host overrides, see [HTTP Protection](/guide/protection).
 
-```yml
-  volumes:
-    ...
-    - ./logrotate.custom:/etc/logrotate.d/nginx-proxy-manager
+## X-Frame-Options for the management UI
+
+```yaml
+environment:
+  X_FRAME_OPTIONS: "SAMEORIGIN"
 ```
 
-For reference, the default configuration can be found [here](https://github.com/NginxProxyManager/nginx-proxy-manager/blob/develop/docker/rootfs/etc/logrotate.d/nginx-proxy-manager).
+The default is `DENY`.
 
-## Enabling the geoip2 module
+## Log rotation
 
-To enable the geoip2 module, you can create the custom configuration file `/data/nginx/custom/root_top.conf` and include the following snippet:
+The default logrotate file remains:
 
-```
-load_module /usr/lib/nginx/modules/ngx_http_geoip2_module.so;
-load_module /usr/lib/nginx/modules/ngx_stream_geoip2_module.so;
-```
-
-## Auto Initial User Creation
-
-Setting these environment variables will create the default user on startup, skipping the UI first user setup screen:
-
-```yml
-    environment:
-      INITIAL_ADMIN_EMAIL: my@example.com
-      INITIAL_ADMIN_PASSWORD: mypassword1
+```text
+/etc/logrotate.d/nginx-proxy-manager
 ```
 
-## Disable Nginx Resolver
+You can mount your own configuration there if your retention requirements differ.
 
-On startup, we generate a resolvers directive for Nginx unless this is defined:
+## GeoIP2
 
-```yml
-    environment:
-      DISABLE_RESOLVER: true
-```
+The inherited Nginx build includes dynamic modules. To load GeoIP2 through a custom root-level snippet, create `/data/nginx/custom/root_top.conf` with the appropriate `load_module` directives for the installed module paths.
 
-In this configuration, all DNS queries performed by Nginx will fall to the `/etc/hosts` file
-and then the `/etc/resolv.conf`.
-
-
-## Changing the Admin UI port from 81 to something else
-
-First, add an env var to your docker compose file:
-```yml
-    environment:
-      NPM_ADMIN_PORT: '8000'
-```
-
-And you'll probably want to expose that port as well
-
-```yml
-    ports:
-      - '8000:8000'
-```
-
-Then you'll be able to access admin UI at `http://localhost:8000`
+Verify the exact module paths in the image you built before enabling them.

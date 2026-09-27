@@ -4,29 +4,45 @@ outline: deep
 
 # FAQ
 
-## Do I have to use Docker?
+## Is NPM Improved the same project as Nginx Proxy Manager?
 
-Yes, that's how this project is packaged.
+No. NPM Improved is a fork based on Nginx Proxy Manager. It intentionally keeps compatible workflows where practical but has its own control-plane, rollback, lifecycle, observability, and protection work.
 
-This makes it easier to support the project when we have control over the version of Nginx other packages
-use by the project.
+## Is there a stable NPM Improved Docker image?
 
-## Can I run it on a Raspberry Pi?
+Not yet. The project is currently pre-1.0. Build from source using the repository's `scripts/buildx` helper.
 
-Yes! The docker image is multi-arch and is built for a variety of architectures. If yours is
-[not listed](https://hub.docker.com/r/jc21/nginx-proxy-manager/tags) please open a
-[GitHub issue](https://github.com/NginxProxyManager/nginx-proxy-manager/issues/new?assignees=&labels=enhancement&template=feature_request.md&title=).
+Do not use an upstream `jc21/nginx-proxy-manager` image and expect NPM Improved features to be present.
 
-## I can't get my service to proxy properly?
+## Which architectures can I build?
 
-Your best bet is to ask the [Reddit community for support](https://www.reddit.com/r/nginxproxymanager/). There's safety in numbers.
+The production build script targets:
 
-## When adding username and password access control to a proxy host, I can no longer login into the app.
+- `linux/amd64`
+- `linux/arm64`
 
-Having an Access Control List (ACL) with username and password requires the browser to always send this username
-and password in the `Authorization` header on each request. If your proxied app also requires authentication (like
-Nginx Proxy Manager itself), most likely the app will also use the `Authorization` header to transmit this information,
-as this is the standardized header meant for this kind of information. However having multiples of the same headers
-is not allowed in the [internet standard](https://www.rfc-editor.org/rfc/rfc7230#section-3.2.2) and almost all apps
-do not support multiple values in the `Authorization` header. Hence one of the two logins will be broken. This can
-only be fixed by either removing one of the logins or by changing the app to use other non-standard headers for authorization.
+## Why does the management UI stay up when Nginx is broken?
+
+Port 81 is served by the standalone Go control-plane process. It is deliberately separate from the Nginx traffic process.
+
+## What happens if I save a bad Nginx configuration?
+
+Generated host changes are rendered as candidates and validated with `nginx -t`. A validation failure restores the previous live file without reloading the bad candidate. A reload failure also triggers last-known-good restoration and recovery reload.
+
+## Does Protection stop DDoS attacks?
+
+It mitigates application-layer request floods, excessive source connections, and slow-client resource exhaustion that reach Nginx.
+
+It cannot stop a volumetric attack that saturates your network connection upstream of the server.
+
+## Can I exempt my LAN from Protection?
+
+Yes, but only add networks you actually trust. Settings → Protection accepts IPv4/IPv6 addresses and CIDR networks. Trusted sources bypass managed rate/connection accounting.
+
+## Why are certificates listed as Unused?
+
+A certificate is unused when no non-deleted Proxy Host, Redirection Host, 404 Host, or Stream references it. Unused certificates enter quarantine before automatic cleanup according to the Certificate Lifecycle settings.
+
+## Are third-party NPM integrations guaranteed to work?
+
+No. Many third-party integrations target upstream Nginx Proxy Manager. NPM Improved intentionally preserves API compatibility where practical, but compatibility must be verified per integration and version.

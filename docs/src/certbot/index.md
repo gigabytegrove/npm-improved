@@ -2,37 +2,45 @@
 outline: deep
 ---
 
-## Certbot DNS plugins in Nginx Proxy Manager
+# Certificates and Certbot
 
-Nginx Proxy Manager uses Certbot to issue and renew Let’s Encrypt certificates.
+NPM Improved retains Certbot-based Let's Encrypt issuance and renewal from Nginx Proxy Manager.
 
-When you request a certificate using a DNS challenge, Nginx Proxy Manager installs
-the corresponding Certbot DNS plugin for the provider you selected. The available
-providers and package versions are defined in
-⁠[certbot-dns-plugins.json](https://github.com/NginxProxyManager/nginx-proxy-manager/blob/develop/backend/certbot/dns-plugins.json).
+## DNS plugins
 
-## Important limitations
+DNS challenge providers are defined in the repository:
 
-DNS plugins are maintained independently from Certbot and from Nginx Proxy Manager. As a result:
-- Some plugins may lag behind current Certbot or dependency versions.
-- A plugin may install package versions that conflict with other Certbot components.
-- Support quality varies between providers, and not every plugin is regularly tested in Nginx Proxy Manager.
+[backend/certbot/dns-plugins.json](https://github.com/gigabytegrove/npm-improved/blob/develop/backend/certbot/dns-plugins.json)
 
-::: warning
-Using more than one DNS provider in the same Nginx Proxy Manager instance may introduce Python
-dependency conflicts between Certbot plugins.
-:::
+DNS plugins are maintained independently and can have Python dependency conflicts. Test provider changes before relying on them for production renewal.
 
-## If a DNS plugin does not work
+## Credential handling
 
-1. Check the Nginx Proxy Manager container logs for Certbot or Python package installation errors.
-2. Identify the plugin package and version defined for your provider in
-⁠[certbot-dns-plugins.json](https://github.com/NginxProxyManager/nginx-proxy-manager/blob/develop/backend/certbot/dns-plugins.json).
-3. Check [PyPI](https://pypi.org/) or the plugin project for a newer compatible release.
-4. If needed, update the plugin definition, including any required dependency pins.
-5. Submitting a pull request and CI will build a testable docker image for you.
+NPM Improved avoids recreating every DNS-provider credential file on backend startup.
 
-## File reference
+For DNS-01 operations, provider credentials are written immediately before the Certbot operation that needs them and removed afterward. Credentials still exist in application/database state as required by the existing certificate workflow, so access to the persistent database remains security-sensitive.
 
-Use this file when reviewing or updating provider definitions:
-- ⁠[certbot-dns-plugins.json](https://github.com/NginxProxyManager/nginx-proxy-manager/blob/develop/backend/certbot/dns-plugins.json)
+## Certificate lifecycle
+
+Certificates are classified as active or unused based on references from non-deleted:
+
+- Proxy Hosts;
+- Redirection Hosts;
+- 404 Hosts;
+- Streams.
+
+Disabled hosts still count as references so their certificate cannot be purged underneath them.
+
+Unused certificates enter quarantine before automatic purge. Configure the retention period and whether imported/custom certificates participate under **Settings → Certificate Lifecycle**.
+
+## Renewal safety
+
+A failed certificate operation must not be treated as a successful replacement. Verify certificate expiration and renewal history after changing DNS providers, credentials, or challenge methods.
+
+## Troubleshooting a DNS plugin
+
+1. review the container and Let's Encrypt logs in the Logs UI;
+2. identify the provider package/version in `backend/certbot/dns-plugins.json`;
+3. verify the provider credentials and required API permissions;
+4. check the DNS provider's propagation behavior;
+5. reproduce against a non-production certificate when possible.
