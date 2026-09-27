@@ -54,10 +54,11 @@ router
 		res.sendStatus(204);
 	})
 	.all(jwtdecode())
-	.get(async (_req, res, next) => {
+	.get(async (req, res, next) => {
 		try {
 			await res.locals.access.can("settings:get");
-			const release = await internalRemoteVersion.get();
+			const refresh = req.query.refresh === "1" || req.query.refresh === "true";
+			const release = await internalRemoteVersion.get(refresh);
 			res.status(200).send({
 				release,
 				capabilities: internalUpdateManager.capabilities(),
