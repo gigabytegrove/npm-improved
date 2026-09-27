@@ -1,0 +1,46 @@
+{
+	"operationId": "getSecurityLogSummary",
+	"summary": "Get recent security events derived from HTTP access logs",
+	"tags": ["logs"],
+	"security": [
+		{
+			"bearerAuth": ["admin"]
+		}
+	],
+	"parameters": [
+		{
+			"in": "query",
+			"name": "hours",
+			"description": "Lookback window in hours",
+			"schema": {
+				"type": "integer",
+				"minimum": 1,
+				"maximum": 168,
+				"default": 24
+			}
+		},
+		{
+			"in": "query",
+			"name": "limit",
+			"description": "Maximum classified events returned",
+			"schema": {
+				"type": "integer",
+				"minimum": 1,
+				"maximum": 500,
+				"default": 100
+			}
+		}
+	],
+	"responses": {
+		"200": {
+			"description": "Structured security summary",
+			"content": {
+				"application/json": {
+					"schema": {
+						"$ref": "../../../components/security-log-summary-object.json"
+					}
+				}
+			}
+		}
+	}
+}
