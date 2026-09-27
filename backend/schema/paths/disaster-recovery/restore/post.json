@@ -1,0 +1,29 @@
+{
+	"operationId": "restoreDisasterRecoveryBackup",
+	"summary": "Restore a validated encrypted backup",
+	"description": "Destructive restore. The server takes a local rollback snapshot and restores it automatically if regenerated Nginx configuration cannot validate or reload.",
+	"tags": ["disaster-recovery"],
+	"security": [{"bearerAuth": ["admin"]}],
+	"requestBody": {
+		"required": true,
+		"content": {
+			"multipart/form-data": {
+				"schema": {
+					"type": "object",
+					"required": ["backup", "passphrase", "confirmation"],
+					"properties": {
+						"backup": {"type": "string", "format": "binary"},
+						"passphrase": {"type": "string", "minLength": 12},
+						"confirmation": {"type": "string", "const": "RESTORE"}
+					}
+				}
+			}
+		}
+	},
+	"responses": {
+		"200": {
+			"description": "Restore result",
+			"content": {"application/json": {"schema": {"type": "object"}}}
+		}
+	}
+}

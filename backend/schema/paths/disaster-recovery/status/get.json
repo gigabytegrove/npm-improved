@@ -1,0 +1,28 @@
+{
+	"operationId": "getDisasterRecoveryStatus",
+	"summary": "Get backup and disaster recovery capabilities",
+	"tags": ["disaster-recovery"],
+	"security": [{"bearerAuth": ["admin"]}],
+	"responses": {
+		"200": {
+			"description": "Backup and restore status",
+			"content": {
+				"application/json": {
+					"schema": {
+						"type": "object",
+						"required": ["formatVersion", "database", "scopes", "encryptionRequired", "minimumPassphraseLength", "restoreInProgress"],
+						"properties": {
+							"formatVersion": {"type": "integer"},
+							"database": {"type": "string"},
+							"counts": {"type": "object"},
+							"scopes": {"type": "array", "items": {"type": "string", "enum": ["configuration", "disaster-recovery"]}},
+							"encryptionRequired": {"type": "boolean"},
+							"minimumPassphraseLength": {"type": "integer"},
+							"restoreInProgress": {"type": "boolean"}
+						}
+					}
+				}
+			}
+		}
+	}
+}

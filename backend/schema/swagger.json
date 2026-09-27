@@ -29,6 +29,10 @@
 			"description": "Durable Nginx configuration revisions and transactional restore"
 		},
 		{
+			"name": "disaster-recovery",
+			"description": "Encrypted configuration backups, disaster recovery bundles, validation and restore"
+		},
+		{
 			"name": "logs",
 			"description": "Endpoints for viewing system, Let's Encrypt and per-host logs"
 		},
@@ -394,6 +398,26 @@
 		"/config-history/{revisionID}/restore": {
 			"post": {
 				"$ref": "./paths/config-history/revisionID/restore/post.json"
+			}
+		},
+		"/disaster-recovery/status": {
+			"get": {
+				"$ref": "./paths/disaster-recovery/status/get.json"
+			}
+		},
+		"/disaster-recovery/export": {
+			"post": {
+				"$ref": "./paths/disaster-recovery/export/post.json"
+			}
+		},
+		"/disaster-recovery/inspect": {
+			"post": {
+				"$ref": "./paths/disaster-recovery/inspect/post.json"
+			}
+		},
+		"/disaster-recovery/restore": {
+			"post": {
+				"$ref": "./paths/disaster-recovery/restore/post.json"
 			}
 		}
 	}
