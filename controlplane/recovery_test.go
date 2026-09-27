@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"mime/multipart"
 	"io"
 	"log"
 	"net/http"
@@ -261,5 +263,73 @@ func TestRecoveryRejectsInvalidToken(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("expected invalid login 401, got %d", rec.Code)
+	}
+}
+
+
+func TestRecoveryUploadStagesBackup(t *testing.T) {
+	cfg := recoveryTestConfig(t)
+	handler, err := newHandler(cfg, log.New(io.Discard, "", 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := readRecoveryToken(t, cfg.RecoveryTokenFile)
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, err := writer.CreateFormFile("backup", "manual-test.npmibak")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write([]byte("encrypted-backup")); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/__npm_improved/recovery/backups/upload", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("X-NPM-Recovery-Token", token)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected upload 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	entries, err := os.ReadDir(cfg.BackupsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || !strings.HasPrefix(entries[0].Name(), "uploaded-") || !strings.HasSuffix(entries[0].Name(), "-manual-test.npmibak") {
+		t.Fatalf("unexpected staged backups: %#v", entries)
+	}
+}
+
+func TestEmergencyRestoreRefusesWhenBackendIsHealthy(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	cfg := recoveryTestConfig(t)
+	cfg.BackendURL, _ = url.Parse(backend.URL)
+	handler, err := newHandler(cfg, log.New(io.Discard, "", 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := readRecoveryToken(t, cfg.RecoveryTokenFile)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/__npm_improved/recovery/backups/restore",
+		strings.NewReader(`{"name":"example.npmibak","passphrase":"correct horse battery staple","confirmation":"RESTORE"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-NPM-Recovery-Token", token)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected healthy-backend restore refusal 409, got %d: %s", rec.Code, rec.Body.String())
 	}
 }

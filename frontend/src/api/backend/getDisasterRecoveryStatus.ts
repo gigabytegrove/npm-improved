@@ -8,6 +8,19 @@ export interface DisasterRecoveryStatus {
 	encryptionRequired: boolean;
 	minimumPassphraseLength: number;
 	restoreInProgress: boolean;
+	automation: {
+		enabled: boolean;
+		scope: "configuration" | "disaster-recovery";
+		intervalHours: number;
+		retention: number;
+		retainedCount: number;
+		latestBackup: {
+			name: string;
+			size: number;
+			modifiedAt: string;
+			type: string;
+		} | null;
+	};
 }
 
 export async function getDisasterRecoveryStatus(): Promise<DisasterRecoveryStatus> {

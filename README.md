@@ -123,6 +123,14 @@ The policy is generated under `/data/nginx/protection/policy.conf` and changed t
 
 Protection uses native Nginx request-rate, concurrent-connection, timeout, and timed-out-connection controls. It is intended to reduce application-layer floods and resource exhaustion. It cannot stop a volumetric DDoS attack that saturates the network connection before packets reach Nginx.
 
+
+### Backup and disaster recovery
+
+NPM Improved can export encrypted portable configuration backups or full-instance disaster-recovery bundles. Restores are inspected before activation, create a pre-restore safety backup, regenerate Nginx configuration, and roll back automatically if validation or reload fails.
+
+Optional scheduled encrypted backups can be retained under `/data/backups` using deployment environment variables. The backup passphrase is not stored in the application database, and retained bundles remain downloadable from the native recovery console when the normal management API is unavailable.
+
+
 ## Development environment
 
 The repository retains the upstream development stack and scripts.
