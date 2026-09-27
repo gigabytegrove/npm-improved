@@ -1,0 +1,75 @@
+{
+	"operationId": "getConfigHistory",
+	"summary": "List configuration revisions",
+	"tags": [
+		"config-history"
+	],
+	"security": [
+		{
+			"bearerAuth": [
+				"admin"
+			]
+		}
+	],
+	"parameters": [
+		{
+			"in": "query",
+			"name": "object_type",
+			"schema": {
+				"type": "string",
+				"enum": [
+					"proxy_host",
+					"redirection_host",
+					"dead_host",
+					"stream"
+				]
+			}
+		},
+		{
+			"in": "query",
+			"name": "object_id",
+			"schema": {
+				"type": "integer",
+				"minimum": 1
+			}
+		},
+		{
+			"in": "query",
+			"name": "status",
+			"schema": {
+				"type": "string",
+				"enum": [
+					"pending",
+					"active",
+					"superseded",
+					"failed"
+				]
+			}
+		},
+		{
+			"in": "query",
+			"name": "limit",
+			"schema": {
+				"type": "integer",
+				"minimum": 1,
+				"maximum": 250,
+				"default": 100
+			}
+		}
+	],
+	"responses": {
+		"200": {
+			"description": "Configuration revisions",
+			"content": {
+				"application/json": {
+					"schema": {
+						"type": "array",
+						"items": {
+							"$ref": "../../components/config-revision-object.json"
+						}
+					}
+				}
+			}
+		}
+	}
+}
