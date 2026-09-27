@@ -2,21 +2,26 @@
 outline: deep
 ---
 
-# Third Party
+# Third-Party Integrations
 
-As this software gains popularity it's common to see it integrated with other platforms. Please be aware that unless specifically mentioned in the documentation of those
-integrations, they are *not supported* by me.
+Most existing third-party integrations were written for upstream Nginx Proxy Manager, not NPM Improved.
 
-Known integrations:
+NPM Improved preserves familiar REST/API behavior where practical, so some integrations may work unchanged, but they are **not considered verified NPM Improved integrations unless explicitly tested against this fork**.
 
-- [HomeAssistant Hass.io plugin](https://github.com/hassio-addons/addon-nginx-proxy-manager)
-- [UnRaid / Synology](https://github.com/jlesage/docker-nginx-proxy-manager)
-- [Proxmox Scripts](https://github.com/ej52/proxmox-scripts/tree/main/apps/nginx-proxy-manager)
-- [Proxmox VE Helper-Scripts](https://community-scripts.github.io/ProxmoxVE/scripts?id=nginxproxymanager)
-- [nginxproxymanagerGraf](https://github.com/ma-karai/nginxproxymanagerGraf)
-- [selfhosting.sh Nginx Proxy Manager Guide](https://selfhosting.sh/apps/nginx-proxy-manager/) - Complete Docker Compose setup guide with SSL configuration, access lists, and proxy host management.
-- [NPM Auth Gateway](https://github.com/Mark0025/npm-auth-gateway) — User-level access control with auto IP whitelisting via auth providers. [Details](/third-party/npm-auth-gateway)
+Examples from the upstream NPM ecosystem include:
 
+- Home Assistant add-ons;
+- Unraid/Synology container wrappers;
+- Proxmox helper scripts;
+- dashboards and monitoring projects;
+- external authentication/access-list automation.
 
-If you would like your integration of NPM listed, please open a
-[Github issue](https://github.com/NginxProxyManager/nginx-proxy-manager/issues/new?assignees=&labels=enhancement&template=feature_request.md&title=)
+Before deploying any integration:
+
+1. confirm which NPM API endpoints it uses;
+2. test it against a non-production NPM Improved instance;
+3. verify that it does not assume the management UI is served by Nginx;
+4. verify that it does not directly overwrite generated Nginx files;
+5. verify behavior with transactional rollback and certificate lifecycle management.
+
+The project does not currently maintain an official compatibility matrix for upstream third-party integrations.
