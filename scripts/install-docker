@@ -8,7 +8,7 @@ cd "${ROOT_DIR}"
 usage() {
 	cat <<'EOF'
 Usage:
-  ./scripts/install-docker [sqlite|mysql|postgres] [--check-only] [--auto-ports]
+  ./scripts/install-docker [sqlite|mysql|postgres] [--check-only] [--auto-ports] [--clean-build]
 
 Examples:
   ./scripts/install-docker
@@ -17,17 +17,24 @@ Examples:
   ./scripts/install-docker postgres
   ./scripts/install-docker sqlite --check-only
   ./scripts/install-docker sqlite --auto-ports
+  ./scripts/install-docker sqlite --clean-build
 
 The installer creates .env from .env.example when needed, validates Docker
-Compose, checks host port availability before building, starts the selected
-stack, and waits for the application healthcheck. Use --auto-ports to replace
-occupied host port mappings with free alternatives automatically.
+Compose, checks host port availability, builds the current checkout, and
+force-recreates only the NPM Improved application container. Existing
+database and persistent data are preserved.
+
+A running NPM Improved app is recognized as the instance being updated, so
+its own published ports are not considered conflicts. Use --auto-ports only
+when another service owns a requested host port. Use --clean-build to disable
+Docker layer reuse. Every successful install verifies the live app identity.
 EOF
 }
 
 MODE="sqlite"
 CHECK_ONLY=0
 AUTO_PORTS=0
+CLEAN_BUILD=0
 
 for arg in "$@"; do
 	case "$arg" in
@@ -39,6 +46,9 @@ for arg in "$@"; do
 			;;
 		--auto-ports)
 			AUTO_PORTS=1
+			;;
+		--clean-build)
+			CLEAN_BUILD=1
 			;;
 		-h|--help)
 			usage
@@ -78,6 +88,37 @@ if [ ! -f ".env" ]; then
 	echo "Created .env from .env.example"
 fi
 
+compose=(docker compose -f "$COMPOSE_FILE")
+
+SOURCE_VERSION="local"
+if [ -f ".version" ]; then
+	SOURCE_VERSION="$(tr -d '[:space:]' < .version)"
+fi
+if [ -z "$SOURCE_VERSION" ]; then
+	SOURCE_VERSION="local"
+fi
+
+SOURCE_COMMIT="unknown"
+if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+	SOURCE_COMMIT="$(git rev-parse --short=12 HEAD)"
+	if ! git diff --quiet --ignore-submodules -- || ! git diff --cached --quiet --ignore-submodules --; then
+		SOURCE_COMMIT="${SOURCE_COMMIT}-dirty"
+	fi
+fi
+
+BUILD_DATE="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+export NPM_BUILD_VERSION="$SOURCE_VERSION"
+export NPM_BUILD_COMMIT="$SOURCE_COMMIT"
+export NPM_BUILD_DATE="$BUILD_DATE"
+
+CURRENT_APP_ID="$("${compose[@]}" ps -q app 2>/dev/null || true)"
+CURRENT_APP_SHORT=""
+if [ -n "$CURRENT_APP_ID" ]; then
+	CURRENT_APP_SHORT="${CURRENT_APP_ID:0:12}"
+	echo "Existing NPM Improved app detected: ${CURRENT_APP_SHORT}"
+	echo "Its published ports are eligible for in-place replacement."
+fi
+
 read_env() {
 	local key="$1"
 	local fallback="$2"
@@ -109,8 +150,34 @@ validate_port() {
 	fi
 }
 
+docker_port_owners() {
+	local port="$1"
+	docker ps --format '{{.ID}}\t{{.Ports}}' 2>/dev/null | awk -v p="$port" '
+		index($0, ":" p "->") { print $1 }
+	'
+}
+
 port_in_use() {
 	local port="$1"
+	local owners=""
+	local owner=""
+	local has_current_owner=0
+
+	owners="$(docker_port_owners "$port")"
+	if [ -n "$owners" ]; then
+		while IFS= read -r owner; do
+			[ -z "$owner" ] && continue
+			if [ -n "$CURRENT_APP_SHORT" ] && [ "$owner" = "$CURRENT_APP_SHORT" ]; then
+				has_current_owner=1
+				continue
+			fi
+			return 0
+		done <<< "$owners"
+
+		if [ "$has_current_owner" -eq 1 ]; then
+			return 1
+		fi
+	fi
 
 	if command -v ss >/dev/null 2>&1; then
 		ss -H -ltn 2>/dev/null | awk -v p="$port" '
@@ -143,9 +210,8 @@ port_in_use() {
 		return
 	fi
 
-	docker ps --format '{{.Ports}}' 2>/dev/null | grep -Eq "(^|[,[:space:]])([^,]*:)?${port}->"
+	[ -n "$(docker_port_owners "$port")" ]
 }
-
 show_port_owner() {
 	local port="$1"
 
@@ -296,18 +362,36 @@ EOF
 	fi
 fi
 
-compose=(docker compose -f "$COMPOSE_FILE")
-
 echo "Validating ${COMPOSE_FILE} ..."
 "${compose[@]}" config --quiet
+
+echo
+echo "Source identity:"
+echo "  Version: $SOURCE_VERSION"
+echo "  Commit:  $SOURCE_COMMIT"
+echo "  Built:   $BUILD_DATE"
 
 if [ "$CHECK_ONLY" -eq 1 ]; then
 	echo "Docker preflight passed for ${MODE}."
 	exit 0
 fi
 
-echo "Building and starting NPM Improved (${MODE}) ..."
-"${compose[@]}" up -d --build
+echo
+if [ "$CLEAN_BUILD" -eq 1 ]; then
+	echo "Building NPM Improved without Docker layer cache ..."
+	"${compose[@]}" build --pull --no-cache app
+else
+	echo "Building NPM Improved ..."
+	"${compose[@]}" build --pull app
+fi
+
+if [ "$MODE" != "sqlite" ]; then
+	echo "Ensuring database service is running ..."
+	"${compose[@]}" up -d --no-build db
+fi
+
+echo "Replacing NPM Improved application container ..."
+"${compose[@]}" up -d --no-build --no-deps --force-recreate app
 
 container_id="$("${compose[@]}" ps -q app)"
 if [ -z "$container_id" ]; then
@@ -342,8 +426,42 @@ if [ "$healthy" -ne 1 ]; then
 	exit 1
 fi
 
+runtime_backend_name="$(docker exec "$container_id" jq -r '.name // empty' /app/package.json 2>/dev/null || true)"
+runtime_backend_version="$(docker exec "$container_id" jq -r '.version // empty' /app/package.json 2>/dev/null || true)"
+runtime_build_version="$(docker exec "$container_id" sh -c 'printf "%s" "$NPM_BUILD_VERSION"' 2>/dev/null || true)"
+runtime_build_commit="$(docker exec "$container_id" sh -c 'printf "%s" "$NPM_BUILD_COMMIT"' 2>/dev/null || true)"
+
+verification_failed=0
+if ! docker exec "$container_id" grep -Fq '<title>NPM Improved</title>' /app/frontend/index.html; then
+	echo "ERROR: Live container frontend is not the NPM Improved build." >&2
+	verification_failed=1
+fi
+if [ "$runtime_backend_name" != "npm-improved-backend" ]; then
+	echo "ERROR: Live container backend identity is '${runtime_backend_name:-missing}', expected 'npm-improved-backend'." >&2
+	verification_failed=1
+fi
+if [ "$runtime_build_version" != "$SOURCE_VERSION" ]; then
+	echo "ERROR: Live container build version '${runtime_build_version:-missing}' does not match source '$SOURCE_VERSION'." >&2
+	verification_failed=1
+fi
+if [ "$runtime_build_commit" != "$SOURCE_COMMIT" ]; then
+	echo "ERROR: Live container build commit '${runtime_build_commit:-missing}' does not match source '$SOURCE_COMMIT'." >&2
+	verification_failed=1
+fi
+if [ "$verification_failed" -ne 0 ]; then
+	echo "ERROR: Runtime verification failed; refusing to report the update as successful." >&2
+	"${compose[@]}" ps >&2 || true
+	exit 1
+fi
+
 echo
-echo "NPM Improved is healthy."
+echo "NPM Improved is healthy and runtime verification passed."
 echo "Management UI: http://<host>:${ADMIN_PORT}"
+echo
+echo "Live build evidence:"
+echo "  Frontend: NPM Improved"
+echo "  Backend:  ${runtime_backend_name} ${runtime_backend_version}"
+echo "  Version:  ${runtime_build_version}"
+echo "  Commit:   ${runtime_build_commit}"
 echo
 "${compose[@]}" ps
