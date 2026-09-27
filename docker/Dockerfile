@@ -1,9 +1,21 @@
-# This is a Dockerfile intended to be built using `docker buildx`
-# for multi-arch support. Building with `docker build` may have unexpected results.
+# This is a Dockerfile intended to be built using Docker BuildKit/buildx.
+# The build is self-contained: it compiles the frontend and control plane
+# before assembling the production image.
 
-# The NPM Improved control plane is intentionally compiled as a standalone binary.
 ARG BASE_IMAGE=nginxproxymanager/nginx-full:certbot-node
 ARG GO_IMAGE=golang:1.23-alpine
+
+FROM --platform=$BUILDPLATFORM ${BASE_IMAGE} AS frontend-builder
+
+ENV NODE_OPTIONS=--openssl-legacy-provider
+
+WORKDIR /build/frontend
+
+COPY frontend/package.json frontend/yarn.lock ./
+RUN yarn install --frozen-lockfile
+
+COPY frontend/ ./
+RUN yarn build
 
 FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS controlplane-builder
 ARG TARGETOS
@@ -53,8 +65,8 @@ RUN /tmp/install-s6 "${TARGETPLATFORM}" && rm -f /tmp/install-s6
 
 EXPOSE 80 81 443
 
-COPY backend       /app
-COPY frontend/dist /app/frontend
+COPY backend /app
+COPY --from=frontend-builder /build/frontend/dist /app/frontend
 COPY docker/rootfs /
 COPY --from=controlplane-builder /out/npm-improved-control-plane /usr/local/bin/npm-improved-control-plane
 
@@ -69,7 +81,7 @@ WORKDIR /etc/ssl/certs
 RUN ln -s NginxProxyManager.crt 1d0e3f10.0 && update-ca-certificates
 
 WORKDIR /app
-RUN yarn install \
+RUN yarn install --frozen-lockfile \
 	&& yarn cache clean
 
 # Remove frontend service not required for prod, dev nginx config as well

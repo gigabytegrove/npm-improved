@@ -146,6 +146,32 @@ NPM Improved can export encrypted portable configuration backups or full-instanc
 Optional scheduled encrypted backups can be retained under `/data/backups` using deployment environment variables. The backup passphrase is not stored in the application database, and retained bundles remain downloadable from the native recovery console when the normal management API is unavailable.
 
 
+## Docker installation
+
+Production Docker Compose files now live at the repository root.
+
+SQLite quick start:
+
+```bash
+git clone https://github.com/gigabytegrove/npm-improved.git
+cd npm-improved
+cp .env.example .env
+docker compose up -d --build
+```
+
+The default stack persists `/data` and `/etc/letsencrypt` in local bind-mounted directories and exposes HTTP on port 80, the independent management control plane on port 81, and HTTPS on port 443.
+
+Database alternatives are included:
+
+```bash
+docker compose -f compose.mysql.yaml up -d --build
+docker compose -f compose.postgres.yaml up -d --build
+```
+
+The production Dockerfile is self-contained and builds the frontend and Go control plane during the image build, so a clean checkout does not require a separate frontend build first.
+
+See [DOCKER.md](DOCKER.md) and the [Setup documentation](docs/src/setup/index.md) for environment variables, persistent storage, backup settings, updates, health checks, and database-specific instructions.
+
 ## Development environment
 
 The repository retains the upstream development stack and scripts.
@@ -170,13 +196,15 @@ Stop the development stack with:
 
 ## Building the production image
 
-NPM Improved does not currently advertise a stable published container image.
+NPM Improved does not currently advertise a stable published container image. The production Compose files build `npm-improved:local` directly from the checkout.
 
-To build from source with the repository buildx script:
+To build only the image with the repository buildx script:
 
 ```bash
 ./scripts/buildx --load -t npm-improved:dev
 ```
+
+The production Dockerfile now builds the frontend and standalone Go control plane itself; `frontend/dist` does not need to exist on the host before the build begins.
 
 For multi-platform publishing, pass the appropriate buildx output/push arguments instead of `--load`.
 
