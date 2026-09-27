@@ -184,7 +184,7 @@ export default function TableWrapper() {
 
 				<Table
 					data={filtered}
-					isFiltered={!!search}
+					isFiltered={!!search || (!!data?.length && filtered.length === 0)}
 					isFetching={isFetching}
 					onRenew={showRenewCertificateModal}
 					onDownload={handleDownload}
