@@ -51,7 +51,10 @@ const internalDeadHost = {
 				throw new errs.InternalValidationError("The host was created but the Certificate creation failed.");
 			}
 			if (freshRow.enabled) {
-				const newMeta = await internalNginx.configure(deadHostModel, "dead_host", freshRow);
+				const newMeta = await internalNginx.configure(deadHostModel, "dead_host", freshRow, {
+					userId: access.token.getUserId(1),
+					operation: "create",
+				});
 				freshRow.meta = newMeta;
 			}
 		} catch (err) {
@@ -121,7 +124,11 @@ const internalDeadHost = {
 				expand: ["owner", "certificate"],
 			});
 			if (updatedRow.enabled) {
-				const newMeta = await internalNginx.configure(deadHostModel, "dead_host", updatedRow);
+				const newMeta = await internalNginx.configure(deadHostModel, "dead_host", updatedRow, {
+					userId: access.token.getUserId(1),
+					operation: "update",
+					previousSnapshot: previousState,
+				});
 				updatedRow.meta = newMeta;
 			}
 		} catch (err) {
@@ -189,7 +196,11 @@ const internalDeadHost = {
 		const previousState = await snapshotModelRow(deadHostModel, row.id);
 		await deadHostModel.query().where("id", row.id).patch({ is_deleted: 1 });
 		try {
-			await internalNginx.removeConfigTransactional("dead_host", row);
+			await internalNginx.removeConfigTransactional(deadHostModel, "dead_host", row, {
+				userId: access.token.getUserId(1),
+				operation: "delete",
+				previousSnapshot: previousState,
+			});
 		} catch (err) {
 			await restoreModelRow(deadHostModel, row.id, previousState);
 			throw err;
@@ -224,7 +235,11 @@ const internalDeadHost = {
 		row.enabled = 1;
 		await deadHostModel.query().where("id", row.id).patch({ enabled: 1 });
 		try {
-			await internalNginx.configure(deadHostModel, "dead_host", row);
+			await internalNginx.configure(deadHostModel, "dead_host", row, {
+				userId: access.token.getUserId(1),
+				operation: "enable",
+				previousSnapshot: previousState,
+			});
 		} catch (err) {
 			await restoreModelRow(deadHostModel, row.id, previousState);
 			throw err;
@@ -256,7 +271,11 @@ const internalDeadHost = {
 		row.enabled = 0;
 		await deadHostModel.query().where("id", row.id).patch({ enabled: 0 });
 		try {
-			await internalNginx.removeConfigTransactional("dead_host", row);
+			await internalNginx.removeConfigTransactional(deadHostModel, "dead_host", row, {
+				userId: access.token.getUserId(1),
+				operation: "disable",
+				previousSnapshot: previousState,
+			});
 		} catch (err) {
 			await restoreModelRow(deadHostModel, row.id, previousState);
 			throw err;
