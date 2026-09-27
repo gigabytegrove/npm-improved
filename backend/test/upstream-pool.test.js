@@ -74,3 +74,25 @@ test("disabled targets do not participate in active scheme validation", () => {
 	assert.equal(result.forward_scheme, "http");
 	assert.equal(result.upstreams[1].enabled, false);
 });
+
+test("legacy updates replace the primary target without discarding secondary targets", () => {
+	const current = normalizeProxyHostPool({
+		upstreams: [
+			{ scheme: "http", host: "old-primary.internal", port: 8080 },
+			{ scheme: "http", host: "secondary.internal", port: 8080 },
+		],
+	});
+
+	const result = normalizeProxyHostPool(
+		{
+			forward_host: "new-primary.internal",
+			forward_port: 8081,
+		},
+		current,
+	);
+
+	assert.equal(result.upstreams.length, 2);
+	assert.equal(result.upstreams[0].host, "new-primary.internal");
+	assert.equal(result.upstreams[0].port, 8081);
+	assert.equal(result.upstreams[1].host, "secondary.internal");
+});
