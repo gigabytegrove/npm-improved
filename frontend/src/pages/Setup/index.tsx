@@ -60,12 +60,12 @@ export default function Setup() {
 			<div className={styles.shell}>
 				<section className={styles.brandPanel}>
 					<div className={styles.brandLockup}>
-						<img src="/images/npm-improved-mark.svg" width={48} height={48} alt="" />
-						<div>
-							<strong>NPM Improved</strong>
-							<span>
-								<T id="app.tagline" />
-							</span>
+						<div className={styles.fullLogoPlate}>
+							<img
+								src="/images/npm-improved-logo.webp"
+								className={styles.fullLogo}
+								alt="Nginx Proxy Manager Improved"
+							/>
 						</div>
 					</div>
 					<div className={styles.heroCopy}>
@@ -85,9 +85,9 @@ export default function Setup() {
 				<section className={styles.formPanel}>
 					<div className={styles.formWrap}>
 						<div className={styles.mobileBrand}>
-							<img src="/images/npm-improved-mark.svg" width={40} height={40} alt="" />
+							<img src="/images/npm-improved-mark.webp" width={62} height={41} alt="" />
 							<div>
-								<strong>NPM Improved</strong>
+								<strong>Nginx Proxy Manager</strong>
 								<span>
 									<T id="app.tagline" />
 								</span>

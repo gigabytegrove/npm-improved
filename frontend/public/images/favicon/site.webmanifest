@@ -4,10 +4,10 @@
 	"description": "Resilient reverse proxy management",
 	"icons": [
 		{
-			"src": "/images/npm-improved-mark.svg",
-			"sizes": "any",
-			"type": "image/svg+xml",
-			"purpose": "any maskable"
+			"src": "/images/npm-improved-mark.webp",
+			"sizes": "160x105",
+			"type": "image/webp",
+			"purpose": "any"
 		}
 	],
 	"theme_color": "#0f172a",

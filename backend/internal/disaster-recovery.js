@@ -41,6 +41,21 @@ const TABLES = Object.freeze({
 		["stream", streamModel],
 		["config_revision", configRevisionModel],
 	],
+	cluster: [
+		["user", userModel],
+		["user_permission", userPermissionModel],
+		["auth", authModel],
+		["setting", settingModel],
+		["access_list", accessListModel],
+		["access_list_auth", accessListAuthModel],
+		["access_list_client", accessListClientModel],
+		["certificate", certificateModel],
+		["proxy_host", proxyHostModel],
+		["redirection_host", redirectionHostModel],
+		["dead_host", deadHostModel],
+		["stream", streamModel],
+		["config_revision", configRevisionModel],
+	],
 	"disaster-recovery": [
 		["user", userModel],
 		["user_permission", userPermissionModel],
@@ -135,6 +150,7 @@ const captureFilesystem = (scope) => {
 		for (const [name, filename] of [
 			["jwt_keys", "/data/keys.json"],
 			["recovery_access", "/data/recovery-access.json"],
+			["cluster_secret", "/data/cluster-secret"],
 		]) {
 			if (!fs.existsSync(filename)) continue;
 			const stat = fs.statSync(filename);
@@ -183,13 +199,13 @@ const summarize = (bundle) => {
 		counts,
 		filesystemEntries,
 		filesystemBytes: bundle.filesystem?.bytes || 0,
-		containsAuthenticationState: bundle.scope === "disaster-recovery",
+		containsAuthenticationState: ["cluster", "disaster-recovery"].includes(bundle.scope),
 		requiresRestart: bundle.scope === "disaster-recovery",
 	};
 };
 
 const validateBundle = (bundle) => {
-	if (!["configuration", "disaster-recovery"].includes(bundle?.scope)) {
+	if (!["configuration", "cluster", "disaster-recovery"].includes(bundle?.scope)) {
 		throw new Error("Backup scope is unsupported");
 	}
 	if (!bundle.database || typeof bundle.database !== "object") {
@@ -206,7 +222,7 @@ const validateBundle = (bundle) => {
 	}
 
 	for (const [rootName, entries] of Object.entries(bundle.filesystem.roots)) {
-		if (![...Object.keys(FILE_ROOTS), "jwt_keys", "recovery_access"].includes(rootName) || !Array.isArray(entries)) {
+		if (![...Object.keys(FILE_ROOTS), "jwt_keys", "recovery_access", "cluster_secret"].includes(rootName) || !Array.isArray(entries)) {
 			throw new Error("Backup contains an unsupported filesystem root");
 		}
 		for (const entry of entries) {
@@ -317,6 +333,7 @@ const restoreFilesystem = (bundle) => {
 		for (const [rootName, filename] of [
 			["jwt_keys", "/data/keys.json"],
 			["recovery_access", "/data/recovery-access.json"],
+			["cluster_secret", "/data/cluster-secret"],
 		]) {
 			const entry = bundle.filesystem.roots[rootName]?.find((item) => item.type === "file");
 			if (entry) {
@@ -337,6 +354,7 @@ const snapshotLiveFilesystem = () => {
 		letsencrypt: "/etc/letsencrypt",
 		keys: "/data/keys.json",
 		recovery_access: "/data/recovery-access.json",
+		cluster_secret: "/data/cluster-secret",
 	};
 	for (const [name, source] of Object.entries(sources)) {
 		if (fs.existsSync(source)) {
@@ -357,6 +375,7 @@ const restoreLiveFilesystemSnapshot = (rollbackRoot) => {
 		letsencrypt: "/etc/letsencrypt",
 		keys: "/data/keys.json",
 		recovery_access: "/data/recovery-access.json",
+		cluster_secret: "/data/cluster-secret",
 	};
 	for (const [name, target] of Object.entries(targets)) {
 		removePath(target);
@@ -472,6 +491,63 @@ const parseUploadedBundle = (file, passphrase) => {
 		return bundle;
 	} catch (err) {
 		throw new errs.ValidationError(err instanceof Error ? err.message : String(err));
+	}
+};
+
+
+const captureClusterDatabase = async () => {
+	const database = await captureDatabase("cluster");
+	database.setting = (database.setting || []).filter((row) => row.id !== "instance-sync");
+	return database;
+};
+
+const replaceClusterDatabase = async (snapshot) => {
+	const localSyncSetting = await settingModel.query().findById("instance-sync");
+	await replaceDatabase(snapshot, "cluster");
+	if (localSyncSetting) {
+		const plain = toPlain(localSyncSetting);
+		const instance = settingModel.fromJson(plain);
+		const dbRow = typeof instance.$toDatabaseJson === "function"
+			? instance.$toDatabaseJson()
+			: instance.$formatDatabaseJson(plain);
+		await db()("setting").insert(dbRow);
+	}
+};
+
+const applyClusterPayload = async (bundle) => {
+	if (bundle.scope !== "cluster") {
+		throw new Error("Cluster synchronization payload has the wrong scope");
+	}
+
+	const previousDatabase = await captureDatabase("cluster");
+	const rollbackRoot = snapshotLiveFilesystem();
+
+	restoreInProgress = true;
+	try {
+		await replaceClusterDatabase(bundle.database);
+		restoreFilesystem(bundle);
+		await regenerateNginx();
+		removePath(rollbackRoot);
+		return {
+			ok: true,
+			scope: "cluster",
+			restoredAt: new Date().toISOString(),
+			source: bundle.source || {},
+			summary: summarize(bundle),
+		};
+	} catch (err) {
+		try {
+			await replaceDatabase(previousDatabase, "cluster");
+			restoreLiveFilesystemSnapshot(rollbackRoot);
+			await internalNginx.test();
+			await internalNginx.reload();
+		} catch (rollbackErr) {
+			err.rollbackError = rollbackErr;
+		}
+		throw err;
+	} finally {
+		restoreInProgress = false;
+		removePath(rollbackRoot);
 	}
 };
 
@@ -628,6 +704,33 @@ const internalDisasterRecovery = {
 				};
 			})(),
 		};
+	},
+
+	createClusterEnvelope: async (passphrase) => {
+		const database = await captureClusterDatabase();
+		const filesystem = captureFilesystem("cluster");
+		const payload = makePayload("cluster", database, filesystem);
+		return {
+			data: createBackupEnvelope(payload, passphrase),
+			summary: summarize({ ...payload, format_version: 1 }),
+		};
+	},
+
+	applyClusterEnvelope: async (buffer, passphrase) => {
+		if (!Buffer.isBuffer(buffer) || !buffer.length) {
+			throw new errs.ValidationError("Cluster synchronization payload is empty");
+		}
+		if (buffer.length > MAX_BUNDLE_BYTES) {
+			throw new errs.ValidationError("Cluster synchronization payload exceeds the 512 MiB limit");
+		}
+		let bundle;
+		try {
+			bundle = openBackupEnvelope(buffer, passphrase);
+			validateBundle(bundle);
+		} catch (err) {
+			throw new errs.ValidationError(err instanceof Error ? err.message : String(err));
+		}
+		return applyClusterPayload(bundle);
 	},
 
 	export: async (access, { scope, passphrase }) => {

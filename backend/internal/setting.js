@@ -15,6 +15,12 @@ const restoreSetting = async (row) => {
 };
 
 const validateSetting = (data) => {
+	if (data.id === "instance-sync") {
+		throw new errs.ValidationError(
+			"Instance synchronization must be changed through the cluster settings API",
+		);
+	}
+
 	if (data.id === "default-site") {
 		const validValues = ["congratulations", "404", "444", "redirect", "html"];
 		if (!validValues.includes(data.value)) {

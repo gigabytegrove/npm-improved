@@ -695,8 +695,47 @@
 	"proxy-host": {
 		"defaultMessage": "Puhverserver"
 	},
+	"proxy-host.add-upstream": {
+		"defaultMessage": "Lisa ülesvoolu server"
+	},
+	"proxy-host.failover-help": {
+		"defaultMessage": "Varurežiimis on esimene lubatud ülesvoolu server esmane. Ülejäänuid kasutatakse varuserveritena, kui esmane pole saadaval."
+	},
 	"proxy-host.forward-host": {
 		"defaultMessage": "Edastuse hostinimi / IP"
+	},
+	"proxy-host.upstream-fail-timeout": {
+		"defaultMessage": "Tõrke aegumine (s)"
+	},
+	"proxy-host.upstream-max-fails": {
+		"defaultMessage": "Maksimum tõrkeid"
+	},
+	"proxy-host.upstream-mode-failover": {
+		"defaultMessage": "Esmane + varu"
+	},
+	"proxy-host.upstream-mode-ip-hash": {
+		"defaultMessage": "Kliendi IP seotus"
+	},
+	"proxy-host.upstream-mode-least-conn": {
+		"defaultMessage": "Vähim ühendusi"
+	},
+	"proxy-host.upstream-mode-round-robin": {
+		"defaultMessage": "Ringjaotus"
+	},
+	"proxy-host.upstream-name": {
+		"defaultMessage": "Silt"
+	},
+	"proxy-host.upstream-pool": {
+		"defaultMessage": "Ülesvoolu serverite kogum"
+	},
+	"proxy-host.upstream-pool-help": {
+		"defaultMessage": "Lisage sellele hostinimele mitu taustaserverit. Nginx proovib rikke korral automaatselt terveid partnereid."
+	},
+	"proxy-host.upstream-weight": {
+		"defaultMessage": "Kaal"
+	},
+	"proxy-host.upstreams-count": {
+		"defaultMessage": "{count} ülesvoolu serverit"
 	},
 	"proxy-hosts": {
 		"defaultMessage": "Puhverserverid"
@@ -823,6 +862,69 @@
 	},
 	"streams.udp": {
 		"defaultMessage": "UDP"
+	},
+	"sync.description": {
+		"defaultMessage": "Hoidke kaks või enam NPMi instantsi sünkroonis, et tagada halduse ja puhverserveri redundantne töö."
+	},
+	"sync.disabled": {
+		"defaultMessage": "Keelatud"
+	},
+	"sync.enabled": {
+		"defaultMessage": "Luba instantside sünkroonimine"
+	},
+	"sync.in-sync": {
+		"defaultMessage": "Sünkroonis"
+	},
+	"sync.interval": {
+		"defaultMessage": "Sünkroonimise intervall"
+	},
+	"sync.last-error": {
+		"defaultMessage": "Viimane sünkroonimise viga"
+	},
+	"sync.last-sync": {
+		"defaultMessage": "Viimane edukas sünkroonimine"
+	},
+	"sync.node-name": {
+		"defaultMessage": "Sõlme nimi"
+	},
+	"sync.node-role-primary": {
+		"defaultMessage": "Esmane"
+	},
+	"sync.node-role-secondary": {
+		"defaultMessage": "Teisene"
+	},
+	"sync.primary-help": {
+		"defaultMessage": "Esmane sõlm on autoriteetne. Teisesed sõlmed tõmbavad esmasest allkirjastatud seadistuse hetktõmmiseid ja neid saab rikke korral edutada."
+	},
+	"sync.primary-url": {
+		"defaultMessage": "Esmase sõlme URL"
+	},
+	"sync.promote": {
+		"defaultMessage": "Eduta see sõlm"
+	},
+	"sync.promote-warning": {
+		"defaultMessage": "Edutamine muudab selle sõlme autoriteetseks. Konfiguratsiooni lahknemise vältimiseks peaks korraga aktiivne olema ainult üks esmane sõlm."
+	},
+	"sync.public-url": {
+		"defaultMessage": "Avalik URL"
+	},
+	"sync.secondary-help": {
+		"defaultMessage": "Teisesed sõlmed teenindavad sünkroonitud puhverserveri seadistust kohapeal ja tõmbavad perioodiliselt muudatusi esmasest sõlmest."
+	},
+	"sync.secret-help": {
+		"defaultMessage": "Kasutage kõigis sõlmedes sama tugevat klastri saladust. Seda kasutatakse sõlmedevahelise sünkroonimise autentimiseks ning API ei tagasta seda pärast salvestamist."
+	},
+	"sync.shared-secret": {
+		"defaultMessage": "Klastri saladus"
+	},
+	"sync.status": {
+		"defaultMessage": "Sünkroonimise olek"
+	},
+	"sync.sync-now": {
+		"defaultMessage": "Sünkrooni kohe"
+	},
+	"sync.title": {
+		"defaultMessage": "Instantside sünkroonimine"
 	},
 	"system-health": {
 		"defaultMessage": "Süsteemi seisund"

@@ -2,6 +2,7 @@ import _ from "lodash";
 import errs from "../lib/error.js";
 import { castJsonIfNeed } from "../lib/helpers.js";
 import { deleteUncommittedRow, restoreModelRow, snapshotModelRow } from "../lib/model-rollback.js";
+import { normalizeProxyHostPool } from "../lib/upstream-pool.js";
 import utils from "../lib/utils.js";
 import proxyHostModel from "../models/proxy_host.js";
 import { global as logger } from "../logger.js";
@@ -22,6 +23,11 @@ const internalProxyHost = {
 	 */
 	create: async (access, data) => {
 		let thisData = { ...data };
+		try {
+			thisData = { ...thisData, ...normalizeProxyHostPool(thisData) };
+		} catch (err) {
+			throw new errs.ValidationError(err instanceof Error ? err.message : String(err));
+		}
 		const createCertificate = thisData.certificate_id === "new";
 		if (createCertificate) {
 			delete thisData.certificate_id;
@@ -115,6 +121,12 @@ const internalProxyHost = {
 				`Proxy Host could not be updated, IDs do not match: ${currentRow.id} !== ${thisData.id}`,
 			);
 		}
+		try {
+			thisData = { ...thisData, ...normalizeProxyHostPool(thisData, currentRow) };
+		} catch (err) {
+			throw new errs.ValidationError(err instanceof Error ? err.message : String(err));
+		}
+
 		const previousState = await snapshotModelRow(proxyHostModel, currentRow.id);
 
 		if (createCertificate) {
