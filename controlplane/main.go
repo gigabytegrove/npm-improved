@@ -11,6 +11,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path"
 	"path/filepath"
@@ -30,6 +31,21 @@ type config struct {
 	AdminPort    int
 	FrontendRoot string
 	BackendURL   *url.URL
+}
+
+type componentHealth struct {
+	Status      string `json:"status"`
+	LatencyMS   int64  `json:"latencyMs,omitempty"`
+	HTTPStatus  int    `json:"httpStatus,omitempty"`
+	PID         int    `json:"pid,omitempty"`
+	ConfigValid bool   `json:"configValid,omitempty"`
+}
+
+type healthResponse struct {
+	Status    string                     `json:"status"`
+	Component string                     `json:"component"`
+	CheckedAt string                     `json:"checkedAt"`
+	Checks    map[string]componentHealth `json:"checks"`
 }
 
 func main() {
@@ -129,7 +145,7 @@ func newHandler(cfg config, logger *log.Logger) (http.Handler, error) {
 	mux.HandleFunc("/__npm_improved/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ok","component":"control-plane"}`))
+		_ = json.NewEncoder(w).Encode(checkSystemHealth(cfg))
 	})
 	mux.HandleFunc("/api", func(w http.ResponseWriter, r *http.Request) {
 		target := "/api/"
@@ -142,6 +158,76 @@ func newHandler(cfg config, logger *log.Logger) (http.Handler, error) {
 	mux.Handle("/", spa)
 
 	return securityHeaders(mux), nil
+}
+
+func checkSystemHealth(cfg config) healthResponse {
+	checks := map[string]componentHealth{
+		"controlPlane": {Status: "ok"},
+	}
+
+	indexPath := filepath.Join(cfg.FrontendRoot, "index.html")
+	if info, err := os.Stat(indexPath); err == nil && !info.IsDir() {
+		checks["frontend"] = componentHealth{Status: "ok"}
+	} else {
+		checks["frontend"] = componentHealth{Status: "unavailable"}
+	}
+
+	backendCheck := componentHealth{Status: "unavailable"}
+	backendURL := *cfg.BackendURL
+	if backendURL.Path == "" {
+		backendURL.Path = "/"
+	}
+	started := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, backendURL.String(), nil)
+	if err == nil {
+		client := &http.Client{Timeout: 2 * time.Second}
+		if resp, requestErr := client.Do(req); requestErr == nil {
+			backendCheck.LatencyMS = time.Since(started).Milliseconds()
+			backendCheck.HTTPStatus = resp.StatusCode
+			_ = resp.Body.Close()
+			if resp.StatusCode >= 200 && resp.StatusCode < 500 {
+				backendCheck.Status = "ok"
+			}
+		}
+	}
+	cancel()
+	checks["backend"] = backendCheck
+
+	nginxCheck := componentHealth{Status: "unavailable"}
+	if pidBytes, err := os.ReadFile("/run/nginx/nginx.pid"); err == nil {
+		if pid, parseErr := strconv.Atoi(strings.TrimSpace(string(pidBytes))); parseErr == nil && pid > 0 {
+			nginxCheck.PID = pid
+			if processErr := syscall.Kill(pid, 0); processErr == nil {
+				nginxCheck.Status = "ok"
+			}
+		}
+	}
+
+	nginxBinary := envOrDefault("NPM_NGINX_BINARY", "/usr/sbin/nginx")
+	nginxCtx, nginxCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	if err := exec.CommandContext(nginxCtx, nginxBinary, "-t", "-g", "error_log off;").Run(); err == nil {
+		nginxCheck.ConfigValid = true
+	} else if nginxCheck.Status == "ok" {
+		nginxCheck.Status = "degraded"
+	}
+	nginxCancel()
+	checks["nginx"] = nginxCheck
+
+	status := "ok"
+	for _, check := range checks {
+		if check.Status != "ok" {
+			status = "degraded"
+			break
+		}
+	}
+
+	return healthResponse{
+		Status:    status,
+		Component: "control-plane",
+		CheckedAt: time.Now().UTC().Format(time.RFC3339),
+		Checks:    checks,
+	}
 }
 
 func newAPIProxy(target *url.URL, logger *log.Logger) *httputil.ReverseProxy {
