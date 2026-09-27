@@ -74,3 +74,131 @@ jobs:
 
       - name: Build production image
         run: docker build --pull --progress=plain -f docker/Dockerfile -t npm-improved:ci .
+
+      - name: Verify UI database migration SQLite → MySQL → SQLite
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cleanup() {
+            docker rm -f npmi-db-wizard-app npmi-db-wizard-mysql >/dev/null 2>&1 || true
+            docker network rm npmi-db-wizard >/dev/null 2>&1 || true
+            sudo rm -rf /tmp/npmi-db-wizard
+          }
+          trap cleanup EXIT
+
+          docker network create npmi-db-wizard
+
+          docker run -d \
+            --name npmi-db-wizard-mysql \
+            --network npmi-db-wizard \
+            -e MARIADB_DATABASE=npmi_target \
+            -e MARIADB_USER=npmi \
+            -e MARIADB_PASSWORD=ci-database-password \
+            -e MARIADB_ROOT_PASSWORD=ci-root-password \
+            mariadb:11
+
+          for attempt in $(seq 1 60); do
+            if docker exec npmi-db-wizard-mysql mariadb-admin ping -uroot -pci-root-password --silent >/dev/null 2>&1; then
+              break
+            fi
+            if [ "$attempt" -eq 60 ]; then
+              docker logs npmi-db-wizard-mysql
+              exit 1
+            fi
+            sleep 1
+          done
+
+          mkdir -p /tmp/npmi-db-wizard/data /tmp/npmi-db-wizard/letsencrypt
+          chmod 0777 /tmp/npmi-db-wizard/data /tmp/npmi-db-wizard/letsencrypt
+
+          docker run -d \
+            --name npmi-db-wizard-app \
+            --network npmi-db-wizard \
+            -p 19081:81 \
+            -e DB_SQLITE_FILE=/data/database.sqlite \
+            -e INITIAL_ADMIN_EMAIL=ci@example.com \
+            -e INITIAL_ADMIN_PASSWORD=ci-password-12345 \
+            -e NPM_BUILD_VERSION=0.1.0-ci \
+            -v /tmp/npmi-db-wizard/data:/data \
+            -v /tmp/npmi-db-wizard/letsencrypt:/etc/letsencrypt \
+            npm-improved:ci
+
+          for attempt in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:19081/api/ >/dev/null 2>&1; then
+              break
+            fi
+            if [ "$attempt" -eq 90 ]; then
+              docker logs npmi-db-wizard-app
+              exit 1
+            fi
+            sleep 1
+          done
+
+          TOKEN="$(
+            curl -fsS \
+              -H 'Content-Type: application/json' \
+              -d '{"identity":"ci@example.com","secret":"ci-password-12345"}' \
+              http://127.0.0.1:19081/api/tokens | jq -r '.token'
+          )"
+          test -n "$TOKEN"
+          test "$TOKEN" != "null"
+
+          curl -fsS \
+            -H "Authorization: Bearer $TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d '{"engine":"mysql","shared":true,"mysql":{"host":"npmi-db-wizard-mysql","port":3306,"user":"npmi","password":"ci-database-password","name":"npmi_target","ssl":false}}' \
+            http://127.0.0.1:19081/api/database/test | jq -e '.ok == true'
+
+          curl -fsS \
+            -H "Authorization: Bearer $TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d '{"engine":"mysql","shared":true,"mysql":{"host":"npmi-db-wizard-mysql","port":3306,"user":"npmi","password":"ci-database-password","name":"npmi_target","ssl":false},"confirmation":"MIGRATE"}' \
+            http://127.0.0.1:19081/api/database/migrate | jq -e '.ok == true and .restartScheduled == true'
+
+          for attempt in $(seq 1 60); do
+            STATUS="$(curl -fsS -H "Authorization: Bearer $TOKEN" http://127.0.0.1:19081/api/database/status 2>/dev/null || true)"
+            if [ -n "$STATUS" ] && [ "$(jq -r '.current.engine // empty' <<<"$STATUS")" = "mysql" ]; then
+              break
+            fi
+            if [ "$attempt" -eq 60 ]; then
+              echo "$STATUS"
+              docker logs npmi-db-wizard-app
+              exit 1
+            fi
+            sleep 1
+          done
+
+          USER_COUNT="$(
+            docker exec npmi-db-wizard-mysql \
+              mariadb -N -B -unpmi -pci-database-password npmi_target \
+              -e 'SELECT COUNT(*) FROM user;'
+          )"
+          test "$USER_COUNT" = "1"
+
+          curl -fsS \
+            -H "Authorization: Bearer $TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d '{"engine":"sqlite","sqlite":{"filename":"/data/database.sqlite"}}' \
+            http://127.0.0.1:19081/api/database/test | jq -e '.ok == true'
+
+          curl -fsS \
+            -H "Authorization: Bearer $TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d '{"engine":"sqlite","sqlite":{"filename":"/data/database.sqlite"},"replace_target":true,"confirmation":"MIGRATE"}' \
+            http://127.0.0.1:19081/api/database/migrate | jq -e '.ok == true and .restartScheduled == true'
+
+          for attempt in $(seq 1 60); do
+            STATUS="$(curl -fsS -H "Authorization: Bearer $TOKEN" http://127.0.0.1:19081/api/database/status 2>/dev/null || true)"
+            if [ -n "$STATUS" ] && [ "$(jq -r '.current.engine // empty' <<<"$STATUS")" = "sqlite" ]; then
+              break
+            fi
+            if [ "$attempt" -eq 60 ]; then
+              echo "$STATUS"
+              docker logs npmi-db-wizard-app
+              exit 1
+            fi
+            sleep 1
+          done
+
+          test "$(jq -r '.current.engine' <<<"$STATUS")" = "sqlite"

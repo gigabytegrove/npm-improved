@@ -28,3 +28,5 @@ export * from "./useUser";
 export * from "./useUsers";
 
 export * from "./useInstanceSync";
+
+export * from "./useDatabase";

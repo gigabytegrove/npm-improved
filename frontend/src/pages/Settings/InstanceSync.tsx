@@ -49,6 +49,22 @@ export default function InstanceSync() {
 		);
 	}
 
+	if (data.blockedBySharedDatabase) {
+		return (
+			<div className="card-body">
+				<div className="d-flex align-items-center gap-2 mb-2">
+					<IconTopologyStar3 size={24} />
+					<h3 className="mb-0">
+						<T id="sync.title" />
+					</h3>
+				</div>
+				<Alert variant="info" className="mb-0">
+					<strong>Shared MySQL mode is active.</strong> These nodes already use one common database, so Primary/Secondary Instance Synchronization is intentionally disabled. Manage this deployment from <strong>Database &amp; Storage</strong> instead.
+				</Alert>
+			</div>
+		);
+	}
+
 	const peers = data.role === "primary"
 		? data.peers || []
 		: data.primaryStatus

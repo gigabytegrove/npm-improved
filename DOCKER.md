@@ -48,6 +48,22 @@ ss -ltnp | grep -E ':(80|81|443)\\b' || true
 docker ps --format 'table {{.Names}}\\t{{.Ports}}'
 ```
 
+## Change databases from the UI
+
+NPM Improved can switch its active database after installation from **Settings → Database & Storage**.
+
+The wizard can:
+
+- copy SQLite to MySQL/MariaDB;
+- copy MySQL/MariaDB back to SQLite;
+- join an existing shared NPM Improved MySQL database;
+- test the destination before switching;
+- preserve the original source database if the migration fails.
+
+Selections made in the UI are stored in `/data/database-config.json` and take precedence over the container's DB environment variables until **Use deployment database settings** is selected.
+
+For multi-server Shared MySQL deployments, all nodes must use the same NPM Improved version and must also share or replicate certificate/custom assets. See [Database & Shared MySQL](docs/src/guide/database.md).
+
 ## MariaDB / MySQL
 
 Copy and edit the environment file first. Set both `MYSQL_PASSWORD` and `MYSQL_ROOT_PASSWORD`. The MariaDB Compose stack refuses to start while either value is blank.
