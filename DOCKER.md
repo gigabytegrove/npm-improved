@@ -2,7 +2,7 @@
 
 NPM Improved includes production-ready Docker Compose definitions in the repository root.
 
-> NPM Improved v1.0.0 is the first stable release. A pre-built container image is not published yet; the Compose files build the image from the checked-out source.
+> NPM Improved v1.1.0 publishes official stable multi-architecture images and includes the built-in **Settings → Update** manager. The Docker installer remains supported for first installation and recovery.
 
 ## Requirements
 
@@ -138,7 +138,33 @@ Backups are retained under `/data/backups`. Copy disaster-recovery backups off t
 
 ## Updating
 
-Use the same installer target that matches the deployment you are running. The installer rebuilds the application, recreates the live app container, and verifies the running NPM Improved build.
+### Settings → Update
+
+Beginning with v1.1.0, normal single-node Docker installations can update from **Settings → Update**.
+
+The installer records the host project path and deployment mode in `.env` and mounts the Docker socket into the NPM Improved application container. Those settings allow the authenticated Update manager to launch a temporary Docker CLI handoff when the running application container must be replaced.
+
+The handoff:
+
+1. validates the deployment;
+2. requires at least 512 MiB of free staging space;
+3. pulls the requested official stable image;
+4. preserves the current `.env`;
+5. recreates only the application container;
+6. waits for Docker health;
+7. verifies the independent control-plane health endpoint and live build version;
+8. restores the previous image configuration automatically when verification fails;
+9. removes itself after the operation.
+
+There is no permanently running updater/worker container.
+
+Because Docker socket access is host-level privileged access, the browser is never given a Docker command interface. The authenticated backend exposes only the defined NPM Improved update/restart/rollback operations, and those operations require the current administrator password.
+
+Shared MySQL and Primary/Secondary Instance Synchronization deployments are intentionally blocked from single-node automatic updates. Upgrade those nodes together during a coordinated maintenance window.
+
+### CLI update/recovery path
+
+The installer remains the supported CLI update and recovery path. Use the same target that matches the underlying deployment.
 
 SQLite:
 
@@ -146,7 +172,7 @@ SQLite:
 cd ~/npm-improved
 git checkout develop
 git pull --ff-only
-./scripts/install-docker sqlite --clean-build
+./scripts/install-docker sqlite
 ```
 
 MariaDB / MySQL:
@@ -155,7 +181,7 @@ MariaDB / MySQL:
 cd ~/npm-improved
 git checkout develop
 git pull --ff-only
-./scripts/install-docker mysql --clean-build
+./scripts/install-docker mysql
 ```
 
 PostgreSQL:
@@ -164,8 +190,10 @@ PostgreSQL:
 cd ~/npm-improved
 git checkout develop
 git pull --ff-only
-./scripts/install-docker postgres --clean-build
+./scripts/install-docker postgres
 ```
+
+Add `--clean-build` only when a cache-free rebuild is intentionally required.
 
 If the database was selected dynamically from **Settings → Database & Storage**, keep using the installer target for the underlying deployment. The saved runtime database selection under `/data` remains in place across the rebuild.
 
