@@ -25,6 +25,10 @@
 			"description": "Endpoints related to Audit Logs"
 		},
 		{
+			"name": "config-history",
+			"description": "Durable Nginx configuration revisions and transactional restore"
+		},
+		{
 			"name": "logs",
 			"description": "Endpoints for viewing system, Let's Encrypt and per-host logs"
 		},
@@ -375,6 +379,21 @@
 		"/users/{userID}/login": {
 			"post": {
 				"$ref": "./paths/users/userID/login/post.json"
+			}
+		},
+		"/config-history": {
+			"get": {
+				"$ref": "./paths/config-history/get.json"
+			}
+		},
+		"/config-history/{revisionID}": {
+			"get": {
+				"$ref": "./paths/config-history/revisionID/get.json"
+			}
+		},
+		"/config-history/{revisionID}/restore": {
+			"post": {
+				"$ref": "./paths/config-history/revisionID/restore/post.json"
 			}
 		}
 	}
