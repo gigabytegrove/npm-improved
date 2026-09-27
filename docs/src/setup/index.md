@@ -6,7 +6,7 @@ outline: deep
 
 ## Docker quick start
 
-NPM Improved is currently pre-1.0 and does not yet publish a stable container image. The repository includes production Compose files that build the image directly from the checked-out source.
+NPM Improved v1.0.0 is the first stable release. A pre-built container image is not published yet. The repository includes production Compose files that build the image directly from the checked-out source.
 
 Requirements:
 

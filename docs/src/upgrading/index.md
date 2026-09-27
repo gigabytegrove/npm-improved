@@ -4,7 +4,7 @@ outline: deep
 
 # Upgrading
 
-NPM Improved is currently pre-1.0. Until a stable migration contract and published container release channel exist, treat upgrades between development snapshots as potentially state-changing.
+NPM Improved v1.0.0 establishes the first stable release baseline. Treat upgrades as state-changing operations: keep a current backup, preserve a rollback path, and verify the important proxy, certificate, database, synchronization, and recovery workflows after every upgrade.
 
 ## Before every upgrade
 

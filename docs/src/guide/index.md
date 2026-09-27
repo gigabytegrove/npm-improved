@@ -10,7 +10,7 @@ You can still create a hostname, point it at an app, turn on HTTPS, and move on.
 
 ## Project status
 
-NPM Improved is currently **pre-1.0**.
+NPM Improved **v1.0.0** is the first stable release.
 
 The active integration branch is:
 
@@ -184,7 +184,7 @@ git pull --ff-only
 
 Use the matching installer target for MySQL or PostgreSQL deployments.
 
-Before upgrading a pre-1.0 system, keep a current backup and verify the important proxy, certificate, database, and recovery workflows after the update.
+Before upgrading a v1.x system, keep a current backup and verify the important proxy, certificate, database, and recovery workflows after the update.
 
 ## Upstream attribution
 

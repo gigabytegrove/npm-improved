@@ -10,7 +10,7 @@ No. NPM Improved is a fork based on Nginx Proxy Manager. It intentionally keeps 
 
 ## Is there a stable NPM Improved Docker image?
 
-Not yet. The project is currently pre-1.0. Build from source using the repository's `scripts/buildx` helper.
+Not yet. NPM Improved v1.0.0 is stable, but a pre-built container image is not published yet. Build from source using the repository's supported Docker installer or `scripts/buildx` helper.
 
 Do not use an upstream `jc21/nginx-proxy-manager` image and expect NPM Improved features to be present.
 
