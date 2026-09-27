@@ -38,6 +38,7 @@ const internalProxyHost = {
 
 		thisData.owner_user_id = access.token.getUserId(1);
 		thisData = internalHost.cleanSslHstsData(thisData);
+		thisData = internalHost.cleanProtectionData(thisData);
 		if (typeof thisData.advanced_config === "undefined") {
 			thisData.advanced_config = "";
 		}
@@ -123,6 +124,7 @@ const internalProxyHost = {
 
 		thisData = _.assign({}, { domain_names: currentRow.domain_names }, thisData);
 		thisData = internalHost.cleanSslHstsData(thisData, currentRow);
+		thisData = internalHost.cleanProtectionData(thisData, currentRow);
 
 		await proxyHostModel.query().where({ id: thisData.id }).patch(thisData);
 
