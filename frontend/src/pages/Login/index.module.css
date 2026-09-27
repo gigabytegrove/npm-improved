@@ -73,17 +73,18 @@
 
 .fullLogoPlate {
 	width: min(29rem, 100%);
-	padding: 0.65rem 0.9rem;
-	border-radius: 1.15rem;
-	background: #ffffff;
-	border: 1px solid rgba(255, 255, 255, 0.18);
-	box-shadow: 0 18px 44px rgba(0, 0, 0, 0.2);
+	padding: 0;
+	background: transparent;
+	border: 0;
+	box-shadow: none;
 }
 
 .fullLogo {
 	display: block;
 	width: 100%;
 	height: auto;
+	mix-blend-mode: screen;
+	filter: invert(1) hue-rotate(180deg) saturate(1.4) brightness(1.12);
 }
 
 .brandMark {
@@ -301,4 +302,15 @@
 	.formPanel {
 		padding-inline: 1.25rem;
 	}
+}
+
+
+.mobileBrand img {
+	object-fit: contain;
+	mix-blend-mode: multiply;
+}
+
+:global([data-bs-theme="dark"]) .mobileBrand img {
+	mix-blend-mode: screen;
+	filter: invert(1) hue-rotate(180deg) saturate(1.4) brightness(1.1);
 }

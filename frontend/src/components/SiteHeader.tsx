@@ -1,146 +1,155 @@
-import { IconLock, IconLogout, IconShieldLock, IconUser } from "@tabler/icons-react";
-import { LocalePicker, NavLink, ThemeSwitcher } from "src/components";
+import {
+	IconActivityHeartbeat,
+	IconChevronDown,
+	IconLock,
+	IconLogout,
+	IconMenu2,
+	IconShieldLock,
+	IconUser,
+} from "@tabler/icons-react";
+import { useLocation } from "react-router-dom";
+import { LocalePicker, ThemeSwitcher } from "src/components";
 import { useAuthState } from "src/context";
-import { useUser } from "src/hooks";
+import { useHealth, useUser } from "src/hooks";
 import { T } from "src/locale";
 import { showChangePasswordModal, showTwoFactorModal, showUserModal } from "src/modals";
 import styles from "./SiteHeader.module.css";
 
+const routeTitles: Array<[RegExp, string, string]> = [
+	[/^\/$/, "Dashboard", "Traffic, health, and proxy control at a glance"],
+	[/^\/nginx\/proxy/, "Proxy Hosts", "HTTP and HTTPS routing, pools, and failover"],
+	[/^\/nginx\/redirection/, "Redirection Hosts", "Redirect traffic with explicit destination rules"],
+	[/^\/nginx\/stream/, "Streams", "Layer 4 TCP and UDP forwarding"],
+	[/^\/nginx\/404/, "404 Hosts", "Controlled responses for retired or blocked hostnames"],
+	[/^\/access/, "Access Lists", "Authentication and network access policy"],
+	[/^\/certificates/, "Certificates", "TLS lifecycle and certificate inventory"],
+	[/^\/users/, "Users", "Operators, roles, and authentication"],
+	[/^\/audit-log/, "Audit Log", "Administrative activity and change visibility"],
+	[/^\/config-history/, "Configuration History", "Revision history and rollback evidence"],
+	[/^\/logs/, "Logs", "Traffic, error, and security observability"],
+	[/^\/system-health/, "System Health", "Runtime dependencies and control-plane status"],
+	[/^\/settings/, "Settings", "Platform policy, recovery, and synchronization"],
+];
+
+const resolveTitle = (pathname: string) =>
+	routeTitles.find(([pattern]) => pattern.test(pathname)) || ["", "Control Center", "NPM Improved"];
+
 export function SiteHeader() {
 	const { data: currentUser } = useUser("me");
+	const health = useHealth();
+	const location = useLocation();
 	const isAdmin = currentUser?.roles.includes("admin");
 	const { logout } = useAuthState();
+	const [, title, subtitle] = resolveTitle(location.pathname);
+	const version = health.data?.version?.display || "";
 
 	return (
-		<header className="navbar navbar-expand-md d-print-none npm-improved-header">
-			<div className="container-xl">
+		<header className={`${styles.header} npm-improved-header`}>
+			<div className={styles.left}>
 				<button
-					className="navbar-toggler"
+					className={styles.menuButton}
 					type="button"
 					data-bs-toggle="collapse"
 					data-bs-target="#navbar-menu"
 					aria-controls="navbar-menu"
 					aria-expanded="false"
 					aria-label="Toggle navigation"
+					data-npmi-menu-toggle
 				>
-					<span className="navbar-toggler-icon" />
+					<IconMenu2 size={22} />
 				</button>
-				<div className="navbar-brand navbar-brand-autodark pe-0 pe-md-3">
-					<NavLink to="/">
-						<span className={styles.brand}>
-							<span className={styles.mark}>
-								<img
-									src="/images/npm-improved-mark.webp"
-									width={58}
-									height={38}
-									className="navbar-brand-image"
-									alt="Nginx Proxy Manager Improved"
-								/>
-							</span>
-							<span className={styles.wordmark}>
-								<span className={styles.name}>Nginx Proxy Manager</span>
-								<span className={styles.tagline}>IMPROVED</span>
-							</span>
-						</span>
-					</NavLink>
+				<div className={styles.pageIdentity}>
+					<div className={styles.pageTitle}>{title}</div>
+					<div className={styles.pageSubtitle}>{subtitle}</div>
 				</div>
-				<div className="navbar-nav flex-row order-md-last">
-					<div className="d-none d-md-flex">
-						<div className="nav-item">
-							<LocalePicker />
-						</div>
-						<div className="nav-item">
+			</div>
+
+			<div className={styles.actions}>
+				<div className={styles.statusPill} title="NPM Improved control plane is responding">
+					<span className={styles.statusIcon}>
+						<IconActivityHeartbeat size={15} />
+					</span>
+					<span className={styles.statusText}>Online</span>
+					{version ? <span className={styles.version}>{version}</span> : null}
+				</div>
+
+				<div className={styles.desktopTools}>
+					<LocalePicker />
+					<ThemeSwitcher />
+				</div>
+
+				<div className="dropdown">
+					<button
+						type="button"
+						className={styles.userButton}
+						data-bs-toggle="dropdown"
+						aria-expanded="false"
+						aria-label="Open user menu"
+					>
+						<span
+							className={`${styles.avatar} avatar avatar-sm`}
+							style={{
+								backgroundImage: `url(${currentUser?.avatar || "/images/default-avatar.jpg"})`,
+							}}
+						/>
+						<span className={styles.userText}>
+							<strong>{currentUser?.nickname || "User"}</strong>
+							<small>
+								<T id={isAdmin ? "role.admin" : "role.standard-user"} />
+							</small>
+						</span>
+						<IconChevronDown size={15} className={styles.chevron} />
+					</button>
+					<div className={`${styles.userMenu} dropdown-menu dropdown-menu-end`}>
+						<div className={styles.mobileTools}>
 							<ThemeSwitcher />
+							<LocalePicker menuAlign="end" />
 						</div>
-					</div>
-					<div className="nav-item d-md-flex">
-						<div className="nav-item dropdown">
-							<a
-								href="/"
-								className="nav-link d-flex lh-1"
-								data-bs-toggle="dropdown"
-								aria-label="Open user menu"
-							>
-								<span
-									className="avatar avatar-sm"
-									style={{
-										backgroundImage: `url(${currentUser?.avatar || "/images/default-avatar.jpg"})`,
-									}}
-								/>
-								<div className="d-none d-xl-block ps-2">
-									<div>{currentUser?.nickname}</div>
-									<div className="mt-1 small text-secondary">
-										<T id={isAdmin ? "role.admin" : "role.standard-user"} />
-									</div>
-								</div>
-							</a>
-							<div className="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
-								<div className="d-md-none">
-									{/* biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: This div is not interactive. */}
-									<div
-										className="p-2 pb-1 pe-1 d-flex align-items-center"
-										onClick={(e) => e.stopPropagation()}
-									>
-										<div className="ps-2 pe-1 me-auto">
-											<div>{currentUser?.nickname}</div>
-											<div className="mt-1 small text-secondary text-nowrap">
-												<T id={isAdmin ? "role.admin" : "role.standard-user"} />
-											</div>
-										</div>
-										<div className="d-flex align-items-center">
-											<ThemeSwitcher className="me-n2" />
-											<LocalePicker menuAlign="end" />
-										</div>
-									</div>
-									<div className="dropdown-divider" />
-								</div>
-								<a
-									href="?"
-									className="dropdown-item"
-									onClick={(e) => {
-										e.preventDefault();
-										showUserModal("me");
-									}}
-								>
-									<IconUser width={18} />
-									<T id="user.edit-profile" />
-								</a>
-								<a
-									href="?"
-									className="dropdown-item"
-									onClick={(e) => {
-										e.preventDefault();
-										showChangePasswordModal("me");
-									}}
-								>
-									<IconLock width={18} />
-									<T id="user.change-password" />
-								</a>
-								<a
-									href="?"
-									className="dropdown-item"
-									onClick={(e) => {
-										e.preventDefault();
-										showTwoFactorModal("me");
-									}}
-								>
-									<IconShieldLock width={18} />
-									<T id="user.two-factor" />
-								</a>
-								<div className="dropdown-divider" />
-								<a
-									href="?"
-									className="dropdown-item"
-									onClick={(e) => {
-										e.preventDefault();
-										logout();
-									}}
-								>
-									<IconLogout width={18} />
-									<T id="user.logout" />
-								</a>
-							</div>
-						</div>
+						<a
+							href="?"
+							className="dropdown-item"
+							onClick={(event) => {
+								event.preventDefault();
+								showUserModal("me");
+							}}
+						>
+							<IconUser width={18} />
+							<T id="user.edit-profile" />
+						</a>
+						<a
+							href="?"
+							className="dropdown-item"
+							onClick={(event) => {
+								event.preventDefault();
+								showChangePasswordModal("me");
+							}}
+						>
+							<IconLock width={18} />
+							<T id="user.change-password" />
+						</a>
+						<a
+							href="?"
+							className="dropdown-item"
+							onClick={(event) => {
+								event.preventDefault();
+								showTwoFactorModal("me");
+							}}
+						>
+							<IconShieldLock width={18} />
+							<T id="user.two-factor" />
+						</a>
+						<div className="dropdown-divider" />
+						<a
+							href="?"
+							className="dropdown-item text-danger"
+							onClick={(event) => {
+								event.preventDefault();
+								logout();
+							}}
+						>
+							<IconLogout width={18} />
+							<T id="user.logout" />
+						</a>
 					</div>
 				</div>
 			</div>
