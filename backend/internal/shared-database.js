@@ -442,26 +442,29 @@ const tick = async () => {
 	}
 };
 
-const initTimer = () => {
+const initTimer = async () => {
 	if (!isSharedDatabase()) return;
 	if (timer) clearInterval(timer);
 	const node = readNode();
-	const start = async () => {
-		try {
-			if (node.role === "primary") {
-				await claimPrimary(false);
-				const state = await stateRow();
-				if (revisionNumber(state.revision) === 0) await publishNow({ force: true });
-				else await registerNode();
-			} else {
-				await reconcileNow();
+
+	try {
+		if (node.role === "primary") {
+			await claimPrimary(false);
+			const state = await stateRow();
+			if (revisionNumber(state.revision) === 0) await publishNow({ force: true });
+			else await registerNode();
+		} else {
+			const result = await reconcileNow();
+			if (result?.restartRequired) {
+				logger.info("Restarting backend before serving requests so shared JWT identity is active");
+				process.exit(0);
 			}
-		} catch (err) {
-			logger.error(`Shared database startup reconciliation failed: ${err.message}`);
-			writeNode({ last_error: err.message });
 		}
-	};
-	start();
+	} catch (err) {
+		logger.error(`Shared database startup reconciliation failed: ${err.message}`);
+		writeNode({ last_error: err.message });
+	}
+
 	timer = setInterval(() => {
 		tick().catch((err) => {
 			logger.error(`Shared database reconciliation failed: ${err.message}`);
