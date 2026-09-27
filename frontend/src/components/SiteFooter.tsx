@@ -1,6 +1,8 @@
 import { useCheckVersion, useHealth } from "src/hooks";
 import { T } from "src/locale";
 
+const repositoryUrl = "https://github.com/gigabytegrove/npm-improved";
+
 export function SiteFooter() {
 	const health = useHealth();
 	const { data: versionData } = useCheckVersion();
@@ -14,56 +16,54 @@ export function SiteFooter() {
 	};
 
 	return (
-		<footer className="footer d-print-none py-3">
+		<footer className="footer d-print-none py-3 npm-improved-footer">
 			<div className="container-xl">
 				<div className="row text-center align-items-center flex-row-reverse">
 					<div className="col-lg-auto ms-lg-auto">
 						<ul className="list-inline list-inline-dots mb-0">
 							<li className="list-inline-item">
 								<a
-									href="https://github.com/NginxProxyManager/nginx-proxy-manager"
+									href={repositoryUrl}
 									target="_blank"
 									className="link-secondary"
-									rel="noopener"
+									rel="noopener noreferrer"
 								>
 									<T id="footer.github-fork" />
+								</a>
+							</li>
+							<li className="list-inline-item">
+								<a
+									href={`${repositoryUrl}/releases`}
+									target="_blank"
+									className="link-secondary"
+									rel="noopener noreferrer"
+								>
+									Release history
 								</a>
 							</li>
 						</ul>
 					</div>
 					<div className="col-12 col-lg-auto mt-3 mt-lg-0">
 						<ul className="list-inline list-inline-dots mb-0">
-							<li className="list-inline-item">
-								© 2026{" "}
-								<a href="https://jc21.com" rel="noreferrer" target="_blank" className="link-secondary">
-									jc21.com
-								</a>
-							</li>
-							<li className="list-inline-item">
-								Theme by{" "}
-								<a href="https://tabler.io" rel="noreferrer" target="_blank" className="link-secondary">
-									Tabler
-								</a>
-							</li>
+							<li className="list-inline-item">© 2026 Gigabyte Grove</li>
 							<li className="list-inline-item">
 								<a
-									href={`https://github.com/NginxProxyManager/nginx-proxy-manager/releases/tag/${getVersion()}`}
+									href={`${repositoryUrl}/releases`}
 									className="link-secondary"
 									target="_blank"
-									rel="noopener"
+									rel="noopener noreferrer"
 								>
-									{" "}
-									{getVersion()}{" "}
+									NPM Improved {getVersion()}
 								</a>
 							</li>
 							{versionData?.updateAvailable && versionData?.latest && (
 								<li className="list-inline-item">
 									<a
-										href={`https://github.com/NginxProxyManager/nginx-proxy-manager/releases/tag/${versionData.latest}`}
+										href={`${repositoryUrl}/releases/tag/${versionData.latest}`}
 										className="link-warning fw-bold"
 										target="_blank"
-										rel="noopener"
-										title={`New version ${versionData.latest} is available`}
+										rel="noopener noreferrer"
+										title={`NPM Improved ${versionData.latest} is available`}
 									>
 										<T id="update-available" data={{ latestVersion: versionData.latest }} />
 									</a>
