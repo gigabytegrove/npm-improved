@@ -119,7 +119,7 @@ jobs:
             -e DB_SQLITE_FILE=/data/database.sqlite \
             -e INITIAL_ADMIN_EMAIL=ci@example.com \
             -e INITIAL_ADMIN_PASSWORD=ci-password-12345 \
-            -e NPM_BUILD_VERSION=1.0.0-ci \
+            -e NPM_BUILD_VERSION=1.1.0-ci \
             -v /tmp/npmi-db-wizard/data:/data \
             -v /tmp/npmi-db-wizard/letsencrypt:/etc/letsencrypt \
             npm-improved:ci
