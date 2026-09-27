@@ -508,7 +508,17 @@ const internalDatabaseManager = {
 		migrationInProgress = true;
 		const client = buildClient(config);
 		try {
-			await inspectClient(client);
+			const before = await inspectClient(client);
+			if (before.rowCount > 0 && !before.npmSchema) {
+				throw new errs.ValidationError(
+					"Target database contains existing non-NPM Improved data. Choose an empty database instead.",
+				);
+			}
+			if (before.rowCount > 0 && !data.replaceTarget) {
+				throw new errs.ValidationError(
+					"Target database already contains NPM Improved data. Enable Replace target data or use Join existing database instead.",
+				);
+			}
 			await prepareTargetSchema(client);
 			const snapshot = await captureSource();
 			const counts = await copySnapshot(client, snapshot, Boolean(data.replaceTarget));
