@@ -1,0 +1,38 @@
+{
+	"operationId": "restoreConfigRevision",
+	"summary": "Restore a superseded configuration revision",
+	"description": "Restores the stored database snapshot through the normal transactional Nginx validation/reload path and creates a new active revision. Failed and pending revisions cannot be restored.",
+	"tags": [
+		"config-history"
+	],
+	"security": [
+		{
+			"bearerAuth": [
+				"admin"
+			]
+		}
+	],
+	"parameters": [
+		{
+			"in": "path",
+			"name": "revisionID",
+			"required": true,
+			"schema": {
+				"type": "integer",
+				"minimum": 1
+			}
+		}
+	],
+	"responses": {
+		"200": {
+			"description": "New active configuration revision created by the restore",
+			"content": {
+				"application/json": {
+					"schema": {
+						"$ref": "../../../../components/config-revision-object.json"
+					}
+				}
+			}
+		}
+	}
+}
