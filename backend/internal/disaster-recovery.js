@@ -41,6 +41,21 @@ const TABLES = Object.freeze({
 		["stream", streamModel],
 		["config_revision", configRevisionModel],
 	],
+	cluster: [
+		["user", userModel],
+		["user_permission", userPermissionModel],
+		["auth", authModel],
+		["setting", settingModel],
+		["access_list", accessListModel],
+		["access_list_auth", accessListAuthModel],
+		["access_list_client", accessListClientModel],
+		["certificate", certificateModel],
+		["proxy_host", proxyHostModel],
+		["redirection_host", redirectionHostModel],
+		["dead_host", deadHostModel],
+		["stream", streamModel],
+		["config_revision", configRevisionModel],
+	],
 	"disaster-recovery": [
 		["user", userModel],
 		["user_permission", userPermissionModel],
@@ -183,13 +198,13 @@ const summarize = (bundle) => {
 		counts,
 		filesystemEntries,
 		filesystemBytes: bundle.filesystem?.bytes || 0,
-		containsAuthenticationState: bundle.scope === "disaster-recovery",
+		containsAuthenticationState: ["cluster", "disaster-recovery"].includes(bundle.scope),
 		requiresRestart: bundle.scope === "disaster-recovery",
 	};
 };
 
 const validateBundle = (bundle) => {
-	if (!["configuration", "disaster-recovery"].includes(bundle?.scope)) {
+	if (!["configuration", "cluster", "disaster-recovery"].includes(bundle?.scope)) {
 		throw new Error("Backup scope is unsupported");
 	}
 	if (!bundle.database || typeof bundle.database !== "object") {
@@ -476,6 +491,63 @@ const parseUploadedBundle = (file, passphrase) => {
 };
 
 
+const captureClusterDatabase = async () => {
+	const database = await captureDatabase("cluster");
+	database.setting = (database.setting || []).filter((row) => row.id !== "instance-sync");
+	return database;
+};
+
+const replaceClusterDatabase = async (snapshot) => {
+	const localSyncSetting = await settingModel.query().findById("instance-sync");
+	await replaceDatabase(snapshot, "cluster");
+	if (localSyncSetting) {
+		const plain = toPlain(localSyncSetting);
+		const instance = settingModel.fromJson(plain);
+		const dbRow = typeof instance.$toDatabaseJson === "function"
+			? instance.$toDatabaseJson()
+			: instance.$formatDatabaseJson(plain);
+		await db()("setting").insert(dbRow);
+	}
+};
+
+const applyClusterPayload = async (bundle) => {
+	if (bundle.scope !== "cluster") {
+		throw new Error("Cluster synchronization payload has the wrong scope");
+	}
+
+	const previousDatabase = await captureDatabase("cluster");
+	const rollbackRoot = snapshotLiveFilesystem();
+
+	restoreInProgress = true;
+	try {
+		await replaceClusterDatabase(bundle.database);
+		restoreFilesystem(bundle);
+		await regenerateNginx();
+		removePath(rollbackRoot);
+		return {
+			ok: true,
+			scope: "cluster",
+			restoredAt: new Date().toISOString(),
+			source: bundle.source || {},
+			summary: summarize(bundle),
+		};
+	} catch (err) {
+		try {
+			await replaceDatabase(previousDatabase, "cluster");
+			restoreLiveFilesystemSnapshot(rollbackRoot);
+			await internalNginx.test();
+			await internalNginx.reload();
+		} catch (rollbackErr) {
+			err.rollbackError = rollbackErr;
+		}
+		throw err;
+	} finally {
+		restoreInProgress = false;
+		removePath(rollbackRoot);
+	}
+};
+
+
 const readScheduledBackupConfig = () => {
 	const passphrase = process.env.NPM_BACKUP_PASSPHRASE || "";
 	const requestedScope = process.env.NPM_BACKUP_SCOPE || "disaster-recovery";
@@ -628,6 +700,33 @@ const internalDisasterRecovery = {
 				};
 			})(),
 		};
+	},
+
+	createClusterEnvelope: async (passphrase) => {
+		const database = await captureClusterDatabase();
+		const filesystem = captureFilesystem("cluster");
+		const payload = makePayload("cluster", database, filesystem);
+		return {
+			data: createBackupEnvelope(payload, passphrase),
+			summary: summarize({ ...payload, format_version: 1 }),
+		};
+	},
+
+	applyClusterEnvelope: async (buffer, passphrase) => {
+		if (!Buffer.isBuffer(buffer) || !buffer.length) {
+			throw new errs.ValidationError("Cluster synchronization payload is empty");
+		}
+		if (buffer.length > MAX_BUNDLE_BYTES) {
+			throw new errs.ValidationError("Cluster synchronization payload exceeds the 512 MiB limit");
+		}
+		let bundle;
+		try {
+			bundle = openBackupEnvelope(buffer, passphrase);
+			validateBundle(bundle);
+		} catch (err) {
+			throw new errs.ValidationError(err instanceof Error ? err.message : String(err));
+		}
+		return applyClusterPayload(bundle);
 	},
 
 	export: async (access, { scope, passphrase }) => {
