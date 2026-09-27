@@ -1,8 +1,8 @@
 {
-	"name": "nginx-proxy-manager",
-	"version": "2.0.0",
-	"description": "A beautiful interface for creating Nginx endpoints",
-	"author": "Jamie Curnow <jc@jc21.com>",
+	"name": "npm-improved-backend",
+	"version": "2.16.0",
+	"description": "NPM Improved control API and proxy management backend",
+	"author": "Gigabyte Grove",
 	"license": "MIT",
 	"main": "index.js",
 	"type": "module",
