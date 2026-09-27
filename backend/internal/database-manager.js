@@ -272,6 +272,15 @@ const internalDatabaseManager = {
 				await internalDisasterRecovery.replaceDatabaseMigrationSnapshot(target, snapshot);
 				await verifySnapshotCounts(target, snapshot);
 				await resetSharedMetadata(target);
+			} else if (targetPublic.shared && current.shared !== true) {
+				// This is the same MySQL database, but it is being converted from
+				// single-server mode to Shared MySQL. Start a fresh cluster generation
+				// rather than trusting metadata/files left by an earlier cluster.
+				await target.migrate.latest({
+					tableName: "migrations",
+					directory: MIGRATIONS_DIR,
+				});
+				await resetSharedMetadata(target);
 			}
 
 			await target.destroy();
