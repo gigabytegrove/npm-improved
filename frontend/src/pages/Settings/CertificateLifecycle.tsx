@@ -76,8 +76,8 @@ export default function CertificateLifecycle() {
 						</Alert>
 
 						<div className="mb-4">
-							<label className="form-check form-switch">
-								<Field name="enabled" type="checkbox" className="form-check-input" />
+							<label className="form-check form-switch" htmlFor="certificate-lifecycle-enabled">
+								<Field id="certificate-lifecycle-enabled" name="enabled" type="checkbox" className="form-check-input" />
 								<span className="form-check-label">
 									<strong>Automatically purge unused certificates</strong>
 								</span>
@@ -104,7 +104,7 @@ export default function CertificateLifecycle() {
 								/>
 								<span className="input-group-text">days</span>
 								{errors.unusedRetentionDays && touched.unusedRetentionDays ? (
-									<div className="invalid-feedback">{errors.unusedRetentionDays}</div>
+									<div className="invalid-feedback">{String(errors.unusedRetentionDays)}</div>
 								) : null}
 							</div>
 							<div className="text-secondary mt-1">
@@ -114,8 +114,8 @@ export default function CertificateLifecycle() {
 						</div>
 
 						<div className="mb-3">
-							<label className="form-check">
-								<Field name="purgeCustomCertificates" type="checkbox" className="form-check-input" />
+							<label className="form-check" htmlFor="certificate-lifecycle-custom">
+								<Field id="certificate-lifecycle-custom" name="purgeCustomCertificates" type="checkbox" className="form-check-input" />
 								<span className="form-check-label">
 									Include imported/custom certificates in automatic cleanup
 								</span>
