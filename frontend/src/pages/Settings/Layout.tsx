@@ -103,6 +103,8 @@ export default function Layout() {
 							<CertificateLifecycle />
 						) : page === "protection" ? (
 							<Protection />
+						) : page === "database" ? (
+							<Database />
 						) : page === "instance-sync" ? (
 							<InstanceSync />
 						) : (
