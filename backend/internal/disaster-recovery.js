@@ -288,6 +288,10 @@ const restoreEntries = (root, entries) => {
 		if (entry.type === "file") {
 			fs.writeFileSync(target, Buffer.from(entry.data, "base64"), { mode: entry.mode || 0o640 });
 		} else if (entry.type === "symlink") {
+			const linkTarget = path.resolve(path.dirname(target), entry.target);
+			if (linkTarget !== resolvedRoot && !linkTarget.startsWith(resolvedRoot + path.sep)) {
+				throw new Error("Backup symlink escaped its restore root");
+			}
 			fs.symlinkSync(entry.target, target);
 		}
 	}
