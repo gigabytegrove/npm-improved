@@ -31,6 +31,42 @@ export const readConfigIfExists = (filename) => {
 	}
 };
 
+export const ensureBaselineRevision = async ({
+	userId = 0,
+	objectType,
+	objectId,
+	snapshot,
+	configText = "",
+}) => {
+	if (!snapshot) return null;
+
+	const existing = await configRevisionModel
+		.query()
+		.where({
+			object_type: objectType,
+			object_id: objectId,
+			status: CONFIG_REVISION_STATUS.ACTIVE,
+		})
+		.orderBy("id", "DESC")
+		.first();
+
+	if (existing) return existing;
+
+	return await configRevisionModel.query().insertAndFetch({
+		user_id: userId || 0,
+		object_type: objectType,
+		object_id: objectId,
+		operation: "baseline",
+		status: CONFIG_REVISION_STATUS.ACTIVE,
+		config_text: configText || "",
+		snapshot: structuredClone(snapshot),
+		error_text: null,
+		meta: {
+			baseline: true,
+		},
+	});
+};
+
 export const beginConfigRevision = async ({
 	userId = 0,
 	objectType,
@@ -117,6 +153,7 @@ export default {
 	captureModelSnapshot,
 	revisionSnapshotForPatch,
 	readConfigIfExists,
+	ensureBaselineRevision,
 	beginConfigRevision,
 	setRevisionCandidate,
 	failConfigRevision,
