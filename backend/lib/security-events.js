@@ -152,7 +152,7 @@ export const classifyAccessRecord = (record) => {
 	const decodedPath = decodedUri.split("?")[0];
 	const ctx = { rawUri, decodedUri, decodedPath };
 
-	return CATEGORY_RULES.filter((rule) => rule.test(ctx)).map((rule) => ({
+	const matched = CATEGORY_RULES.filter((rule) => rule.test(ctx)).map((rule) => ({
 		category: rule.category,
 		label: rule.label,
 		severity: rule.severity,
@@ -167,6 +167,26 @@ export const classifyAccessRecord = (record) => {
 		sourceHostType: record.sourceHostType || null,
 		sourceHostId: record.sourceHostId || null,
 	}));
+
+	if (record.status === 429) {
+		matched.push({
+			category: "rate-limit",
+			label: "Rate limit enforced",
+			severity: "medium",
+			confidence: "strong",
+			timestamp: record.timestamp,
+			status: record.status,
+			method: record.method,
+			host: record.host,
+			uri: record.uri,
+			clientIp: record.clientIp,
+			userAgent: record.userAgent,
+			sourceHostType: record.sourceHostType || null,
+			sourceHostId: record.sourceHostId || null,
+		});
+	}
+
+	return matched;
 };
 
 const increment = (map, key, amount = 1) => {
