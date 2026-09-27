@@ -8,8 +8,10 @@ import { ProxyAgent } from "proxy-agent";
 import tempWrite from "temp-write";
 import dnsPlugins from "../certbot/dns-plugins.json" with { type: "json" };
 import { installPlugin } from "../lib/certbot.js";
+import { applyAtomicCertificateFiles, runCertificateMutationWithRollback } from "../lib/certificate-transaction.js";
 import { useLetsencryptServer, useLetsencryptStaging } from "../lib/config.js";
 import error from "../lib/error.js";
+import { restoreModelRow, snapshotModelRow } from "../lib/model-rollback.js";
 import utils from "../lib/utils.js";
 import { debug, ssl as logger } from "../logger.js";
 import certificateModel from "../models/certificate.js";
@@ -485,47 +487,31 @@ const internalCertificate = {
 	 * @returns {Promise}
 	 */
 	writeCustomCert: async (certificate) => {
-		logger.info("Writing Custom Certificate:", certificate);
+		logger.info("Writing Custom Certificate:", certificate.id);
+
+		if (certificate.provider === "letsencrypt") {
+			throw new Error("Refusing to write letsencrypt certs here");
+		}
+		if (!certificate.meta?.certificate || !certificate.meta?.certificate_key) {
+			throw new error.ValidationError("Both a certificate and private key are required");
+		}
+
+		let certData = certificate.meta.certificate;
+		if (certificate.meta.intermediate_certificate) {
+			certData = `${certData}\n${certificate.meta.intermediate_certificate}`;
+		}
 
 		const dir = `/data/custom_ssl/npm-${certificate.id}`;
-
-		return new Promise((resolve, reject) => {
-			if (certificate.provider === "letsencrypt") {
-				reject(new Error("Refusing to write letsencrypt certs here"));
-				return;
-			}
-
-			let certData = certificate.meta.certificate;
-			if (typeof certificate.meta.intermediate_certificate !== "undefined") {
-				certData = `${certData}\n${certificate.meta.intermediate_certificate}`;
-			}
-
-			try {
-				if (!fs.existsSync(dir)) {
-					fs.mkdirSync(dir);
-				}
-			} catch (err) {
-				reject(err);
-				return;
-			}
-
-			fs.writeFile(`${dir}/fullchain.pem`, certData, (err) => {
-				if (err) {
-					reject(err);
-				} else {
-					resolve();
-				}
-			});
-		}).then(() => {
-			return new Promise((resolve, reject) => {
-				fs.writeFile(`${dir}/privkey.pem`, certificate.meta.certificate_key, (err) => {
-					if (err) {
-						reject(err);
-					} else {
-						resolve();
-					}
-				});
-			});
+		await applyAtomicCertificateFiles({
+			files: [
+				{ key: "fullchain", path: `${dir}/fullchain.pem`, content: certData, mode: 0o644 },
+				{ key: "privkey", path: `${dir}/privkey.pem`, content: certificate.meta.certificate_key, mode: 0o600 },
+			],
+			validate: async (paths) => {
+				await internalCertificate.getCertificateInfoFromFile(paths.fullchain, true);
+				await internalCertificate.validateCertificatePairFiles(paths.fullchain, paths.privkey);
+			},
+			log: (message) => logger.error(message),
 		});
 	},
 
@@ -605,22 +591,83 @@ const internalCertificate = {
 			throw new error.ValidationError("Certificate file was not provided");
 		}
 
+		// Fetch the unfiltered row so an existing private key can be retained when
+		// the upload only replaces the certificate/chain.
+		const rawRow = await certificateModel.query().findById(data.id);
+		if (!rawRow) {
+			throw new error.ItemNotFoundError(data.id);
+		}
+
+		const mergedMeta = _.cloneDeep(rawRow.meta || {});
 		_.map(data.files, (file, name) => {
 			if (internalCertificate.allowedSslFiles.indexOf(name) !== -1) {
-				row.meta[name] = file.data.toString();
+				mergedMeta[name] = file.data.toString();
 			}
 		});
 
-		const certificate = await internalCertificate.update(access, {
-			id: data.id,
-			expires_on: moment(validations.certificate.dates.to, "X").format("YYYY-MM-DD HH:mm:ss"),
-			domain_names: validations.certificate.cn ? [validations.certificate.cn] : [],
-			meta: _.clone(row.meta), // Prevent the update method from changing this value that we'll use later
+		if (!mergedMeta.certificate || !mergedMeta.certificate_key) {
+			throw new error.ValidationError("Both a certificate and private key are required");
+		}
+
+		let fullchain = mergedMeta.certificate;
+		if (mergedMeta.intermediate_certificate) {
+			fullchain = `${fullchain}\n${mergedMeta.intermediate_certificate}`;
+		}
+
+		const dir = `/data/custom_ssl/npm-${data.id}`;
+		const fullchainPath = `${dir}/fullchain.pem`;
+		const privkeyPath = `${dir}/privkey.pem`;
+		const previousState = await snapshotModelRow(certificateModel, data.id);
+
+		const newExpiresOn = moment(validations.certificate.dates.to, "X").format("YYYY-MM-DD HH:mm:ss");
+		const newDomainNames = validations.certificate.cn ? [validations.certificate.cn] : [];
+
+		await applyAtomicCertificateFiles({
+			files: [
+				{ key: "fullchain", path: fullchainPath, content: fullchain, mode: 0o644 },
+				{ key: "privkey", path: privkeyPath, content: mergedMeta.certificate_key, mode: 0o600 },
+			],
+			validate: async (paths) => {
+				await internalCertificate.getCertificateInfoFromFile(paths.fullchain, true);
+				await internalCertificate.validateCertificatePairFiles(paths.fullchain, paths.privkey);
+			},
+			activate: () => internalNginx.reload(),
+			commit: async () => {
+				try {
+					await certificateModel.query().patchAndFetchById(data.id, {
+						expires_on: newExpiresOn,
+						domain_names: newDomainNames,
+						meta: mergedMeta,
+					});
+				} catch (err) {
+					await restoreModelRow(certificateModel, data.id, previousState).catch((rollbackErr) => {
+						err.databaseRollbackError = rollbackErr;
+					});
+					throw err;
+				}
+			},
+			log: (message) => logger.error(message),
 		});
 
-		certificate.meta = row.meta;
-		await internalCertificate.writeCustomCert(certificate);
-		return _.pick(row.meta, internalCertificate.allowedSslFiles);
+		try {
+			await internalAuditLog.add(access, {
+				action: "updated",
+				object_type: "certificate",
+				object_id: data.id,
+				meta: {
+					domain_names: newDomainNames,
+					expires_on: newExpiresOn,
+					provider: "other",
+				},
+			});
+		} catch (err) {
+			// The certificate is already atomically committed and serving. Do not
+			// falsely report the upload as failed solely because audit persistence
+			// had a transient problem.
+			logger.error(`Certificate #${data.id} committed but audit logging failed: ${err.message}`);
+		}
+
+		return _.pick(mergedMeta, internalCertificate.allowedSslFiles);
 	},
 
 	/**
@@ -754,6 +801,36 @@ const internalCertificate = {
 	 * @param   {Boolean} [remove]
 	 * @returns {Object}
 	 */
+	/**
+	 * Verifies that a certificate file and private-key file are both valid and
+	 * contain the same public key.
+	 *
+	 * @param {String} certificateFile
+	 * @param {String} privateKeyFile
+	 * @returns {Promise<Boolean>}
+	 */
+	validateCertificatePairFiles: async (certificateFile, privateKeyFile) => {
+		try {
+			const [certificatePublicKey, privateKeyPublicKey] = await Promise.all([
+				utils.execFile("openssl", ["x509", "-in", certificateFile, "-pubkey", "-noout"]),
+				utils.execFile("openssl", ["pkey", "-in", privateKeyFile, "-pubout"]),
+			]);
+
+			const normalize = (value) => value.replace(/\r/g, "").trim();
+			if (normalize(certificatePublicKey) !== normalize(privateKeyPublicKey)) {
+				throw new error.ValidationError("Certificate and private key do not match");
+			}
+
+			await utils.execFile("openssl", ["pkey", "-in", privateKeyFile, "-check", "-noout"]);
+			return true;
+		} catch (err) {
+			if (err instanceof error.ValidationError) {
+				throw err;
+			}
+			throw new error.ValidationError(`Certificate/private-key validation failed (${err.message})`, err);
+		}
+	},
+
 	cleanMeta: (meta, remove) => {
 		internalCertificate.allowedSslFiles.map((key) => {
 			if (typeof meta[key] !== "undefined" && meta[key]) {
@@ -908,32 +985,57 @@ const internalCertificate = {
 		await access.can("certificates:update", data);
 		const certificate = await internalCertificate.get(access, data);
 
-		if (certificate.provider === "letsencrypt") {
-			const renewMethod = certificate.meta.dns_challenge
-				? internalCertificate.renewLetsEncryptSslWithDnsChallenge
-				: internalCertificate.renewLetsEncryptSsl;
+		if (certificate.provider !== "letsencrypt") {
+			throw new error.ValidationError("Only Let'sEncrypt certificates can be renewed");
+		}
 
-			await renewMethod(certificate);
-			const certInfo = await internalCertificate.getCertificateInfoFromFile(
-				`${internalCertificate.getLiveCertPath(certificate.id)}/fullchain.pem`,
-			);
+		const renewMethod = certificate.meta.dns_challenge
+			? internalCertificate.renewLetsEncryptSslWithDnsChallenge
+			: internalCertificate.renewLetsEncryptSsl;
 
-			const updatedCertificate = await certificateModel.query().patchAndFetchById(certificate.id, {
-				expires_on: moment(certInfo.dates.to, "X").format("YYYY-MM-DD HH:mm:ss"),
-			});
+		const livePath = internalCertificate.getLiveCertPath(certificate.id);
+		const certificatePaths = [
+			`${livePath}/cert.pem`,
+			`${livePath}/chain.pem`,
+			`${livePath}/fullchain.pem`,
+			`${livePath}/privkey.pem`,
+		];
+		const previousState = await snapshotModelRow(certificateModel, certificate.id);
+		let certInfo = null;
+		let updatedCertificate = null;
 
-			// Add to audit log
+		await runCertificateMutationWithRollback({
+			paths: certificatePaths,
+			mutate: () => renewMethod(certificate),
+			validate: async () => {
+				certInfo = await internalCertificate.getCertificateInfoFromFile(`${livePath}/fullchain.pem`, true);
+				await internalCertificate.validateCertificatePairFiles(
+					`${livePath}/fullchain.pem`,
+					`${livePath}/privkey.pem`,
+				);
+			},
+			activate: () => internalNginx.reload(),
+			commit: async () => {
+				updatedCertificate = await certificateModel.query().patchAndFetchById(certificate.id, {
+					expires_on: moment(certInfo.dates.to, "X").format("YYYY-MM-DD HH:mm:ss"),
+				});
+			},
+			rollbackCommit: () => restoreModelRow(certificateModel, certificate.id, previousState),
+			log: (message) => logger.error(message),
+		});
+
+		try {
 			await internalAuditLog.add(access, {
 				action: "renewed",
 				object_type: "certificate",
 				object_id: updatedCertificate.id,
 				meta: updatedCertificate,
 			});
-
-			return updatedCertificate;
+		} catch (err) {
+			logger.error(`Certificate #${certificate.id} renewed but audit logging failed: ${err.message}`);
 		}
 
-		throw new error.ValidationError("Only Let'sEncrypt certificates can be renewed");
+		return updatedCertificate;
 	},
 
 	/**
