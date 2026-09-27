@@ -164,6 +164,8 @@ export const classifyAccessRecord = (record) => {
 		uri: record.uri,
 		clientIp: record.clientIp,
 		userAgent: record.userAgent,
+		sourceHostType: record.sourceHostType || null,
+		sourceHostId: record.sourceHostId || null,
 	}));
 };
 
