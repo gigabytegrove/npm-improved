@@ -39,9 +39,10 @@ A Full Disaster Recovery backup contains everything in a Configuration backup pl
 - user permissions;
 - authentication records, including configured two-factor state;
 - administrative audit-log history;
-- the instance JWT key pair from `/data/keys.json`.
+- the instance JWT key pair from `/data/keys.json`;
+- the native recovery credential from `/data/recovery-access.json`.
 
-This mode is intended to rebuild the **same NPM Improved instance** after host/container/storage loss. A restart is required after a full restore so all processes reload restored identity state.
+This mode is intended to rebuild the **same NPM Improved instance** after host/container/storage loss. A restart is required after a full restore so all processes reload restored JWT and recovery identity state.
 
 ## Sensitive data
 
