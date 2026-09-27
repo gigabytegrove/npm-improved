@@ -22,6 +22,7 @@ It contains:
 - Streams;
 - Access Lists and their authorization/client entries;
 - application settings;
+- configuration revision history;
 - certificate database records, including provider metadata;
 - custom certificate material under `/data/custom_ssl`;
 - Let's Encrypt state under `/etc/letsencrypt`;
@@ -37,7 +38,6 @@ A Full Disaster Recovery backup contains everything in a Configuration backup pl
 - NPM Improved users;
 - user permissions;
 - authentication records, including configured two-factor state;
-- configuration revision history;
 - the instance JWT key pair from `/data/keys.json`.
 
 This mode is intended to rebuild the **same NPM Improved instance** after host/container/storage loss. A restart is required after a full restore so all processes reload restored identity state.
