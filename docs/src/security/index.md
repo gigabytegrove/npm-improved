@@ -14,6 +14,8 @@ The control-plane health endpoint is:
 /__npm_improved/health
 ```
 
+It intentionally exposes only coarse component state needed for degraded-mode diagnosis. Raw Nginx validation errors, configuration text, database details, and other sensitive diagnostics remain behind authenticated administration APIs.
+
 ## Configuration safety
 
 Generated changes are validated with `nginx -t` before they are allowed to replace the last-known-good configuration. Failed candidates are retained for diagnostics.
