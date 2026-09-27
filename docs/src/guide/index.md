@@ -10,7 +10,7 @@ You can still create a hostname, point it at an app, turn on HTTPS, and move on.
 
 ## Project status
 
-NPM Improved **v1.0.0** is the first stable release.
+NPM Improved **v1.1.0** adds native Control Center updates and official stable container images.
 
 The active integration branch is:
 
@@ -18,7 +18,7 @@ The active integration branch is:
 develop
 ```
 
-There is not yet a stable published NPM Improved container image. Current installations build from this repository using the included Docker installer.
+Stable Linux amd64 and arm64 images are published at `ghcr.io/gigabytegrove/npm-improved`. The included Docker installer remains the supported first-install and source-build path.
 
 Do not use an upstream Nginx Proxy Manager container image when you expect NPM Improved features to be present.
 
@@ -39,7 +39,8 @@ It includes dedicated areas for:
 - System Health;
 - Database & Storage;
 - Instance Synchronization;
-- Backup & Disaster Recovery.
+- Backup & Disaster Recovery;
+- Update.
 
 ### Safer configuration changes
 
@@ -171,18 +172,13 @@ Keep both on persistent storage and include them in your normal infrastructure b
 
 Shared MySQL deployments also need shared or replicated certificate/custom file storage between nodes.
 
-## Updating a source-based installation
+## Updating
 
-For a typical SQLite installation:
+For normal single-node Docker installations on v1.1.0 or newer, use **Settings → Update**. It shows the stable release, release notes and progress, then performs a health-verified application-container replacement with automatic rollback when the target cannot be verified.
 
-```bash
-cd ~/npm-improved
-git checkout develop
-git pull --ff-only
-./scripts/install-docker sqlite --clean-build
-```
+v1.0.0 must be upgraded to v1.1.0 once through the Docker installer because the older release does not yet include the Update manager.
 
-Use the matching installer target for MySQL or PostgreSQL deployments.
+Shared MySQL and Instance Synchronization deployments remain coordinated maintenance updates so all participating nodes stay on a compatible version.
 
 Before upgrading a v1.x system, keep a current backup and verify the important proxy, certificate, database, and recovery workflows after the update.
 
