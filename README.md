@@ -79,7 +79,7 @@ Settings → **Backup & Recovery** can create encrypted, versioned `.npmibak` bu
 
 **Configuration backups** are portable and contain hosts, streams, access lists, settings, configuration history, certificate records/material, Let's Encrypt state, and custom Nginx/default-site files while leaving destination user/JWT identity intact.
 
-**Full disaster recovery backups** additionally preserve users, permissions, authentication/2FA records, configuration history, and the instance JWT keys so the same NPM Improved installation can be rebuilt after host or storage loss.
+**Full disaster recovery backups** additionally preserve users, permissions, authentication/2FA records, configuration history, the instance JWT keys, and the native recovery credential so the same NPM Improved installation can be rebuilt after host or storage loss.
 
 Backups require a passphrase and are encrypted with AES-256-GCM. Restore supports a non-destructive inspection step first, takes a local rollback snapshot before applying changes, regenerates all Nginx configuration, and automatically restores the prior database/filesystem state if `nginx -t` or reload fails.
 
