@@ -2,7 +2,7 @@ import { defineConfig } from "vitepress";
 
 export default defineConfig({
 	title: "NPM Improved",
-	description: "A more resilient, observable, and security-focused Nginx Proxy Manager fork",
+	description: "Reverse proxy management with high availability, recovery, shared MySQL, observability, and a modern Control Center",
 	head: [
 		["link", { rel: "icon", href: "/npm-improved-mark.webp", type: "image/webp" }],
 		[
@@ -10,7 +10,7 @@ export default defineConfig({
 			{
 				name: "description",
 				content:
-					"NPM Improved is a compatibility-focused Nginx Proxy Manager fork with an independent management control plane, transactional Nginx configuration, certificate lifecycle management, security observability, and managed HTTP protection.",
+					"NPM Improved is a modernized Nginx Proxy Manager fork with safer configuration changes, backend and node high availability, shared MySQL, disaster recovery, observability, and a redesigned Control Center.",
 			},
 		],
 		["meta", { property: "og:title", content: "NPM Improved" }],
@@ -19,7 +19,7 @@ export default defineConfig({
 			{
 				property: "og:description",
 				content:
-					"Resilient reverse-proxy management with rollback, certificate lifecycle management, logs, security events, and managed HTTP protection.",
+					"Reverse-proxy management with rollback, high availability, shared MySQL, disaster recovery, certificate lifecycle management, logs, and security visibility.",
 			},
 		],
 		["meta", { property: "og:type", content: "website" }],
@@ -54,7 +54,6 @@ export default defineConfig({
 					{ text: "Advanced Configuration", link: "/advanced-config/" },
 					{ text: "Upgrading", link: "/upgrading/" },
 					{ text: "Certificates / Certbot", link: "/certbot/" },
-					{ text: "Screenshots", link: "/screenshots/" },
 					{ text: "Frequently Asked Questions", link: "/faq/" },
 					{ text: "Third Party", link: "/third-party/" },
 				],
