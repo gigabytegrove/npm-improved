@@ -294,6 +294,8 @@ deliberately first. The installer will never stop an existing service for you.
 EOF
 		exit 2
 	fi
+fi
+
 compose=(docker compose -f "$COMPOSE_FILE")
 
 echo "Validating ${COMPOSE_FILE} ..."
