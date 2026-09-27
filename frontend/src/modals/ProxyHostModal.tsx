@@ -1,7 +1,7 @@
-import { IconSettings } from "@tabler/icons-react";
+import { IconPlus, IconSettings, IconTrash } from "@tabler/icons-react";
 import cn from "classnames";
 import EasyModal, { type InnerModalProps } from "ez-modal-react";
-import { Field, Form, Formik } from "formik";
+import { Field, FieldArray, Form, Formik } from "formik";
 import { type ReactNode, useState } from "react";
 import { Alert } from "react-bootstrap";
 import Modal from "react-bootstrap/Modal";
@@ -42,9 +42,23 @@ const ProxyHostModal = EasyModal.create(({ id, visible, remove }: Props) => {
 		setIsSubmitting(true);
 		setErrorMsg(null);
 
+		const normalizedUpstreams = (values.upstreams || []).map((target: any) => ({
+			...target,
+			port: Number.parseInt(target.port, 10),
+			weight: Number.parseInt(target.weight, 10) || 1,
+			maxFails: Number.parseInt(target.maxFails, 10) || 3,
+			failTimeout: Number.parseInt(target.failTimeout, 10) || 10,
+			enabled: target.enabled !== false,
+		}));
+		const primary = normalizedUpstreams.find((target: any) => target.enabled) || normalizedUpstreams[0];
+
 		const { ...payload } = {
 			id: id === "new" ? undefined : id,
 			...values,
+			upstreams: normalizedUpstreams,
+			forwardScheme: primary?.scheme || "http",
+			forwardHost: primary?.host || "",
+			forwardPort: primary?.port || 80,
 		};
 
 		setProxyHost(payload, {
@@ -76,7 +90,23 @@ const ProxyHostModal = EasyModal.create(({ id, visible, remove }: Props) => {
 							domainNames: data?.domainNames || [],
 							forwardScheme: data?.forwardScheme || "http",
 							forwardHost: data?.forwardHost || "",
-							forwardPort: data?.forwardPort || undefined,
+							forwardPort: data?.forwardPort || 80,
+							upstreamMode: data?.upstreamMode || "round-robin",
+							upstreams:
+								data?.upstreams?.length
+									? data.upstreams
+									: [
+											{
+												name: "Primary",
+												scheme: data?.forwardScheme || "http",
+												host: data?.forwardHost || "",
+												port: data?.forwardPort || 80,
+												weight: 1,
+												maxFails: 3,
+												failTimeout: 10,
+												enabled: true,
+											},
+										],
 							accessListId: data?.accessListId || 0,
 							cachingEnabled: data?.cachingEnabled || false,
 							blockExploits: data?.blockExploits || false,
@@ -97,7 +127,7 @@ const ProxyHostModal = EasyModal.create(({ id, visible, remove }: Props) => {
 					}
 					onSubmit={onSubmit}
 				>
-					{() => (
+					{({ values }) => (
 						<Form>
 							<Modal.Header closeButton>
 								<Modal.Title>
@@ -177,95 +207,214 @@ const ProxyHostModal = EasyModal.create(({ id, visible, remove }: Props) => {
 										<div className="tab-content">
 											<div className="tab-pane active show" id="tab-details" role="tabpanel">
 												<DomainNamesField isWildcardPermitted dnsProviderWildcardSupported />
-												<div className="row">
-													<div className="col-md-3">
-														<Field name="forwardScheme">
-															{({ field, form }: any) => (
-																<div className="mb-3">
-																	<label
-																		className="form-label"
-																		htmlFor="forwardScheme"
-																	>
-																		<T id="host.forward-scheme" />
-																	</label>
-																	<select
-																		id="forwardScheme"
-																		className={`form-control ${form.errors.forwardScheme && form.touched.forwardScheme ? "is-invalid" : ""}`}
-																		required
-																		{...field}
-																	>
-																		<option value="http">http</option>
-																		<option value="https">https</option>
-																	</select>
-																	{form.errors.forwardScheme ? (
-																		<div className="invalid-feedback">
-																			{form.errors.forwardScheme &&
-																			form.touched.forwardScheme
-																				? form.errors.forwardScheme
-																				: null}
-																		</div>
-																	) : null}
-																</div>
-															)}
-														</Field>
+												<div className="d-flex align-items-start justify-content-between gap-3 mb-3">
+													<div>
+														<h4 className="mb-1">
+															<T id="proxy-host.upstream-pool" />
+														</h4>
+														<div className="text-secondary small">
+															<T id="proxy-host.upstream-pool-help" />
+														</div>
 													</div>
-													<div className="col-md-6">
-														<Field name="forwardHost" validate={validateString(1, 255)}>
-															{({ field, form }: any) => (
-																<div className="mb-3">
-																	<label className="form-label" htmlFor="forwardHost">
-																		<T id="proxy-host.forward-host" />
-																	</label>
-																	<input
-																		id="forwardHost"
-																		type="text"
-																		className={`form-control ${form.errors.forwardHost && form.touched.forwardHost ? "is-invalid" : ""}`}
-																		required
-																		placeholder="example.com"
-																		{...field}
-																	/>
-																	{form.errors.forwardHost ? (
-																		<div className="invalid-feedback">
-																			{form.errors.forwardHost &&
-																			form.touched.forwardHost
-																				? form.errors.forwardHost
-																				: null}
-																		</div>
-																	) : null}
-																</div>
-															)}
-														</Field>
-													</div>
-													<div className="col-md-3">
-														<Field name="forwardPort" validate={validateNumber(1, 65535)}>
-															{({ field, form }: any) => (
-																<div className="mb-3">
-																	<label className="form-label" htmlFor="forwardPort">
-																		<T id="host.forward-port" />
-																	</label>
-																	<input
-																		id="forwardPort"
-																		type="number"
-																		min={1}
-																		max={65535}
-																		className={`form-control ${form.errors.forwardPort && form.touched.forwardPort ? "is-invalid" : ""}`}
-																		required
-																		placeholder="eg: 8081"
-																		{...field}
-																	/>
-																	{form.errors.forwardPort ? (
-																		<div className="invalid-feedback">
-																			{form.errors.forwardPort &&
-																			form.touched.forwardPort
-																				? form.errors.forwardPort
-																				: null}
-																		</div>
-																	) : null}
-																</div>
+													<div style={{ minWidth: 190 }}>
+														<Field name="upstreamMode">
+															{({ field }: any) => (
+																<select className="form-select form-select-sm" {...field}>
+																	<option value="round-robin">
+																		<T id="proxy-host.upstream-mode-round-robin" />
+																	</option>
+																	<option value="least-conn">
+																		<T id="proxy-host.upstream-mode-least-conn" />
+																	</option>
+																	<option value="ip-hash">
+																		<T id="proxy-host.upstream-mode-ip-hash" />
+																	</option>
+																	<option value="failover">
+																		<T id="proxy-host.upstream-mode-failover" />
+																	</option>
+																</select>
 															)}
 														</Field>
 													</div>
 												</div>
+												<FieldArray name="upstreams">
+													{({ push, remove }) => (
+														<div className="mb-3">
+															{(values.upstreams || []).map((_: any, index: number) => (
+																<div className="card mb-2" key={index}>
+																	<div className="card-body p-3">
+																		<div className="row g-2 align-items-end">
+																			<div className="col-md-2">
+																				<label className="form-label" htmlFor={`upstream-${index}-scheme`}>
+																					<T id="host.forward-scheme" />
+																				</label>
+																				<Field
+																					as="select"
+																					id={`upstream-${index}-scheme`}
+																					name={`upstreams.${index}.scheme`}
+																					className="form-select"
+																				>
+																					<option value="http">http</option>
+																					<option value="https">https</option>
+																				</Field>
+																			</div>
+																			<div className="col-md-4">
+																				<Field
+																					name={`upstreams.${index}.host`}
+																					validate={validateString(1, 255)}
+																				>
+																					{({ field, form }: any) => (
+																						<>
+																							<label className="form-label" htmlFor={`upstream-${index}-host`}>
+																								<T id="proxy-host.forward-host" />
+																							</label>
+																							<input
+																								{...field}
+																								id={`upstream-${index}-host`}
+																								className={`form-control ${form.errors?.upstreams?.[index]?.host && form.touched?.upstreams?.[index]?.host ? "is-invalid" : ""}`}
+																								placeholder="10.0.0.10 or app.internal"
+																								required
+																							/>
+																						</>
+																					)}
+																				</Field>
+																			</div>
+																			<div className="col-md-2">
+																				<Field
+																					name={`upstreams.${index}.port`}
+																					validate={validateNumber(1, 65535)}
+																				>
+																					{({ field }: any) => (
+																						<>
+																							<label className="form-label" htmlFor={`upstream-${index}-port`}>
+																								<T id="host.forward-port" />
+																							</label>
+																							<input
+																								{...field}
+																								id={`upstream-${index}-port`}
+																								type="number"
+																								min={1}
+																								max={65535}
+																								className="form-control"
+																								required
+																							/>
+																						</>
+																					)}
+																				</Field>
+																			</div>
+																			<div className="col-md-3">
+																				<label className="form-label" htmlFor={`upstream-${index}-name`}>
+																					<T id="proxy-host.upstream-name" />
+																				</label>
+																				<Field
+																					id={`upstream-${index}-name`}
+																					name={`upstreams.${index}.name`}
+																					className="form-control"
+																					placeholder={index === 0 ? "Primary" : `Backend ${index + 1}`}
+																				/>
+																			</div>
+																			<div className="col-md-1 d-flex justify-content-end">
+																				<button
+																					type="button"
+																					className="btn btn-ghost-danger btn-icon"
+																					title="Remove upstream"
+																					disabled={(values.upstreams || []).length <= 1}
+																					onClick={() => remove(index)}
+																				>
+																					<IconTrash size={18} />
+																				</button>
+																			</div>
+																		</div>
+																		<div className="row g-2 mt-1 align-items-end">
+																			<div className="col-md-2">
+																				<label className="form-label" htmlFor={`upstream-${index}-weight`}>
+																					<T id="proxy-host.upstream-weight" />
+																				</label>
+																				<Field
+																					id={`upstream-${index}-weight`}
+																					name={`upstreams.${index}.weight`}
+																					type="number"
+																					min={1}
+																					max={256}
+																					className="form-control form-control-sm"
+																				/>
+																			</div>
+																			<div className="col-md-2">
+																				<label className="form-label" htmlFor={`upstream-${index}-max-fails`}>
+																					<T id="proxy-host.upstream-max-fails" />
+																				</label>
+																				<Field
+																					id={`upstream-${index}-max-fails`}
+																					name={`upstreams.${index}.maxFails`}
+																					type="number"
+																					min={1}
+																					max={100}
+																					className="form-control form-control-sm"
+																				/>
+																			</div>
+																			<div className="col-md-2">
+																				<label className="form-label" htmlFor={`upstream-${index}-fail-timeout`}>
+																					<T id="proxy-host.upstream-fail-timeout" />
+																				</label>
+																				<Field
+																					id={`upstream-${index}-fail-timeout`}
+																					name={`upstreams.${index}.failTimeout`}
+																					type="number"
+																					min={1}
+																					max={3600}
+																					className="form-control form-control-sm"
+																				/>
+																			</div>
+																			<div className="col-md-3">
+																				<label className="form-label" htmlFor={`upstream-${index}-enabled`}>
+																					<T id="column.status" />
+																				</label>
+																				<div className="form-check form-switch mb-1">
+																					<Field
+																						id={`upstream-${index}-enabled`}
+																						name={`upstreams.${index}.enabled`}
+																						type="checkbox"
+																						className="form-check-input"
+																					/>
+																					<label
+																						className="form-check-label"
+																						htmlFor={`upstream-${index}-enabled`}
+																					>
+																						<T id="enabled" />
+																					</label>
+																				</div>
+																			</div>
+																		</div>
+																	</div>
+																</div>
+															))}
+															<Button
+																type="button"
+																size="sm"
+																onClick={() =>
+																	push({
+																		name: "",
+																		scheme: values.upstreams?.[0]?.scheme || "http",
+																		host: "",
+																		port: values.upstreams?.[0]?.port || 80,
+																		weight: 1,
+																		maxFails: 3,
+																		failTimeout: 10,
+																		enabled: true,
+																	})
+																}
+															>
+																<IconPlus size={16} />
+																<T id="proxy-host.add-upstream" />
+															</Button>
+															{values.upstreamMode === "failover" ? (
+																<div className="text-secondary small mt-2">
+																	<T id="proxy-host.failover-help" />
+																</div>
+															) : null}
+														</div>
+													)}
+												</FieldArray>
 												<AccessField />
 												<div className="my-3">
 													<h4 className="py-2">

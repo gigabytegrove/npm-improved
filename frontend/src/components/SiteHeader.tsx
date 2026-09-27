@@ -30,16 +30,16 @@ export function SiteHeader() {
 						<span className={styles.brand}>
 							<span className={styles.mark}>
 								<img
-									src="/images/npm-improved-mark.svg"
-									width={36}
-									height={36}
+									src="/images/npm-improved-mark.webp"
+									width={58}
+									height={38}
 									className="navbar-brand-image"
-									alt="NPM Improved"
+									alt="Nginx Proxy Manager Improved"
 								/>
 							</span>
 							<span className={styles.wordmark}>
-								<span className={styles.name}>NPM Improved</span>
-								<span className={styles.tagline}>Control Plane</span>
+								<span className={styles.name}>Nginx Proxy Manager</span>
+								<span className={styles.tagline}>IMPROVED</span>
 							</span>
 						</span>
 					</NavLink>

@@ -43,6 +43,9 @@ export interface AppVersion {
 	major: number;
 	minor: number;
 	revision: number;
+	display?: string;
+	buildCommit?: string | null;
+	buildDate?: string | null;
 }
 
 export interface UserPermissions {
@@ -236,6 +239,19 @@ export interface ProxyLocation {
 	accessList?: AccessList;
 }
 
+export type ProxyUpstreamMode = "round-robin" | "least-conn" | "ip-hash" | "failover";
+
+export interface ProxyUpstream {
+	name?: string;
+	scheme: "http" | "https";
+	host: string;
+	port: number;
+	weight: number;
+	maxFails: number;
+	failTimeout: number;
+	enabled: boolean;
+}
+
 export interface ProxyHost {
 	id: number;
 	createdOn: string;
@@ -245,6 +261,8 @@ export interface ProxyHost {
 	forwardScheme: string;
 	forwardHost: string;
 	forwardPort: number;
+	upstreamMode: ProxyUpstreamMode;
+	upstreams: ProxyUpstream[];
 	accessListId: number;
 	certificateId: number;
 	sslForced: boolean;

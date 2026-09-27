@@ -73,6 +73,20 @@ export default function Table({
 				},
 				cell: (info: any) => {
 					const value = info.getValue();
+					const enabledUpstreams = (value.upstreams || []).filter((target: any) => target.enabled !== false);
+					if (enabledUpstreams.length > 1) {
+						const primary = enabledUpstreams[0];
+						return (
+							<div>
+								<div>{`${primary.scheme}://${primary.host}:${primary.port}`}</div>
+								<div className="text-secondary small">
+									<T id="proxy-host.upstreams-count" data={{ count: enabledUpstreams.length }} />
+									{" · "}
+									{intl.formatMessage({ id: `proxy-host.upstream-mode-${value.upstreamMode || "round-robin"}` })}
+								</div>
+							</div>
+						);
+					}
 					return `${value.forwardScheme}://${value.forwardHost}:${value.forwardPort}`;
 				},
 			}),

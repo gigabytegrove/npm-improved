@@ -4,8 +4,10 @@ import errs from "../lib/error.js";
 import logRequest from "../lib/express/log-request.js";
 import pjson from "../package.json" with { type: "json" };
 import { isSetup } from "../setup.js";
+import internalInstanceSync from "../internal/instance-sync.js";
 import auditLogRoutes from "./audit-log.js";
 import ciRoutes from "./ci.js";
+import clusterRoutes from "./cluster.js";
 import configHistoryRoutes from "./config-history.js";
 import disasterRecoveryRoutes from "./disaster-recovery.js";
 import logsRoutes from "./logs.js";
@@ -35,21 +37,28 @@ router.use(logRequest);
  * GET /api
  */
 router.get("/", async (_, res /*, next*/) => {
-	const version = pjson.version.split("-").shift().split(".");
+	const displayVersion = (process.env.NPM_BUILD_VERSION || pjson.version || "0.0.0").trim();
+	const normalizedVersion = displayVersion.replace(/^v/, "").split("-").shift();
+	const versionParts = normalizedVersion.split(".").map((part) => Number.parseInt(part, 10) || 0);
 	const setup = await isSetup();
 
 	res.status(200).send({
 		status: "OK",
 		setup,
 		version: {
-			major: Number.parseInt(version.shift(), 10),
-			minor: Number.parseInt(version.shift(), 10),
-			revision: Number.parseInt(version.shift(), 10),
+			major: versionParts[0] || 0,
+			minor: versionParts[1] || 0,
+			revision: versionParts[2] || 0,
+			display: displayVersion.startsWith("v") ? displayVersion : `v${displayVersion}`,
+			build_commit: process.env.NPM_BUILD_COMMIT || null,
+			build_date: process.env.NPM_BUILD_DATE || null,
 		},
 	});
 });
 
 router.use("/schema", schemaRoutes);
+router.use("/cluster", clusterRoutes);
+router.use(internalInstanceSync.writeGuard);
 router.use("/tokens", tokensRoutes);
 router.use("/users", usersRoutes);
 router.use("/audit-log", auditLogRoutes);

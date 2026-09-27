@@ -3,6 +3,7 @@
 import app from "./app.js";
 import internalCertificate from "./internal/certificate.js";
 import internalIpRanges from "./internal/ip_ranges.js";
+import internalInstanceSync from "./internal/instance-sync.js";
 import { global as logger } from "./logger.js";
 import { migrateUp } from "./migrate.js";
 import { getCompiledSchema } from "./schema/index.js";
@@ -27,6 +28,7 @@ async function appStart() {
 		.then(() => {
 			internalCertificate.initTimer();
 			internalIpRanges.initTimer();
+			internalInstanceSync.initTimer();
 
 			const server = app.listen(3000, () => {
 				logger.info(`Backend PID ${process.pid} listening on port 3000 ...`);
