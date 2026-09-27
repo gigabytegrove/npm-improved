@@ -1,31 +1,48 @@
-<!-- WARNING: Any PR without a description will be closed. The title is not enough! -->
-
-<!-- ANOTHER WARNING: Don't go creating a duplicate PR! Check that someone hasn't already created something that tackles your fix and if so, help them first -->
-
 ## Why
 
-<!-- Provide a brief description of WHY you are making your changes -->
+Describe the problem and why this change belongs in NPM Improved.
 
-<!-- Consider if you are changing the API, then go in to detail why and/or if
-you change will break API for existing users -->
+## What changed
 
-## Type of Change
+Summarize the implementation.
 
-<!-- Mark the relevant options with an "x" -->
+## Failure / rollback behavior
 
-- [ ] Bug fix (non-breaking change that fixes an issue)
-- [ ] New feature (non-breaking change that adds functionality)
-- [ ] Breaking change (fix or feature that would cause existing functionality to change)
-- [ ] Documentation update
-- [ ] Code refactoring
-- [ ] API changes
-- [ ] Performance improvement
-- [ ] Test addition or update
+For changes that affect Nginx, certificates, settings, persistent state, or deployment, explain what happens on validation/reload/runtime failure.
 
-## AI Usage
+## Compatibility
 
-<!-- Mark the relevant options with an "x" -->
+- [ ] Preserves expected upstream NPM compatibility where practical
+- [ ] API changes are documented
+- [ ] Persistent-state / migration impact is documented
+- [ ] Upgrade/downgrade implications are documented
 
-- [ ] AI was used to write this
-- [ ] AI was used to review this
+## Validation
 
+List the tests/checks actually run.
+
+- [ ] Backend tests
+- [ ] Frontend tests
+- [ ] Control-plane Go tests
+- [ ] API schema validation
+- [ ] Documentation build
+- [ ] Nginx/container behavior validated where applicable
+
+## Documentation
+
+- [ ] Root README updated if user-visible behavior changed
+- [ ] VitePress docs updated if user/admin behavior changed
+- [ ] SECURITY.md updated if security support/reporting changed
+- [ ] Secondary contributor/backend READMEs updated where applicable
+
+## Type of change
+
+- [ ] Bug fix
+- [ ] New feature
+- [ ] Breaking change
+- [ ] Documentation
+- [ ] Refactor
+- [ ] API change
+- [ ] Performance
+- [ ] Security hardening
+- [ ] Tests
