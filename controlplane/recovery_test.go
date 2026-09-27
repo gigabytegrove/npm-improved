@@ -208,6 +208,30 @@ func TestRecoveryListsFailedCandidatesAndBackups(t *testing.T) {
 		t.Fatalf("unexpected failed candidates: %#v", status.FailedCandidates)
 	}
 
+	viewReq := httptest.NewRequest(
+		http.MethodGet,
+		"/__npm_improved/recovery/failed?path=proxy_host%2F42.conf.err",
+		nil,
+	)
+	viewReq.Header.Set("X-NPM-Recovery-Token", token)
+	viewRec := httptest.NewRecorder()
+	handler.ServeHTTP(viewRec, viewReq)
+	if viewRec.Code != http.StatusOK || viewRec.Body.String() != "bad config" {
+		t.Fatalf("unexpected failed candidate view: code=%d body=%q", viewRec.Code, viewRec.Body.String())
+	}
+
+	traversalReq := httptest.NewRequest(
+		http.MethodGet,
+		"/__npm_improved/recovery/failed?path=..%2Frecovery-access.json.err",
+		nil,
+	)
+	traversalReq.Header.Set("X-NPM-Recovery-Token", token)
+	traversalRec := httptest.NewRecorder()
+	handler.ServeHTTP(traversalRec, traversalReq)
+	if traversalRec.Code != http.StatusNotFound {
+		t.Fatalf("expected traversal request 404, got %d", traversalRec.Code)
+	}
+
 	downloadReq := httptest.NewRequest(
 		http.MethodGet,
 		"/__npm_improved/recovery/backups/pre-restore-test.npmibak",
