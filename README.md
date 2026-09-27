@@ -69,7 +69,7 @@ Existing hosts receive a baseline revision automatically before their first post
 
 The standalone Go control plane exposes an emergency console at `/recovery/`. It remains available independently of the Node management API and normal React application.
 
-The console uses a separate recovery token stored under `/data/recovery-access.json` and can report control-plane/backend/Nginx/storage health, run `nginx -t`, perform a validated Nginx reload, show failed configuration candidates, and download retained encrypted recovery backups.
+The console uses a separate recovery token stored under `/data/recovery-access.json` with mode `0600`; the token is never emitted to application logs. It can report control-plane/backend/Nginx/storage health, run `nginx -t`, perform a validated Nginx reload, show failed configuration candidates, and download retained encrypted recovery backups.
 
 See [Native Recovery Console](docs/src/guide/recovery-console.md).
 
