@@ -10,6 +10,7 @@ import internalInstanceSync from "./instance-sync.js";
 
 const DOCKER_SOCKET = "/var/run/docker.sock";
 const STATUS_FILE = "/data/update-status.json";
+const AUDIT_MARKER_FILE = "/data/update-audit-marker.json";
 const HELPER_IMAGE = "docker:27-cli";
 const OFFICIAL_IMAGE_PREFIX = "ghcr.io/gigabytegrove/npm-improved:";
 const ACTIVE_STATES = new Set(["preflight", "pulling", "staging", "restarting", "verifying", "rolling_back"]);
@@ -188,7 +189,7 @@ const verifyCurrentPassword = async (access, password) => {
 	}
 };
 
-const launchHandoff = async ({ action, targetImage, sourceVersion, targetVersion }) => {
+const launchHandoff = async ({ action, targetImage, sourceVersion, targetVersion, initiatedBy }) => {
 	const caps = capabilities();
 	if (!caps.enabled) {
 		throw new errs.ValidationError(caps.reason || "Automatic updates are unavailable.");
@@ -210,6 +211,7 @@ const launchHandoff = async ({ action, targetImage, sourceVersion, targetVersion
 			Env: [
 				`NPM_UPDATE_STATUS_FILE=${path.posix.join(projectDir, "data/update-status.json")}`,
 				`NPM_UPDATE_PROJECT_DIR=${projectDir}`,
+				`NPM_UPDATE_INITIATED_BY=${initiatedBy || ""}`,
 			],
 			Labels: {
 				"com.gigabytegrove.npm-improved.role": "update-handoff",
@@ -249,6 +251,7 @@ const startUpdate = async (access, release, password) => {
 
 	const sourceVersion = release.current;
 	const targetVersion = release.latest;
+	const initiatedBy = access.token.getUserId(0);
 	const targetImage = `${OFFICIAL_IMAGE_PREFIX}${targetVersion}`;
 	const startedAt = now();
 
@@ -265,6 +268,7 @@ const startUpdate = async (access, release, password) => {
 		target_image: targetImage,
 		target_digest: null,
 		error: null,
+		initiated_by: initiatedBy,
 	});
 
 	try {
@@ -273,6 +277,7 @@ const startUpdate = async (access, release, password) => {
 			targetImage,
 			sourceVersion,
 			targetVersion,
+			initiatedBy,
 		});
 		await internalAuditLog.add(access, {
 			action: "update_started",
@@ -305,6 +310,7 @@ const rollback = async (access, password) => {
 	await verifyOperationalSafety(access);
 
 	const status = getStatus();
+	const initiatedBy = access.token.getUserId(0);
 	if (!status.previous_image) {
 		throw new errs.ValidationError("No previous image is available for rollback.");
 	}
@@ -324,6 +330,7 @@ const rollback = async (access, password) => {
 		target_version: targetVersion,
 		target_image: targetImage,
 		error: null,
+		initiated_by: initiatedBy,
 	});
 
 	const helper = await launchHandoff({
@@ -331,6 +338,7 @@ const rollback = async (access, password) => {
 		targetImage,
 		sourceVersion,
 		targetVersion,
+		initiatedBy,
 	});
 	await internalAuditLog.add(access, {
 		action: "rollback_started",
@@ -352,6 +360,7 @@ const restart = async (access, password) => {
 	await verifyOperationalSafety(access);
 
 	const sourceVersion = process.env.NPM_BUILD_VERSION || "unknown";
+	const initiatedBy = access.token.getUserId(0);
 	writeJsonFile(STATUS_FILE, {
 		...getStatus(),
 		state: "preflight",
@@ -362,6 +371,7 @@ const restart = async (access, password) => {
 		source_version: sourceVersion,
 		target_version: sourceVersion,
 		error: null,
+		initiated_by: initiatedBy,
 	});
 
 	const helper = await launchHandoff({
@@ -369,6 +379,7 @@ const restart = async (access, password) => {
 		targetImage: "",
 		sourceVersion,
 		targetVersion: sourceVersion,
+		initiatedBy,
 	});
 	await internalAuditLog.add(access, {
 		action: "restart_started",
@@ -378,10 +389,47 @@ const restart = async (access, password) => {
 	return { ...getStatus(), helper };
 };
 
+const reconcileAudit = async () => {
+	const status = getStatus();
+	if (!["completed", "rolled_back", "failed"].includes(status.state) || !status.completed_at) {
+		return false;
+	}
+	const userId = Number(status.initiated_by || 0);
+	if (!Number.isInteger(userId) || userId < 1) {
+		return false;
+	}
+
+	const key = [status.action || "update", status.state, status.completed_at].join(":");
+	const marker = readJsonFile(AUDIT_MARKER_FILE, {});
+	if (marker?.key === key) {
+		return false;
+	}
+
+	await internalAuditLog.add(null, {
+		user_id: userId,
+		action: `${status.action || "update"}_${status.state}`,
+		object_type: "system",
+		meta: {
+			source_version: status.source_version || null,
+			target_version: status.target_version || null,
+			previous_version: status.previous_version || null,
+			previous_image: status.previous_image || null,
+			target_image: status.target_image || null,
+			target_digest: status.target_digest || null,
+			error: status.error || null,
+			started_at: status.started_at || null,
+			completed_at: status.completed_at,
+		},
+	});
+	writeJsonFile(AUDIT_MARKER_FILE, { key, recorded_at: now() });
+	return true;
+};
+
 export default {
 	capabilities,
 	getStatus,
 	startUpdate,
 	rollback,
 	restart,
+	reconcileAudit,
 };
