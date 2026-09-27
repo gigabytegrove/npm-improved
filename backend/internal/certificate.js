@@ -586,24 +586,39 @@ const internalCertificate = {
 			throw new error.ItemNotFoundError(data.id);
 		}
 
+		const usageMap = await internalCertificate.getUsageMap();
+		const usageCount = usageMap.get(row.id) || 0;
+		if (usageCount > 0) {
+			throw new error.ValidationError(
+				`Certificate is still referenced by ${usageCount} host${usageCount === 1 ? "" : "s"}`,
+			);
+		}
+
+		if (row.provider === "letsencrypt") {
+			const fullchain = `${internalCertificate.getLiveCertPath(row.id)}/fullchain.pem`;
+			if (fs.existsSync(fullchain)) {
+				await internalCertificate.revokeLetsEncryptSsl(row, true);
+			} else {
+				fs.rmSync(internalCertificate.getLiveCertPath(row.id), { recursive: true, force: true });
+				fs.rmSync(`/etc/letsencrypt/archive/npm-${row.id}`, { recursive: true, force: true });
+				fs.rmSync(`/etc/letsencrypt/renewal/npm-${row.id}.conf`, { force: true });
+				fs.rmSync(`/etc/letsencrypt/credentials/credentials-${row.id}`, { force: true });
+			}
+		} else {
+			fs.rmSync(`/data/custom_ssl/npm-${row.id}`, { recursive: true, force: true });
+		}
+
 		await certificateModel.query().where("id", row.id).patch({
 			is_deleted: 1,
 		});
 
-		// Add to audit log
 		row.meta = internalCertificate.cleanMeta(row.meta);
-
 		await internalAuditLog.add(access, {
 			action: "deleted",
 			object_type: "certificate",
 			object_id: row.id,
 			meta: _.omit(row, omissions()),
 		});
-
-		if (row.provider === "letsencrypt") {
-			// Revoke the cert
-			await internalCertificate.revokeLetsEncryptSsl(row);
-		}
 		return true;
 	},
 
