@@ -14,7 +14,7 @@ const up = async (knex) => {
 		table.integer("object_id").notNull().unsigned().defaultTo(0);
 		table.string("operation", 30).notNull();
 		table.string("status", 20).notNull();
-		table.text("config_text").notNull();
+		table.text("config_text", "longtext").notNull();
 		table.json("snapshot").notNull();
 		table.text("error_text").nullable();
 		table.json("meta").notNull();
