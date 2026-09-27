@@ -1,4 +1,5 @@
 import { installPlugins } from "./lib/certbot.js";
+import internalDisasterRecovery from "./internal/disaster-recovery.js";
 import utils from "./lib/utils.js";
 import { setup as logger } from "./logger.js";
 import authModel from "./models/auth.js";
@@ -172,4 +173,43 @@ const setupLogrotation = () => {
 	return runLogrotate();
 };
 
-export default () => setupDefaultUser().then(setupDefaultSettings).then(setupCertbotPlugins).then(setupLogrotation);
+/**
+ * Starts encrypted local disaster-recovery backups when explicitly configured.
+ *
+ * The passphrase is supplied only through NPM_BACKUP_PASSPHRASE and is never
+ * written to the database. Backups are retained under /data/backups where the
+ * native recovery console can retrieve them even when the Node API is unhealthy.
+ */
+const setupDisasterRecoveryBackups = () => {
+	const config = internalDisasterRecovery.getScheduledBackupConfig();
+	if (!config.enabled) {
+		logger.info("Scheduled disaster-recovery backups are disabled");
+		return Promise.resolve();
+	}
+
+	const intervalMs = config.intervalHours * 60 * 60 * 1000;
+	let running = false;
+	const run = async () => {
+		if (running) return;
+		running = true;
+		try {
+			const result = await internalDisasterRecovery.runScheduledBackup();
+			if (!result.skipped) {
+				logger.info(`Scheduled disaster-recovery backup created: ${result.name}`);
+			}
+		} catch (err) {
+			logger.error("Scheduled disaster-recovery backup failed:", err);
+		} finally {
+			running = false;
+		}
+	};
+
+	logger.info(
+		`Scheduled disaster-recovery backups enabled: scope=${config.scope}, interval=${config.intervalHours}h, retention=${config.retention}`,
+	);
+	setTimeout(run, 60 * 1000);
+	setInterval(run, intervalMs);
+	return Promise.resolve();
+};
+
+export default () => setupDefaultUser().then(setupDefaultSettings).then(setupCertbotPlugins).then(setupLogrotation).then(setupDisasterRecoveryBackups);
