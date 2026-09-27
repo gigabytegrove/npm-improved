@@ -48,7 +48,10 @@ const internalRedirectionHost = {
 				expand: ["certificate", "owner"],
 			});
 			if (freshRow.enabled) {
-				const newMeta = await internalNginx.configure(redirectionHostModel, "redirection_host", freshRow);
+				const newMeta = await internalNginx.configure(redirectionHostModel, "redirection_host", freshRow, {
+					userId: access.token.getUserId(1),
+					operation: "create",
+				});
 				freshRow.meta = newMeta;
 			}
 		} catch (err) {
@@ -119,7 +122,11 @@ const internalRedirectionHost = {
 				expand: ["owner", "certificate"],
 			});
 			if (updatedRow.enabled) {
-				const newMeta = await internalNginx.configure(redirectionHostModel, "redirection_host", updatedRow);
+				const newMeta = await internalNginx.configure(redirectionHostModel, "redirection_host", updatedRow, {
+					userId: access.token.getUserId(1),
+					operation: "update",
+					previousSnapshot: previousState,
+				});
 				updatedRow.meta = newMeta;
 			}
 		} catch (err) {
@@ -195,7 +202,11 @@ const internalRedirectionHost = {
 		const previousState = await snapshotModelRow(redirectionHostModel, row.id);
 		await redirectionHostModel.query().where("id", row.id).patch({ is_deleted: 1 });
 		try {
-			await internalNginx.removeConfigTransactional("redirection_host", row);
+			await internalNginx.removeConfigTransactional(redirectionHostModel, "redirection_host", row, {
+				userId: access.token.getUserId(1),
+				operation: "delete",
+				previousSnapshot: previousState,
+			});
 		} catch (err) {
 			await restoreModelRow(redirectionHostModel, row.id, previousState);
 			throw err;
@@ -230,7 +241,11 @@ const internalRedirectionHost = {
 		row.enabled = 1;
 		await redirectionHostModel.query().where("id", row.id).patch({ enabled: 1 });
 		try {
-			await internalNginx.configure(redirectionHostModel, "redirection_host", row);
+			await internalNginx.configure(redirectionHostModel, "redirection_host", row, {
+				userId: access.token.getUserId(1),
+				operation: "enable",
+				previousSnapshot: previousState,
+			});
 		} catch (err) {
 			await restoreModelRow(redirectionHostModel, row.id, previousState);
 			throw err;
@@ -262,7 +277,11 @@ const internalRedirectionHost = {
 		row.enabled = 0;
 		await redirectionHostModel.query().where("id", row.id).patch({ enabled: 0 });
 		try {
-			await internalNginx.removeConfigTransactional("redirection_host", row);
+			await internalNginx.removeConfigTransactional(redirectionHostModel, "redirection_host", row, {
+				userId: access.token.getUserId(1),
+				operation: "disable",
+				previousSnapshot: previousState,
+			});
 		} catch (err) {
 			await restoreModelRow(redirectionHostModel, row.id, previousState);
 			throw err;

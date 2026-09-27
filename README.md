@@ -57,6 +57,14 @@ Database changes for proxy hosts, redirection hosts, 404 hosts, and streams are 
 
 Settings that regenerate Nginx configuration use the same rollback model.
 
+### Configuration History
+
+NPM Improved records durable configuration revisions for Proxy Hosts, Redirection Hosts, 404 Hosts, and Streams.
+
+Each revision records the operation, actor, database snapshot, generated Nginx configuration, state, exact activation error when applicable, and restore ancestry. Revisions move through **Pending**, **Active**, **Superseded**, or **Failed** states.
+
+Existing hosts receive a baseline revision automatically before their first post-upgrade change. Failed candidates remain inspectable but cannot be restored. Superseded known-good revisions can be restored by an administrator; a restore regenerates and validates Nginx through the normal transactional path and creates a new active revision rather than rewriting history.
+
 ### Certificate lifecycle management
 
 Certificates are separated into active and unused states.

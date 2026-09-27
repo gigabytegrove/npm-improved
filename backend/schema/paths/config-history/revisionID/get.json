@@ -1,0 +1,37 @@
+{
+	"operationId": "getConfigRevision",
+	"summary": "Get a configuration revision",
+	"tags": [
+		"config-history"
+	],
+	"security": [
+		{
+			"bearerAuth": [
+				"admin"
+			]
+		}
+	],
+	"parameters": [
+		{
+			"in": "path",
+			"name": "revisionID",
+			"required": true,
+			"schema": {
+				"type": "integer",
+				"minimum": 1
+			}
+		}
+	],
+	"responses": {
+		"200": {
+			"description": "Configuration revision",
+			"content": {
+				"application/json": {
+					"schema": {
+						"$ref": "../../../components/config-revision-object.json"
+					}
+				}
+			}
+		}
+	}
+}

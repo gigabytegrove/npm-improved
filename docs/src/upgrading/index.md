@@ -27,6 +27,14 @@ For external MySQL/MariaDB/PostgreSQL deployments, back up the database as well.
 6. verify proxy hosts, redirects, 404 hosts, streams, certificates, logs, and Protection settings;
 7. only then upgrade the live deployment.
 
+## Configuration History on upgrade
+
+The Configuration History feature adds a `config_revision` database table.
+
+Existing hosts and streams are not bulk-rewritten during upgrade. Instead, NPM Improved captures the currently serving state as a baseline revision immediately before that object's first subsequent configuration change. History therefore begins at the point this feature is installed, while still preserving a restorable pre-change baseline for existing objects.
+
+Failed revisions are retained for diagnostics but are not eligible for restore.
+
 ## HTTP Protection on upgrade
 
 NPM Improved creates `/data/nginx/protection/policy.conf` when the managed protection system is introduced. The default global profile is **Standard**.
