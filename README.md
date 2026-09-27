@@ -65,6 +65,14 @@ Each revision records the operation, actor, database snapshot, generated Nginx c
 
 Existing hosts receive a baseline revision automatically before their first post-upgrade change. Failed candidates remain inspectable but cannot be restored. Superseded known-good revisions can be restored by an administrator; a restore regenerates and validates Nginx through the normal transactional path and creates a new active revision rather than rewriting history.
 
+### Native recovery console
+
+The standalone Go control plane exposes an emergency console at `/recovery/`. It remains available independently of the Node management API and normal React application.
+
+The console uses a separate recovery token stored under `/data/recovery-access.json` and can report control-plane/backend/Nginx/storage health, run `nginx -t`, perform a validated Nginx reload, show failed configuration candidates, and download retained encrypted recovery backups.
+
+See [Native Recovery Console](docs/src/guide/recovery-console.md).
+
 ### Backup & disaster recovery
 
 Settings → **Backup & Recovery** can create encrypted, versioned `.npmibak` bundles.
