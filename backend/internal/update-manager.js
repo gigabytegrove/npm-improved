@@ -185,7 +185,7 @@ const verifyCurrentPassword = async (access, password) => {
 		.first();
 
 	if (!auth || !(await auth.verifyPassword(password))) {
-		throw new errs.AuthError("Current administrator password is incorrect.");
+		throw new errs.ValidationError("Current administrator password is incorrect.");
 	}
 };
 
