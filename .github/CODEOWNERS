@@ -1,0 +1,9 @@
+# NPM Improved code ownership
+* @bradjtrammell
+
+# Security-sensitive project surfaces
+/.github/ @bradjtrammell
+/backend/ @bradjtrammell
+/controlplane/ @bradjtrammell
+/docker/ @bradjtrammell
+/scripts/ @bradjtrammell
