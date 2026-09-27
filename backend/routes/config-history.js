@@ -30,16 +30,17 @@ router
 				{
 					additionalProperties: false,
 					properties: {
-						object_type: objectTypeSchema,
-						object_id: {
-							type: "integer",
-							minimum: 1,
+						object_type: {
+							anyOf: [{ type: "null" }, objectTypeSchema],
 						},
-						status: statusSchema,
+						object_id: {
+							anyOf: [{ type: "null" }, { type: "integer", minimum: 1 }],
+						},
+						status: {
+							anyOf: [{ type: "null" }, statusSchema],
+						},
 						limit: {
-							type: "integer",
-							minimum: 1,
-							maximum: 250,
+							anyOf: [{ type: "null" }, { type: "integer", minimum: 1, maximum: 250 }],
 						},
 					},
 				},
