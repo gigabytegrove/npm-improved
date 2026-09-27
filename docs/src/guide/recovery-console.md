@@ -55,7 +55,7 @@ Available recovery operations include:
 
 - run `nginx -t`;
 - validate and reload Nginx;
-- download retained encrypted recovery backups.
+- download retained encrypted recovery backups, including scheduled backups created under `/data/backups`.
 
 A recovery-triggered Nginx reload is never attempted unless `nginx -t` succeeds first.
 
