@@ -22,9 +22,9 @@ Hosts can still explicitly select Standard or Aggressive.
 
 Designed as the normal public-service default:
 
-- 30 requests/second per source key;
+- 30 requests/second per client per host;
 - burst allowance of 60 requests;
-- 40 concurrent connections per source key;
+- 40 concurrent connections per client per host;
 - 15-second client-header timeout;
 - 30-second client-body timeout;
 - 30-second send timeout;
@@ -35,9 +35,9 @@ Designed as the normal public-service default:
 
 For low-volume or higher-risk public endpoints:
 
-- 10 requests/second per source key;
+- 10 requests/second per client per host;
 - burst allowance of 20 requests;
-- 15 concurrent connections per source key;
+- 15 concurrent connections per client per host;
 - 10-second client-header timeout;
 - 15-second client-body timeout;
 - 20-second send timeout;
@@ -53,7 +53,7 @@ Proxy Hosts, Redirection Hosts, and 404 Hosts have a **Protection** tab with:
 - **Standard**
 - **Aggressive**
 
-A host-specific selection replaces the inherited managed request/connection policy for that server block.
+A host-specific selection replaces the inherited managed request/connection policy for that server block. Selecting **Off** suppresses the inherited managed limiter and restores relaxed client timeouts for that host.
 
 ## Trusted networks
 
@@ -71,6 +71,8 @@ Examples:
 Addresses without a prefix are normalized to `/32` for IPv4 or `/128` for IPv6. Loopback is always trusted.
 
 Trusted sources are excluded from the managed rate and connection counters.
+
+Accounting uses Nginx's resolved client address after the configured real-IP processing, combined with the requested host. One client therefore has a separate allowance for each proxied hostname instead of sharing one rate bucket across the entire NPM Improved instance.
 
 Only add networks you actually trust. Broad private ranges should not be entered merely because they are private if untrusted clients can reach NPM Improved from those networks.
 
@@ -101,4 +103,18 @@ If a service is sensitive to connection limits or timeout behavior, set that hos
 
 ## Security event visibility
 
-Rate-limited responses use status 429 and appear in access logs. The Security Events workspace also counts denied/throttled responses alongside classified probe patterns.
+Rate-limited responses use status 429 and appear in access logs. The Security Events workspace records these as **Rate limit enforced** events, while also counting other denied/throttled responses and classified probe patterns.
+
+## Transactional policy changes
+
+The generated global policy is stored at:
+
+```text
+/data/nginx/protection/policy.conf
+```
+
+Saving Protection settings creates a candidate policy, validates the complete Nginx configuration with `nginx -t`, reloads Nginx, and only then commits the change. If validation or reload fails, NPM Improved restores both the previous policy file and the previous database setting.
+
+## Upgrade behavior
+
+Existing installations receive the managed policy file automatically. The default global profile is **Standard**. Review the Protection page after upgrading, especially for high-throughput APIs, WebSocket-heavy applications, or services where a single client legitimately opens many parallel connections.

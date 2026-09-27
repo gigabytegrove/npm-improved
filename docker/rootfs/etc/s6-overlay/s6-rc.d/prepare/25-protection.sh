@@ -22,7 +22,7 @@ geo $npm_protection_trusted {
 }
 
 map $npm_protection_trusted $npm_protection_key {
-    0 $binary_remote_addr;
+    0 "$binary_remote_addr:$host";
     1 "";
 }
 

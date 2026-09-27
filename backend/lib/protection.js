@@ -34,20 +34,20 @@ const parseNetwork = (value) => {
 
 	const parts = trimmed.split("/");
 	if (parts.length > 2) {
-		throw new Error("Invalid trusted network: " + trimmed);
+		throw new Error(`Invalid trusted network: ${trimmed}`);
 	}
 
 	const address = parts[0];
 	const version = net.isIP(address);
 	if (!version) {
-		throw new Error("Invalid trusted IP or network: " + trimmed);
+		throw new Error(`Invalid trusted IP or network: ${trimmed}`);
 	}
 
 	const maxPrefix = version === 4 ? 32 : 128;
 	let prefix = maxPrefix;
 	if (parts.length === 2) {
 		if (!/^\d+$/.test(parts[1])) {
-			throw new Error("Invalid CIDR prefix: " + trimmed);
+			throw new Error(`Invalid CIDR prefix: ${trimmed}`);
 		}
 		prefix = Number.parseInt(parts[1], 10);
 		if (prefix < 0 || prefix > maxPrefix) {
@@ -55,7 +55,7 @@ const parseNetwork = (value) => {
 		}
 	}
 
-	return address + "/" + prefix;
+	return `${address}/${prefix}`;
 };
 
 export const normalizeProtectionSetting = (data) => {
@@ -81,8 +81,21 @@ export const normalizeProtectionSetting = (data) => {
 	};
 };
 
-export const normalizeHostProtectionProfile = (value) =>
-	HOST_PROTECTION_PROFILES.includes(value) ? value : "inherit";
+export const validateHostProtectionProfile = (value) => {
+	const profile = value ?? "inherit";
+	if (!HOST_PROTECTION_PROFILES.includes(profile)) {
+		throw new Error("Protection profile must be inherit, off, standard, or aggressive");
+	}
+	return profile;
+};
+
+export const normalizeHostProtectionProfile = (value) => {
+	try {
+		return validateHostProtectionProfile(value);
+	} catch {
+		return "inherit";
+	}
+};
 
 const renderGlobalDirectives = (profile) => {
 	if (profile === "off") {
@@ -91,16 +104,16 @@ const renderGlobalDirectives = (profile) => {
 
 	const cfg = PROFILE_CONFIG[profile];
 	return [
-		"# Global " + profile + " protection policy",
-		"limit_req zone=npm_protection_" + profile + " burst=" + cfg.burst + " nodelay;",
-		"limit_conn npm_protection_conn " + cfg.connections + ";",
+		`# Global ${profile} protection policy`,
+		`limit_req zone=npm_protection_${profile} burst=${cfg.burst} nodelay;`,
+		`limit_conn npm_protection_conn ${cfg.connections};`,
 		"limit_req_status 429;",
 		"limit_conn_status 429;",
 		"limit_req_log_level warn;",
 		"limit_conn_log_level warn;",
-		"client_header_timeout " + cfg.clientHeaderTimeout + ";",
-		"client_body_timeout " + cfg.clientBodyTimeout + ";",
-		"send_timeout " + cfg.sendTimeout + ";",
+		`client_header_timeout ${cfg.clientHeaderTimeout};`,
+		`client_body_timeout ${cfg.clientBodyTimeout};`,
+		`send_timeout ${cfg.sendTimeout};`,
 		"reset_timedout_connection on;",
 	].join("\n");
 };
@@ -113,7 +126,7 @@ export const renderProtectionPolicy = (setting) => {
 		...normalized.meta.trusted_networks,
 	].filter((value, index, values) => values.indexOf(value) === index);
 
-	const trustedLines = trusted.map((network) => "    " + network + " 1;").join("\n");
+	const trustedLines = trusted.map((network) => `    ${network} 1;`).join("\n");
 
 	return [
 		"# NPM Improved managed protection policy.",
@@ -125,7 +138,7 @@ export const renderProtectionPolicy = (setting) => {
 		"}",
 		"",
 		"map $npm_protection_trusted $npm_protection_key {",
-		"    0 $binary_remote_addr;",
+		"    0 \"$binary_remote_addr:$host\";",
 		"    1 \"\";",
 		"}",
 		"",
@@ -135,8 +148,8 @@ export const renderProtectionPolicy = (setting) => {
 		"    default \"\";",
 		"}",
 		"",
-		"limit_req_zone $npm_protection_key zone=npm_protection_standard:20m rate=" + PROFILE_CONFIG.standard.rate + ";",
-		"limit_req_zone $npm_protection_key zone=npm_protection_aggressive:20m rate=" + PROFILE_CONFIG.aggressive.rate + ";",
+		`limit_req_zone $npm_protection_key zone=npm_protection_standard:20m rate=${PROFILE_CONFIG.standard.rate};`,
+		`limit_req_zone $npm_protection_key zone=npm_protection_aggressive:20m rate=${PROFILE_CONFIG.aggressive.rate};`,
 		"limit_conn_zone $npm_protection_key zone=npm_protection_conn:20m;",
 		"",
 		"limit_req_zone $npm_protection_off_key zone=npm_protection_off:1m rate=1r/s;",
