@@ -1,0 +1,93 @@
+{
+	"type": "object",
+	"description": "Durable configuration revision recorded by NPM Improved",
+	"required": [
+		"id",
+		"created_on",
+		"modified_on",
+		"user_id",
+		"object_type",
+		"object_id",
+		"operation",
+		"status",
+		"config_text",
+		"snapshot",
+		"meta"
+	],
+	"properties": {
+		"id": {
+			"$ref": "../common.json#/properties/id"
+		},
+		"created_on": {
+			"$ref": "../common.json#/properties/created_on"
+		},
+		"modified_on": {
+			"$ref": "../common.json#/properties/modified_on"
+		},
+		"user_id": {
+			"type": "integer",
+			"minimum": 0
+		},
+		"object_type": {
+			"type": "string",
+			"enum": [
+				"proxy_host",
+				"redirection_host",
+				"dead_host",
+				"stream"
+			]
+		},
+		"object_id": {
+			"type": "integer",
+			"minimum": 1
+		},
+		"operation": {
+			"type": "string",
+			"enum": [
+				"baseline",
+				"create",
+				"update",
+				"enable",
+				"disable",
+				"delete",
+				"restore"
+			]
+		},
+		"status": {
+			"type": "string",
+			"enum": [
+				"pending",
+				"active",
+				"superseded",
+				"failed"
+			]
+		},
+		"config_text": {
+			"type": "string"
+		},
+		"snapshot": {
+			"type": "object",
+			"additionalProperties": true
+		},
+		"error_text": {
+			"type": [
+				"string",
+				"null"
+			]
+		},
+		"meta": {
+			"type": "object",
+			"additionalProperties": true
+		},
+		"user": {
+			"oneOf": [
+				{
+					"type": "null"
+				},
+				{
+					"$ref": "./user-object.json"
+				}
+			]
+		}
+	}
+}
