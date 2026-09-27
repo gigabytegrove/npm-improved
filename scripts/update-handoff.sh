@@ -24,6 +24,8 @@ case "$MODE" in
 		;;
 esac
 
+STATUS_OWNER="$(stat -c '%u:%g' "$STATUS_FILE" 2>/dev/null || true)"
+
 json_escape() {
 	printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; :a; N; $!ba; s/\n/\\n/g'
 }
@@ -152,6 +154,10 @@ if ! docker compose version >/dev/null 2>&1; then
 	write_status "failed" "Automatic update is unavailable." "The temporary update handoff does not include Docker Compose." "" "$SOURCE_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 	exit 1
 fi
+
+# Give the initiating HTTP request time to return before a restart or replacement
+# can take the backend offline.
+sleep 2
 
 case "$ACTION" in
 	update)
