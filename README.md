@@ -159,6 +159,18 @@ This gives you multiple possible proxy entry points without allowing two indepen
 
 [Read the Instance Synchronization guide](docs/src/guide/instance-sync.md).
 
+### Grow from SQLite to MySQL without starting over
+
+Database choice is now manageable from **Settings → Database & Cluster**.
+
+You can move an existing NPM Improved installation from SQLite to MySQL/MariaDB, move it back to SQLite later, or join another NPMi server to an existing Shared MySQL database.
+
+The wizard tests the destination first, copies and verifies the data before switching, and leaves the source database untouched.
+
+Shared MySQL lets several NPMi proxy servers use one database while keeping a single Primary for configuration changes. Secondary nodes remain ready to serve traffic and automatically mirror the certificates and local files they need.
+
+[Read the Database & Shared MySQL guide](docs/src/guide/database.md).
+
 ## Safer configuration changes
 
 A reverse proxy is often the front door to many applications. A single bad configuration should not take everything down.
@@ -527,7 +539,7 @@ Useful guides include:
 
 - [Docker installation](DOCKER.md)
 - [Proxy Host high availability](docs/src/guide/high-availability.md)
-- [Instance Synchronization](docs/src/guide/instance-sync.md)
+- [Instance Synchronization](docs/src/guide/instance-sync.md)\n- [Database & Shared MySQL](docs/src/guide/database.md)
 - [Backup & Disaster Recovery](docs/src/guide/disaster-recovery.md)
 - [Native Recovery Console](docs/src/guide/recovery-console.md)
 - [Configuration History](docs/src/guide/config-history.md)
