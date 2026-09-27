@@ -2,82 +2,80 @@
 outline: deep
 ---
 
-# Full Setup Instructions
+# Setup
 
-## Running the App
+## Current pre-1.0 installation model
 
-Create a `docker-compose.yml` file:
+NPM Improved does not currently advertise a stable published container image. Build the production image from this repository before creating a deployment.
 
-```yml
+```bash
+git clone https://github.com/gigabytegrove/npm-improved.git
+cd npm-improved
+./scripts/buildx --load -t npm-improved:dev
+```
+
+The repository production Dockerfile builds for `linux/amd64` and `linux/arm64`.
+
+## SQLite deployment
+
+After building `npm-improved:dev`, create a compose file:
+
+```yaml
 services:
   app:
-    image: 'jc21/nginx-proxy-manager:{{VERSION}}'
+    image: npm-improved:dev
     restart: unless-stopped
-
     ports:
-      # These ports are in format <host-port>:<container-port>
-      - '80:80' # Public HTTP Port
-      - '443:443' # Public HTTPS Port
-      - '81:81' # Admin Web Port
-      # Add any other Stream port you want to expose
-      # - '21:21' # FTP
-
+      - "80:80"
+      - "81:81"
+      - "443:443"
     environment:
-      TZ: "Australia/Brisbane"
-
-      # Uncomment this if you want to change the location of
-      # the SQLite DB file within the container
-      # DB_SQLITE_FILE: "/data/database.sqlite"
-
-      # Uncomment this if IPv6 is not enabled on your host
-      # DISABLE_IPV6: 'true'
-
+      TZ: "America/New_York"
+      # DISABLE_IPV6: "true"
+      # NPM_ADMIN_PORT: "81"
     volumes:
       - ./data:/data
       - ./letsencrypt:/etc/letsencrypt
 ```
 
-Then:
+Start it with:
 
 ```bash
 docker compose up -d
 ```
 
-## Using MySQL / MariaDB Database
+Open the management interface on port `81`.
 
-If you opt for the MySQL configuration you will have to provide the database server yourself.
+## Persistent data
 
-It's easy to use another docker container for your database also and link it as part of the docker stack, so that's what the following examples
-are going to use.
+Back up both directories:
 
-Here is an example of what your `docker-compose.yml` will look like when using a MariaDB container:
+```text
+./data
+./letsencrypt
+```
 
-```yml
+Inside the container these map to `/data` and `/etc/letsencrypt`.
+
+## MySQL / MariaDB
+
+The existing NPM database environment variables remain supported.
+
+```yaml
 services:
   app:
-    image: 'jc21/nginx-proxy-manager:{{VERSION}}'
+    image: npm-improved:dev
     restart: unless-stopped
     ports:
-      # These ports are in format <host-port>:<container-port>
-      - '80:80' # Public HTTP Port
-      - '443:443' # Public HTTPS Port
-      - '81:81' # Admin Web Port
-      # Add any other Stream port you want to expose
-      # - '21:21' # FTP
+      - "80:80"
+      - "81:81"
+      - "443:443"
     environment:
-      TZ: "Australia/Brisbane"
-      # Mysql/Maria connection parameters:
-      DB_MYSQL_HOST: "db"
+      DB_MYSQL_HOST: db
       DB_MYSQL_PORT: 3306
-      DB_MYSQL_USER: "npm"
-      DB_MYSQL_PASSWORD: "npm"
-      DB_MYSQL_NAME: "npm"
-      # Optional SSL (see section below)
-      # DB_MYSQL_SSL: 'true'
-      # DB_MYSQL_SSL_REJECT_UNAUTHORIZED: 'true'
-      # DB_MYSQL_SSL_VERIFY_IDENTITY: 'true'
-      # Uncomment this if IPv6 is not enabled on your host
-      # DISABLE_IPV6: 'true'
+      DB_MYSQL_USER: npm
+      DB_MYSQL_PASSWORD: change-me
+      DB_MYSQL_NAME: npm
     volumes:
       - ./data:/data
       - ./letsencrypt:/etc/letsencrypt
@@ -85,58 +83,36 @@ services:
       - db
 
   db:
-    image: 'linuxserver/mariadb'
+    image: mariadb:11
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: 'npm'
-      MYSQL_DATABASE: 'npm'
-      MYSQL_USER: 'npm'
-      MYSQL_PASSWORD: 'npm'
-      TZ: 'Australia/Brisbane'
+      MARIADB_DATABASE: npm
+      MARIADB_USER: npm
+      MARIADB_PASSWORD: change-me
+      MARIADB_ROOT_PASSWORD: change-root-password
     volumes:
-      - ./mariadb:/config
+      - ./mariadb:/var/lib/mysql
 ```
 
-::: warning
-Please note, that `DB_MYSQL_*` environment variables will take precedent over `DB_SQLITE_*` variables. So if you keep the MySQL variables, you will not be able to use SQLite.
-:::
+Use strong unique passwords or Docker secrets in real deployments.
 
-### Optional: MySQL / MariaDB SSL
+## PostgreSQL
 
-You can enable TLS for the MySQL/MariaDB connection with these environment variables:
-
-- `DB_MYSQL_SSL`: Enable SSL when set to true. If unset or false, SSL disabled (previous default behaviour).
-- `DB_MYSQL_SSL_REJECT_UNAUTHORIZED`: (default: true) Validate the server certificate chain. Set to false to allow self‑signed/unknown CA.
-- `DB_MYSQL_SSL_VERIFY_IDENTITY`: (default: true) Performs host name / identity verification.
-
-Enabling SSL using a self-signed cert (not recommended for production).
-
-## Using Postgres database
-
-Similar to the MySQL server setup:
-
-```yml
+```yaml
 services:
   app:
-    image: 'jc21/nginx-proxy-manager:{{VERSION}}'
+    image: npm-improved:dev
     restart: unless-stopped
     ports:
-      # These ports are in format <host-port>:<container-port>
-      - '80:80' # Public HTTP Port
-      - '443:443' # Public HTTPS Port
-      - '81:81' # Admin Web Port
-      # Add any other Stream port you want to expose
-      # - '21:21' # FTP
+      - "80:80"
+      - "81:81"
+      - "443:443"
     environment:
-      TZ: "Australia/Brisbane"
-      # Postgres parameters:
-      DB_POSTGRES_HOST: 'db'
-      DB_POSTGRES_PORT: '5432'
-      DB_POSTGRES_USER: 'npm'
-      DB_POSTGRES_PASSWORD: 'npmpass'
-      DB_POSTGRES_NAME: 'npm'
-      # Uncomment this if IPv6 is not enabled on your host
-      # DISABLE_IPV6: 'true'
+      DB_POSTGRES_HOST: db
+      DB_POSTGRES_PORT: 5432
+      DB_POSTGRES_USER: npm
+      DB_POSTGRES_PASSWORD: change-me
+      DB_POSTGRES_NAME: npm
     volumes:
       - ./data:/data
       - ./letsencrypt:/etc/letsencrypt
@@ -145,47 +121,65 @@ services:
 
   db:
     image: postgres:17
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: 'npm'
-      POSTGRES_PASSWORD: 'npmpass'
-      POSTGRES_DB: 'npm'
+      POSTGRES_USER: npm
+      POSTGRES_PASSWORD: change-me
+      POSTGRES_DB: npm
     volumes:
-      - ./postgres_data:/var/lib/postgresql/data
+      - ./postgres:/var/lib/postgresql/data
 ```
 
-::: warning
+Custom PostgreSQL schemas are not supported; the normal `public` schema is used.
 
-Custom Postgres schema is not supported, as such `public` will be used.
+## Initial administrator
 
-:::
+If no active users exist, the UI presents the first-user setup flow.
 
-## Running on Raspberry PI / ARM devices
+For automated initialization you may set:
 
-The docker images support the following architectures:
-- amd64
-- arm64
+```yaml
+environment:
+  INITIAL_ADMIN_EMAIL: admin@example.com
+  INITIAL_ADMIN_PASSWORD: use-a-strong-password
+```
 
-::: warning
-`armv7` is no longer supported in version 2.14+. This is due to Nodejs dropping support for armhf. Please
-use the `2.13.7` image tag if this applies to you.
-:::
+The automatic user is created only when no active user already exists.
 
-The docker images are a manifest of all the architecture docker builds supported, so this means
-you don't have to worry about doing anything special and you can follow the common instructions above.
+## Control plane
 
-Check out the [dockerhub tags](https://hub.docker.com/r/jc21/nginx-proxy-manager/tags)
-for a list of supported architectures and if you want one that doesn't exist,
-[create a feature request](https://github.com/NginxProxyManager/nginx-proxy-manager/issues/new?assignees=&labels=enhancement&template=feature_request.md&title=).
+Port `81` is owned by the standalone NPM Improved Go control plane, not by the Nginx traffic process.
 
-Also, if you don't know how to already, follow [this guide to install docker and docker-compose](https://manre-universe.net/how-to-run-docker-and-docker-compose-on-raspbian/)
-on Raspbian.
+Changing the management port:
 
-## Initial Run
+```yaml
+environment:
+  NPM_ADMIN_PORT: "8000"
+ports:
+  - "8000:8000"
+```
 
-After the app is running for the first time, the following will happen:
+## Healthcheck
 
-1. JWT keys will be generated and saved in the data folder
-2. The database will initialize with table structures
-3. A default admin user will be created
+```yaml
+healthcheck:
+  test: ["CMD", "/usr/bin/check-health"]
+  interval: 10s
+  timeout: 3s
+```
 
-This process can take a couple of minutes depending on your machine.
+The independent control plane also exposes:
+
+```text
+/__npm_improved/health
+```
+
+## Before exposing the service publicly
+
+- use strong administrator credentials;
+- keep port 81 on a management network whenever practical;
+- configure certificates and verify renewals;
+- review Settings → Protection;
+- add only genuinely trusted networks to the Protection bypass list;
+- review the Logs → Security Events workspace;
+- maintain backups of persistent data and the database.
