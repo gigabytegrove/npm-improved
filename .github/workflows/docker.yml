@@ -1,0 +1,65 @@
+name: Docker
+
+on:
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - "docker/**"
+      - "frontend/**"
+      - "backend/**"
+      - "controlplane/**"
+      - "compose*.yaml"
+      - ".dockerignore"
+      - ".env.example"
+      - "DOCKER.md"
+      - ".github/workflows/docker.yml"
+  push:
+    branches:
+      - "feature/**"
+      - "fix/**"
+    paths:
+      - "docker/**"
+      - "frontend/**"
+      - "backend/**"
+      - "controlplane/**"
+      - "compose*.yaml"
+      - ".dockerignore"
+      - ".env.example"
+      - "DOCKER.md"
+      - ".github/workflows/docker.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate Compose and image build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare validation environment
+        run: |
+          cp .env.example .env
+          sed -i 's/^MYSQL_PASSWORD=.*/MYSQL_PASSWORD=ci-mysql-password/' .env
+          sed -i 's/^MYSQL_ROOT_PASSWORD=.*/MYSQL_ROOT_PASSWORD=ci-mysql-root-password/' .env
+          sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci-postgres-password/' .env
+
+      - name: Validate SQLite Compose
+        run: docker compose -f compose.yaml config --quiet
+
+      - name: Validate MariaDB Compose
+        run: docker compose -f compose.mysql.yaml config --quiet
+
+      - name: Validate PostgreSQL Compose
+        run: docker compose -f compose.postgres.yaml config --quiet
+
+      - name: Build production image
+        run: docker build --pull --progress=plain -f docker/Dockerfile -t npm-improved:ci .
