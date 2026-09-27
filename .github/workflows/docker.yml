@@ -154,7 +154,7 @@ jobs:
             -H "Authorization: Bearer $TOKEN" \
             -H 'Content-Type: application/json' \
             -d '{"engine":"mysql","shared":true,"mysql":{"host":"npmi-db-wizard-mysql","port":3306,"user":"npmi","password":"ci-database-password","name":"npmi_target","ssl":false},"confirmation":"MIGRATE"}' \
-            http://127.0.0.1:19081/api/database/migrate | jq -e '.ok == true and .restart_scheduled == true'
+            http://127.0.0.1:19081/api/database/migrate | jq -e '.ok == true and .restartScheduled == true'
 
           for attempt in $(seq 1 60); do
             STATUS="$(curl -fsS -H "Authorization: Bearer $TOKEN" http://127.0.0.1:19081/api/database/status 2>/dev/null || true)"
@@ -170,7 +170,7 @@ jobs:
           done
 
           docker exec npmi-db-wizard-mysql \
-            mariadb -unmpi -pci-database-password npmi_target \
+            mariadb -unpmi -pci-database-password npmi_target \
             -e 'SELECT COUNT(*) AS users FROM user;' | grep -Eq '[[:space:]]1
 
           curl -fsS \
