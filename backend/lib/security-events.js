@@ -8,7 +8,7 @@ const CATEGORY_RULES = [
 		severity: "high",
 		confidence: "strong",
 		test: (ctx) =>
-			/(?:^|\/)(?:\.env(?:\.|\/|$)|\.git(?:\/|$)|\.svn(?:\/|$)|\.hg(?:\/|$)|id_rsa(?:$|[?\/])|credentials(?:$|[?\/])|\.aws(?:\/|$)|\.docker(?:\/|$)|wp-config\.php(?:$|[?\/])|config\.json(?:$|[?\/])|composer\.(?:json|lock)(?:$|[?\/]))/i.test(ctx.decodedPath),
+			/(?:^|\/)(?:\.env(?:\.|\/|$)|\.git(?:\/|$)|\.svn(?:\/|$)|\.hg(?:\/|$)|id_rsa(?:$|[?/])|credentials(?:$|[?\/])|\.aws(?:\/|$)|\.docker(?:\/|$)|wp-config\.php(?:$|[?\/])|config\.json(?:$|[?\/])|composer\.(?:json|lock)(?:$|[?\/]))/i.test(ctx.decodedPath),
 	},
 	{
 		category: "path-traversal",
