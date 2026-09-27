@@ -4,7 +4,7 @@ outline: deep
 
 # Upgrading
 
-NPM Improved v1.0.0 establishes the first stable release baseline. Treat upgrades as state-changing operations: keep a current backup, preserve a rollback path, and verify the important proxy, certificate, database, synchronization, and recovery workflows after every upgrade.
+NPM Improved v1.1.0 adds the built-in **Settings → Update** manager and official stable container images. Treat upgrades as state-changing operations: keep a current backup, preserve a rollback path, and verify the important proxy, certificate, database, synchronization, and recovery workflows after every upgrade.
 
 ## Before every upgrade
 
@@ -33,24 +33,28 @@ See [Backup & Disaster Recovery](/guide/disaster-recovery).
 
 ## Recommended process
 
+For a normal single-node Docker installation running v1.1.0 or newer:
+
 1. create a current NPM Improved backup;
 2. snapshot or back up `/data`, `/etc/letsencrypt`, and the external database when one is used;
-3. pull the target NPM Improved revision;
-4. rebuild with the installer target that matches the deployment;
-5. verify management access on port 81;
-6. verify Proxy Hosts, redirects, 404 hosts, Streams, certificates, logs, Protection, Database & Storage, and System Health;
-7. verify Instance Synchronization or Shared MySQL node status when those features are in use.
+3. open **Settings → Update**;
+4. review the target stable version and release notes;
+5. enter the current administrator password and choose **Update**;
+6. allow the page to reconnect while the application container is replaced and verified;
+7. verify Proxy Hosts, redirects, 404 hosts, Streams, certificates, logs, Protection, Database & Storage, and System Health.
 
-For a typical SQLite installation:
+The Update manager preserves the deployment environment and persistent state, verifies Docker and the independent control plane after replacement, and automatically restores the previous image configuration when the target fails verification.
+
+The v1.0.0 → v1.1.0 transition is the one-time CLI bridge:
 
 ```bash
 cd ~/npm-improved
 git checkout develop
 git pull --ff-only
-./scripts/install-docker sqlite --clean-build
+./scripts/install-docker sqlite
 ```
 
-Use `mysql` or `postgres` instead of `sqlite` when that is the underlying deployment target.
+Use `mysql` or `postgres` instead of `sqlite` when that is the underlying deployment target. Add `--clean-build` only when you specifically need a cache-free source rebuild.
 
 A database selected through **Settings → Database & Storage** is stored under `/data/database-config.json` and survives the application rebuild.
 
