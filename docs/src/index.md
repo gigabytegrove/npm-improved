@@ -26,6 +26,8 @@ features:
     details: New Nginx configurations are rendered, validated, activated, reloaded, and committed with automatic last-known-good rollback on failure.
   - title: Configuration History
     details: Durable Active, Superseded, and Failed revisions preserve database snapshots, generated Nginx configuration, activation errors, and safe restore points.
+  - title: Backup & Disaster Recovery
+    details: Encrypted configuration/full-instance bundles can be inspected before restore, with local rollback if regenerated Nginx state fails validation.
   - title: Certificate Lifecycle
     details: Active and unused certificates are tracked separately, with quarantine and configurable cleanup instead of an undifferentiated certificate list.
   - title: Logs & Security Events
