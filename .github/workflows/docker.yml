@@ -135,7 +135,7 @@ jobs:
               -H "Authorization: Bearer $TOKEN" \
               http://127.0.0.1:19181/api/version/update
           )"
-          jq -e '.capabilities.enabled == true and .capabilities.deploymentMode == "sqlite"' <<<"$MANAGER"
+          jq -e '.capabilities.enabled == true and .capabilities.deployment_mode == "sqlite"' <<<"$MANAGER"
 
           curl -fsS \
             -H "Authorization: Bearer $TOKEN" \
