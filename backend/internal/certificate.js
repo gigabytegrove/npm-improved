@@ -13,6 +13,7 @@ import { calculateCertificateLifecycle, normalizeCertificateLifecyclePolicy } fr
 import { useLetsencryptServer, useLetsencryptStaging } from "../lib/config.js";
 import error from "../lib/error.js";
 import { restoreModelRow, snapshotModelRow } from "../lib/model-rollback.js";
+import { withSharedMysqlLock } from "../lib/shared-database.js";
 import utils from "../lib/utils.js";
 import { debug, ssl as logger } from "../logger.js";
 import certificateModel from "../models/certificate.js";
@@ -74,9 +75,10 @@ const internalCertificate = {
 
 		internalCertificate.intervalProcessing = true;
 		try {
-			logger.info(
-				`Renewing SSL certs expiring within ${internalCertificate.renewBeforeExpirationBy[0]} ${internalCertificate.renewBeforeExpirationBy[1]} ...`,
-			);
+			await withSharedMysqlLock("npmi:certificate-maintenance", async () => {
+				logger.info(
+					`Renewing SSL certs expiring within ${internalCertificate.renewBeforeExpirationBy[0]} ${internalCertificate.renewBeforeExpirationBy[1]} ...`,
+				);
 
 			const expirationThreshold = moment()
 				.add(internalCertificate.renewBeforeExpirationBy[0], internalCertificate.renewBeforeExpirationBy[1])
@@ -110,7 +112,8 @@ const internalCertificate = {
 				}
 			}
 
-			logger.info("Completed SSL cert renew process");
+				logger.info("Completed SSL cert renew process");
+			}, 600);
 		} catch (err) {
 			logger.error(err);
 		} finally {
@@ -173,7 +176,8 @@ const internalCertificate = {
 
 		internalCertificate.lifecycleProcessing = true;
 		try {
-			const [policy, certificates, usageMap] = await Promise.all([
+			await withSharedMysqlLock("npmi:certificate-maintenance", async () => {
+				const [policy, certificates, usageMap] = await Promise.all([
 				internalCertificate.getLifecyclePolicy(),
 				certificateModel.query().where("is_deleted", 0),
 				internalCertificate.getUsageMap(),
@@ -220,7 +224,8 @@ const internalCertificate = {
 						logger.error(`Auto-purge failed for Cert #${certificate.id}: ${err.message}`);
 					}
 				}
-			}
+				}
+			}, 600);
 		} catch (err) {
 			logger.error(`Certificate lifecycle processing failed: ${err.message}`);
 		} finally {

@@ -677,6 +677,7 @@ const performRestore = async ({ bundle, passphrase, currentUserId = null, access
 };
 
 const internalDisasterRecovery = {
+	regenerateNginx,
 	status: async (access) => {
 		await access.can("settings:update", "disaster-recovery");
 		const counts = {};

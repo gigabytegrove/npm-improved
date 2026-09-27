@@ -21,6 +21,7 @@ export interface InstanceSyncPeer {
 
 export interface InstanceSyncStatus {
 	enabled: boolean;
+	blockedBySharedDatabase?: boolean;
 	nodeId: string;
 	nodeName: string;
 	role: "primary" | "secondary";

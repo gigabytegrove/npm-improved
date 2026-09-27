@@ -3,6 +3,7 @@ import NodeRSA from "node-rsa";
 import { global as logger } from "../logger.js";
 
 const keysFile = "/data/keys.json";
+const runtimeDatabaseConfigFile = "/data/database-config.json";
 const mysqlEngine = "mysql2";
 const postgresEngine = "pg";
 const sqliteClientName = "better-sqlite3";
@@ -12,9 +13,86 @@ const legacySqliteClientName = "sqlite3";
 
 let instance = null;
 
-// 1. Load from config file first (not recommended anymore)
-// 2. Use config env variables next
+const normalizeRuntimeDatabase = (raw) => {
+	if (!raw || raw.version !== 1 || !raw.engine) return null;
+
+	if (raw.engine === "sqlite") {
+		const filename = String(raw.sqlite?.filename || "/data/database.sqlite").trim();
+		if (!filename) return null;
+		return {
+			database: {
+				engine: "knex-native",
+				knex: {
+					client: sqliteClientName,
+					connection: { filename },
+					useNullAsDefault: true,
+				},
+			},
+			databaseRuntime: {
+				source: "runtime",
+				engine: "sqlite",
+				shared: false,
+				filename,
+			},
+		};
+	}
+
+	if (raw.engine === "mysql") {
+		const mysql = raw.mysql || {};
+		if (!mysql.host || !mysql.user || !mysql.name) return null;
+		return {
+			database: {
+				engine: mysqlEngine,
+				host: String(mysql.host),
+				port: Number.parseInt(mysql.port || 3306, 10) || 3306,
+				user: String(mysql.user),
+				password: String(mysql.password || ""),
+				name: String(mysql.name),
+				ssl: mysql.ssl
+					? {
+							rejectUnauthorized: mysql.sslRejectUnauthorized !== false,
+							verifyIdentity: mysql.sslVerifyIdentity !== false,
+						}
+					: false,
+			},
+			databaseRuntime: {
+				source: "runtime",
+				engine: "mysql",
+				shared: Boolean(raw.shared),
+				host: String(mysql.host),
+				port: Number.parseInt(mysql.port || 3306, 10) || 3306,
+				user: String(mysql.user),
+				name: String(mysql.name),
+				ssl: Boolean(mysql.ssl),
+			},
+		};
+	}
+
+	return null;
+};
+
+// 1. Runtime database selection created by the NPM Improved database wizard.
+// 2. Legacy config file.
+// 3. Deployment environment variables.
 const configure = () => {
+	if (fs.existsSync(runtimeDatabaseConfigFile)) {
+		try {
+			const raw = JSON.parse(fs.readFileSync(runtimeDatabaseConfigFile, "utf8"));
+			const runtime = normalizeRuntimeDatabase(raw);
+			if (runtime) {
+				logger.info(`Using runtime database configuration: ${runtime.databaseRuntime.engine}`);
+				instance = {
+					...runtime,
+					keys: getKeys(),
+				};
+				return;
+			}
+			logger.warn(`Ignoring invalid runtime database configuration: ${runtimeDatabaseConfigFile}`);
+		} catch (err) {
+			logger.warn(`Could not read runtime database configuration: ${err.message}`);
+		}
+	}
+
 	const filename = `${process.env.NODE_CONFIG_DIR || "./config"}/${process.env.NODE_ENV || "default"}.json`;
 	if (fs.existsSync(filename)) {
 		let configData;
@@ -35,6 +113,11 @@ const configure = () => {
 			}
 
 			instance = configData;
+			instance.databaseRuntime = {
+				source: "config-file",
+				engine: configData.database.engine === mysqlEngine ? "mysql" : configData.database.engine,
+				shared: false,
+			};
 			instance.keys = getKeys();
 			return;
 		}
@@ -69,6 +152,16 @@ const configure = () => {
 					? { rejectUnauthorized: envMysqlSSLRejectUnauthorized, verifyIdentity: envMysqlSSLVerifyIdentity }
 					: false,
 			},
+			databaseRuntime: {
+				source: "environment",
+				engine: "mysql",
+				shared: false,
+				host: envMysqlHost,
+				port: Number.parseInt(process.env.DB_MYSQL_PORT || "3306", 10),
+				user: envMysqlUser,
+				name: envMysqlName,
+				ssl: envMysqlSSL,
+			},
 			keys: getKeys(),
 		};
 		return;
@@ -89,6 +182,15 @@ const configure = () => {
 				password: process.env.DB_POSTGRES_PASSWORD,
 				name: envPostgresName,
 			},
+			databaseRuntime: {
+				source: "environment",
+				engine: "postgres",
+				shared: false,
+				host: envPostgresHost,
+				port: Number.parseInt(process.env.DB_POSTGRES_PORT || "5432", 10),
+				user: envPostgresUser,
+				name: envPostgresName,
+			},
 			keys: getKeys(),
 		};
 		return;
@@ -107,6 +209,12 @@ const configure = () => {
 				},
 				useNullAsDefault: true,
 			},
+		},
+		databaseRuntime: {
+			source: "environment",
+			engine: "sqlite",
+			shared: false,
+			filename: envSqliteFile,
 		},
 		keys: getKeys(),
 	};
@@ -186,6 +294,15 @@ const configGet = (key) => {
 		return instance[key];
 	}
 	return instance;
+};
+
+const getDatabaseRuntime = () => {
+	instance === null && configure();
+	return instance.databaseRuntime || {
+		source: "unknown",
+		engine: isSqlite() ? "sqlite" : isMysql() ? "mysql" : isPostgres() ? "postgres" : "unknown",
+		shared: false,
+	};
 };
 
 /**
@@ -271,6 +388,7 @@ export {
 	isCI,
 	configHas,
 	configGet,
+	getDatabaseRuntime,
 	isSqlite,
 	isMysql,
 	isPostgres,

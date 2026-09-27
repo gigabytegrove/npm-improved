@@ -159,6 +159,20 @@ This gives you multiple possible proxy entry points without allowing two indepen
 
 [Read the Instance Synchronization guide](docs/src/guide/instance-sync.md).
 
+## Start with SQLite, move to MySQL when you need it
+
+NPM Improved does not force you to choose your long-term database on day one.
+
+A small installation can start with the default SQLite database. Later, **Settings → Database & Storage** can copy that installation into MySQL/MariaDB, verify the destination, switch the backend, and restart it automatically.
+
+You can also move back from MySQL to SQLite.
+
+If you run several NPM Improved proxy servers, **Shared MySQL mode** lets them use one common database. NPM Improved coordinates login signing identity, shows the connected database nodes, and has every node watch the shared database so its local Nginx configuration follows changes made on another node.
+
+Certificate files are still files, so multi-server deployments must also share or replicate `/etc/letsencrypt` and `/data/custom_ssl`.
+
+[Read the Database & Shared MySQL guide](docs/src/guide/database.md).
+
 ## Safer configuration changes
 
 A reverse proxy is often the front door to many applications. A single bad configuration should not take everything down.
@@ -528,6 +542,7 @@ Useful guides include:
 - [Docker installation](DOCKER.md)
 - [Proxy Host high availability](docs/src/guide/high-availability.md)
 - [Instance Synchronization](docs/src/guide/instance-sync.md)
+- [Database & Shared MySQL](docs/src/guide/database.md)
 - [Backup & Disaster Recovery](docs/src/guide/disaster-recovery.md)
 - [Native Recovery Console](docs/src/guide/recovery-console.md)
 - [Configuration History](docs/src/guide/config-history.md)

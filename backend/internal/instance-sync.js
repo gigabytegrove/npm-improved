@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { getDatabaseRuntime, isMysql } from "../lib/config.js";
 import errs from "../lib/error.js";
 import settingModel from "../models/setting.js";
 import pjson from "../package.json" with { type: "json" };
@@ -20,6 +21,11 @@ let schedulerTimer = null;
 let syncRunning = false;
 
 const currentVersion = () => (process.env.NPM_BUILD_VERSION || pjson.version || "0.0.0").trim();
+
+const sharedDatabaseMode = () => {
+	const runtime = getDatabaseRuntime();
+	return isMysql() && Boolean(runtime.shared);
+};
 
 const normalizeUrl = (value, label, required = false) => {
 	const raw = String(value || "").trim();
@@ -135,8 +141,10 @@ const updateMeta = async (patch) => {
 const sanitizedStatus = async () => {
 	const row = await getRow();
 	const meta = row.meta || {};
+	const sharedDatabase = sharedDatabaseMode();
 	return {
-		enabled: row.value === "enabled",
+		enabled: sharedDatabase ? false : row.value === "enabled",
+		blockedBySharedDatabase: sharedDatabase,
 		nodeId: meta.node_id,
 		nodeName: meta.node_name,
 		role: meta.role,
@@ -200,6 +208,11 @@ const internalInstanceSync = {
 	getStatus: sanitizedStatus,
 
 	updateSettings: async (data) => {
+		if (sharedDatabaseMode() && data.enabled !== false) {
+			throw new errs.ValidationError(
+				"Instance Synchronization is not used when multiple NPM Improved nodes share the same MySQL database. Shared Database mode already keeps database state common between nodes.",
+			);
+		}
 		const row = await getRow();
 		const current = row.meta || {};
 		const enabled = typeof data.enabled === "boolean" ? data.enabled : row.value === "enabled";
@@ -259,6 +272,9 @@ const internalInstanceSync = {
 	},
 
 	promote: async () => {
+		if (sharedDatabaseMode()) {
+			throw new errs.ValidationError("Shared MySQL nodes do not use primary/secondary database promotion");
+		}
 		const row = await getRow();
 		const meta = {
 			...(row.meta || {}),
@@ -432,6 +448,7 @@ const internalInstanceSync = {
 	},
 
 	isSecondaryReadOnly: async () => {
+		if (sharedDatabaseMode()) return false;
 		const row = await getRow();
 		return row.value === "enabled" && row.meta?.role === "secondary";
 	},
@@ -493,6 +510,14 @@ const internalInstanceSync = {
 	},
 
 	initTimer: () => {
+		if (sharedDatabaseMode()) {
+			if (schedulerTimer) {
+				clearTimeout(schedulerTimer);
+				schedulerTimer = null;
+			}
+			logger.info("Instance Synchronization scheduler disabled because Shared MySQL mode is active");
+			return;
+		}
 		internalInstanceSync.reschedule(30_000);
 	},
 };

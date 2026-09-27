@@ -2,6 +2,7 @@
 
 import app from "./app.js";
 import internalCertificate from "./internal/certificate.js";
+import internalDatabaseManager from "./internal/database-manager.js";
 import internalIpRanges from "./internal/ip_ranges.js";
 import internalInstanceSync from "./internal/instance-sync.js";
 import { global as logger } from "./logger.js";
@@ -13,6 +14,13 @@ const IP_RANGES_FETCH_ENABLED = process.env.IP_RANGES_FETCH_ENABLED !== "false";
 
 async function appStart() {
 	return migrateUp()
+		.then(async () => {
+			const shared = await internalDatabaseManager.initializeSharedMode();
+			if (shared.restartRequired) {
+				setTimeout(() => process.exit(0), 250);
+				return new Promise(() => {});
+			}
+		})
 		.then(setup)
 		.then(getCompiledSchema)
 		.then(() => {
@@ -29,6 +37,7 @@ async function appStart() {
 			internalCertificate.initTimer();
 			internalIpRanges.initTimer();
 			internalInstanceSync.initTimer();
+			internalDatabaseManager.initWatcher();
 
 			const server = app.listen(3000, () => {
 				logger.info(`Backend PID ${process.pid} listening on port 3000 ...`);
