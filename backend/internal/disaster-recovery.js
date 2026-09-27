@@ -694,19 +694,41 @@ const internalDisasterRecovery = {
 	replaceDatabaseMigrationSnapshot: async (targetDb, snapshot) =>
 		replaceDatabaseOn(targetDb, snapshot, "disaster-recovery"),
 
-	captureSharedFilesystem: () => captureFilesystem("cluster"),
+	captureSharedFilesystem: () => {
+		const filesystem = captureFilesystem("cluster");
+		if (fs.existsSync("/data/keys.json")) {
+			const stat = fs.statSync("/data/keys.json");
+			filesystem.roots.jwt_keys = [{
+				path: "keys.json",
+				type: "file",
+				mode: stat.mode & 0o777,
+				data: fs.readFileSync("/data/keys.json").toString("base64"),
+			}];
+			filesystem.bytes += stat.size;
+		}
+		return filesystem;
+	},
 
 	applySharedFilesystem: async (filesystem) => {
 		if (!filesystem?.roots || typeof filesystem.roots !== "object") {
 			throw new errs.ValidationError("Shared filesystem payload is invalid");
 		}
+		const incomingKeys = filesystem.roots.jwt_keys?.find((item) => item.type === "file");
+		const currentKeys = fs.existsSync("/data/keys.json")
+			? fs.readFileSync("/data/keys.json").toString("base64")
+			: "";
+		const keysChanged = Boolean(incomingKeys?.data && incomingKeys.data !== currentKeys);
 		const rollbackRoot = snapshotLiveFilesystem();
 		restoreInProgress = true;
 		try {
 			restoreFilesystem({ scope: "cluster", filesystem });
+			if (incomingKeys?.data) {
+				fs.writeFileSync("/data/keys.json", Buffer.from(incomingKeys.data, "base64"), { mode: 0o600 });
+				fs.chmodSync("/data/keys.json", 0o600);
+			}
 			await regenerateNginx();
 			removePath(rollbackRoot);
-			return { ok: true };
+			return { ok: true, restartRequired: keysChanged };
 		} catch (err) {
 			try {
 				restoreLiveFilesystemSnapshot(rollbackRoot);
