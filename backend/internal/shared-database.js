@@ -168,6 +168,7 @@ const inflateFilesystem = (rows) => {
 		default_www: [],
 		custom_ssl: [],
 		letsencrypt: [],
+		jwt_keys: [],
 	};
 	let bytes = 0;
 	for (const row of rows) {
@@ -273,14 +274,18 @@ const reconcileNow = async () => {
 
 		const rows = await db()("npmi_shared_file").orderBy(["root", "path"]);
 		const filesystem = inflateFilesystem(rows);
-		await internalDisasterRecovery.applySharedFilesystem(filesystem);
+		const applied = await internalDisasterRecovery.applySharedFilesystem(filesystem);
 		writeNode({
 			last_applied_revision: revision,
 			initialized: true,
 			last_error: null,
 		});
 		await registerNode({ last_applied_revision: revision, last_error: null });
-		return { changed: true, revision };
+		if (applied.restartRequired) {
+			logger.info("Shared database JWT identity changed; restarting backend to load the shared signing keys");
+			setTimeout(() => process.exit(0), 750).unref?.();
+		}
+		return { changed: true, revision, restartRequired: applied.restartRequired };
 	} catch (err) {
 		writeNode({ last_error: err.message });
 		await registerNode({ last_error: err.message }).catch(() => undefined);
