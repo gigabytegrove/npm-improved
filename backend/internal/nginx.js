@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import _ from "lodash";
 import errs from "../lib/error.js";
 import { applyConfigTransaction, removeConfigTransaction } from "../lib/nginx-transaction.js";
+import { normalizeHostProtectionProfile } from "../lib/protection.js";
 import utils from "../lib/utils.js";
 import { debug, nginx as logger } from "../logger.js";
 import accessListModel from "../models/access_list.js";
@@ -256,8 +257,11 @@ const internalNginx = {
 				locationsPromise = Promise.resolve();
 			}
 
-			// Set the IPv6 setting for the host
+			// Set managed runtime settings for the host.
 			host.ipv6 = internalNginx.ipv6Enabled();
+			if (["proxy_host", "redirection_host", "dead_host"].includes(nice_host_type)) {
+				host.protection_profile = normalizeHostProtectionProfile(host.meta?.protection_profile);
+			}
 
 			locationsPromise.then(() => {
 				renderEngine
