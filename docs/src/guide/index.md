@@ -15,6 +15,7 @@ NPM Improved is currently pre-1.0. The `develop` branch is the integration branc
 - the management listener is served by a standalone Go control-plane process;
 - Nginx host changes are transactional and retain a last-known-good configuration;
 - database host state is rolled back when the Nginx transaction fails;
+- durable Configuration History records active, superseded, and failed revisions with safe restore;
 - certificates have active/unused lifecycle states and quarantine cleanup;
 - raw logs and structured security events are exposed in the UI;
 - HTTP hosts can use managed Protection profiles;
@@ -80,6 +81,10 @@ Back up both locations before upgrades:
 ```
 
 See [Upgrading](/upgrading/) before moving between development snapshots.
+
+## Configuration History
+
+Administrators can inspect generated configuration revisions and restore superseded known-good states from **Configuration History**. See [Configuration History](/guide/config-history).
 
 ## Protection
 
