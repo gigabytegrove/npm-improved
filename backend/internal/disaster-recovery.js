@@ -150,6 +150,7 @@ const captureFilesystem = (scope) => {
 		for (const [name, filename] of [
 			["jwt_keys", "/data/keys.json"],
 			["recovery_access", "/data/recovery-access.json"],
+			["cluster_secret", "/data/cluster-secret"],
 		]) {
 			if (!fs.existsSync(filename)) continue;
 			const stat = fs.statSync(filename);
@@ -221,7 +222,7 @@ const validateBundle = (bundle) => {
 	}
 
 	for (const [rootName, entries] of Object.entries(bundle.filesystem.roots)) {
-		if (![...Object.keys(FILE_ROOTS), "jwt_keys", "recovery_access"].includes(rootName) || !Array.isArray(entries)) {
+		if (![...Object.keys(FILE_ROOTS), "jwt_keys", "recovery_access", "cluster_secret"].includes(rootName) || !Array.isArray(entries)) {
 			throw new Error("Backup contains an unsupported filesystem root");
 		}
 		for (const entry of entries) {
@@ -332,6 +333,7 @@ const restoreFilesystem = (bundle) => {
 		for (const [rootName, filename] of [
 			["jwt_keys", "/data/keys.json"],
 			["recovery_access", "/data/recovery-access.json"],
+			["cluster_secret", "/data/cluster-secret"],
 		]) {
 			const entry = bundle.filesystem.roots[rootName]?.find((item) => item.type === "file");
 			if (entry) {
@@ -352,6 +354,7 @@ const snapshotLiveFilesystem = () => {
 		letsencrypt: "/etc/letsencrypt",
 		keys: "/data/keys.json",
 		recovery_access: "/data/recovery-access.json",
+		cluster_secret: "/data/cluster-secret",
 	};
 	for (const [name, source] of Object.entries(sources)) {
 		if (fs.existsSync(source)) {
