@@ -646,3 +646,74 @@ label.row {
 		gap: 0.7rem;
 	}
 }
+
+
+/* Proxy Host editor
+ *
+ * This workflow now contains upstream pools, SSL, protection, custom locations,
+ * and advanced Nginx settings. Treat it as a full configuration workspace
+ * rather than a medium dialog.
+ */
+.npmi-proxy-host-dialog {
+	width: min(1240px, calc(100vw - 2.5rem));
+	max-width: 1240px;
+}
+
+.npmi-proxy-host-dialog .modal-content {
+	max-height: calc(100vh - 2.5rem);
+}
+
+.npmi-proxy-host-dialog .modal-header,
+.npmi-proxy-host-dialog .modal-footer {
+	flex: 0 0 auto;
+}
+
+.npmi-proxy-host-dialog .modal-body {
+	min-height: 0;
+	overflow-y: auto;
+}
+
+.npmi-proxy-host-dialog .card-header {
+	position: sticky;
+	top: 0;
+	z-index: 5;
+	background: var(--npi-surface-raised);
+}
+
+.npmi-proxy-host-dialog .card-body {
+	padding: 1.35rem;
+}
+
+.npmi-proxy-host-dialog .tab-content {
+	min-height: 420px;
+}
+
+@media (max-width: 991.98px) {
+	.npmi-proxy-host-dialog {
+		width: calc(100vw - 1rem);
+		max-width: none;
+		margin: 0.5rem auto;
+	}
+
+	.npmi-proxy-host-dialog .modal-content {
+		max-height: calc(100vh - 1rem);
+	}
+}
+
+@media (max-width: 575.98px) {
+	.npmi-proxy-host-dialog {
+		width: 100vw;
+		margin: 0;
+	}
+
+	.npmi-proxy-host-dialog .modal-content {
+		min-height: 100vh;
+		max-height: 100vh;
+		border-radius: 0;
+		border-inline: 0;
+	}
+
+	.npmi-proxy-host-dialog .card-body {
+		padding: 1rem;
+	}
+}
