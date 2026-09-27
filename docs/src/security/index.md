@@ -18,6 +18,10 @@ The control-plane health endpoint is:
 
 Generated changes are validated with `nginx -t` before they are allowed to replace the last-known-good configuration. Failed candidates are retained for diagnostics.
 
+## Recovery history
+
+Configuration History keeps durable known-good revisions and failed candidates for administrators. Restores are revalidated with `nginx -t` and normal reload handling; historical configuration files are never copied blindly into service.
+
 ## Logs and security observability
 
 The Logs workspace includes raw logs and structured Security Events. Event classification identifies request patterns such as sensitive-file probes, path traversal, injection-shaped requests, CMS scanning, and exploit endpoint probes.
