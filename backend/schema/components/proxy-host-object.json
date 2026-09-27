@@ -23,7 +23,9 @@
 		"locations",
 		"hsts_enabled",
 		"hsts_subdomains",
-		"trust_forwarded_proto"
+		"trust_forwarded_proto",
+		"upstream_mode",
+		"upstreams"
 	],
 	"properties": {
 		"id": {
@@ -203,6 +205,98 @@
 				}
 			],
 			"example": null
+		},
+		"upstream_mode": {
+			"type": "string",
+			"enum": [
+				"round-robin",
+				"least-conn",
+				"ip-hash",
+				"failover"
+			],
+			"default": "round-robin",
+			"description": "NPM Improved upstream pool strategy. failover keeps the first enabled target primary and marks remaining targets as Nginx backup servers."
+		},
+		"upstreams": {
+			"type": "array",
+			"minItems": 1,
+			"description": "One or more backend targets for this proxy host. Enabled targets must use the same scheme.",
+			"items": {
+				"type": "object",
+				"additionalProperties": false,
+				"required": [
+					"scheme",
+					"host",
+					"port"
+				],
+				"properties": {
+					"name": {
+						"type": "string",
+						"maxLength": 100
+					},
+					"scheme": {
+						"type": "string",
+						"enum": [
+							"http",
+							"https"
+						]
+					},
+					"host": {
+						"type": "string",
+						"minLength": 1,
+						"maxLength": 255
+					},
+					"port": {
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 65535
+					},
+					"weight": {
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 256,
+						"default": 1
+					},
+					"max_fails": {
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 100,
+						"default": 3
+					},
+					"fail_timeout": {
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 3600,
+						"default": 10
+					},
+					"enabled": {
+						"type": "boolean",
+						"default": true
+					}
+				}
+			},
+			"example": [
+				{
+					"name": "primary",
+					"scheme": "http",
+					"host": "10.0.0.10",
+					"port": 8080,
+					"weight": 1,
+					"max_fails": 3,
+					"fail_timeout": 10,
+					"enabled": true
+				},
+				{
+					"name": "secondary",
+					"scheme": "http",
+					"host": "10.0.0.11",
+					"port": 8080,
+					"weight": 1,
+					"max_fails": 3,
+					"fail_timeout": 10,
+					"enabled": true
+				}
+			]
 		}
 	}
 }
