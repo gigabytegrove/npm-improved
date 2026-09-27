@@ -92,6 +92,15 @@ const setupDefaultSettings = async () => {
 				purge_custom_certificates: true,
 			},
 		},
+		{
+			id: "http-protection",
+			name: "HTTP Protection",
+			description: "Controls request-rate, connection, and slow-client protection for HTTP hosts",
+			value: "standard",
+			meta: {
+				trusted_networks: [],
+			},
+		},
 	];
 
 	for (const setting of defaults) {
