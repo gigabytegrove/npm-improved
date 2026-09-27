@@ -1,5 +1,5 @@
 import { IconDatabase, IconRefresh, IconServer2, IconSwitchHorizontal } from "@tabler/icons-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Alert } from "react-bootstrap";
 import {
 	type DatabaseEngine,
@@ -63,7 +63,8 @@ export default function Database() {
 	const [initializedFromStatus, setInitializedFromStatus] = useState(false);
 	const [promoteConfirmation, setPromoteConfirmation] = useState("");
 
-	if (status && !initializedFromStatus) {
+	useEffect(() => {
+		if (!status || initializedFromStatus) return;
 		const current = status.current;
 		if (current.engine === "mysql") {
 			setEngine("mysql");
@@ -81,7 +82,7 @@ export default function Database() {
 		if (status.sharedCluster?.publicUrl) setPublicUrl(status.sharedCluster.publicUrl);
 		if (status.sharedCluster?.role) setNodeRole(status.sharedCluster.role);
 		setInitializedFromStatus(true);
-	}
+	}, [initializedFromStatus, status]);
 
 	const target = useMemo<DatabaseTarget>(() => {
 		if (engine === "sqlite") {
