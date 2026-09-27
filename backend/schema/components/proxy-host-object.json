@@ -75,8 +75,23 @@
 		"meta": {
 			"type": "object",
 			"example": {
+				"protection_profile": "inherit",
 				"nginx_online": true,
 				"nginx_err": null
+			},
+			"description": "Runtime metadata plus NPM Improved host controls.",
+			"properties": {
+				"protection_profile": {
+					"type": "string",
+					"enum": [
+						"inherit",
+						"off",
+						"standard",
+						"aggressive"
+					],
+					"default": "inherit",
+					"description": "Managed HTTP Protection profile for this host. inherit uses the global Settings > Protection policy."
+				}
 			}
 		},
 		"allow_websocket_upgrade": {
@@ -89,7 +104,10 @@
 		},
 		"forward_scheme": {
 			"type": "string",
-			"enum": ["http", "https"],
+			"enum": [
+				"http",
+				"https"
+			],
 			"example": "http"
 		},
 		"enabled": {
@@ -100,11 +118,19 @@
 			"minItems": 0,
 			"items": {
 				"type": "object",
-				"required": ["forward_scheme", "forward_host", "forward_port", "path"],
+				"required": [
+					"forward_scheme",
+					"forward_host",
+					"forward_port",
+					"path"
+				],
 				"additionalProperties": false,
 				"properties": {
 					"id": {
-						"type": ["integer", "null"]
+						"type": [
+							"integer",
+							"null"
+						]
 					},
 					"path": {
 						"type": "string",
@@ -146,7 +172,7 @@
 		"hsts_subdomains": {
 			"$ref": "../common.json#/properties/hsts_subdomains"
 		},
-		"trust_forwarded_proto":{
+		"trust_forwarded_proto": {
 			"type": "boolean",
 			"description": "Trust the forwarded headers",
 			"example": false
