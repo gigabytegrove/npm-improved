@@ -1,4 +1,6 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,6 +9,7 @@ import db from "../db.js";
 import { getDatabaseRuntime, isMysql, isPostgres, isSqlite } from "../lib/config.js";
 import errs from "../lib/error.js";
 import { global as logger } from "../logger.js";
+import pjson from "../package.json" with { type: "json" };
 import internalDisasterRecovery from "./disaster-recovery.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -14,6 +17,8 @@ const __dirname = dirname(__filename);
 const MIGRATIONS_DIR = path.resolve(__dirname, "../migrations");
 const RUNTIME_FILE = "/data/database-config.json";
 const SHARED_IDENTITY_KEY = "jwt-keys";
+const SHARED_VERSION_KEY = "npmi-version";
+const SHARED_NODE_FILE = "/data/shared-database-node-id";
 const POLL_SECONDS_MIN = 2;
 const POLL_SECONDS_MAX = 60;
 const DEFAULT_POLL_SECONDS = 5;
@@ -35,6 +40,21 @@ let migrationInProgress = false;
 let watcherTimer = null;
 let lastFingerprint = null;
 let refreshInProgress = false;
+
+const currentVersion = () => (process.env.NPM_BUILD_VERSION || pjson.version || "0.0.0").trim();
+
+const getSharedNodeId = () => {
+	try {
+		const value = fs.readFileSync(SHARED_NODE_FILE, "utf8").trim();
+		if (value) return value;
+	} catch {
+		// Create a stable local node identity below.
+	}
+	const value = crypto.randomUUID();
+	fs.writeFileSync(SHARED_NODE_FILE, value + "\n", { mode: 0o600 });
+	fs.chmodSync(SHARED_NODE_FILE, 0o600);
+	return value;
+};
 
 const engineName = () => (isSqlite() ? "sqlite" : isMysql() ? "mysql" : isPostgres() ? "postgres" : "unknown");
 
@@ -198,6 +218,11 @@ const inspectClient = async (client) => {
 	const tables = await listTables(client);
 	const dataTables = appTables(tables);
 	const counts = await tableCounts(client, dataTables);
+	let sharedVersion = null;
+	if (tables.includes("shared_runtime")) {
+		const row = await client("shared_runtime").where({ id: SHARED_VERSION_KEY }).first();
+		sharedVersion = row?.value ? String(row.value) : null;
+	}
 	return {
 		reachable: true,
 		npmSchema: tables.includes("user") && tables.includes("setting") && tables.includes("proxy_host"),
@@ -205,6 +230,7 @@ const inspectClient = async (client) => {
 		rowCount: totalRows(counts),
 		counts,
 		migration: await migrationStatus(client),
+		sharedVersion,
 	};
 };
 
@@ -316,6 +342,25 @@ const fingerprint = async () => {
 
 const syncSharedJwtIdentity = async () => {
 	if (!(await db().schema.hasTable("shared_runtime"))) return false;
+
+	const now = new Date();
+	const versionRow = await db()("shared_runtime").where({ id: SHARED_VERSION_KEY }).first();
+	if (!versionRow) {
+		await db()("shared_runtime").insert({
+			id: SHARED_VERSION_KEY,
+			value: currentVersion(),
+			modified_on: now,
+		});
+	} else if (String(versionRow.value) !== currentVersion()) {
+		logger.warn(
+			`Shared MySQL cluster version differs: database=${versionRow.value}, local=${currentVersion()}. Coordinate upgrades across all nodes.`,
+		);
+		await db()("shared_runtime").where({ id: SHARED_VERSION_KEY }).update({
+			value: currentVersion(),
+			modified_on: now,
+		});
+	}
+
 	const local = fs.readFileSync("/data/keys.json", "utf8").trim();
 	const existing = await db()("shared_runtime").where({ id: SHARED_IDENTITY_KEY }).first();
 	if (!existing) {
@@ -349,10 +394,44 @@ const syncSharedJwtIdentity = async () => {
 	return true;
 };
 
+const recordSharedNodeHeartbeat = async () => {
+	const id = getSharedNodeId();
+	const value = JSON.stringify({
+		id,
+		name: os.hostname(),
+		version: currentVersion(),
+		last_seen: new Date().toISOString(),
+	});
+	const rowId = `node:${id}`;
+	const existing = await db()("shared_runtime").where({ id: rowId }).first();
+	if (existing) {
+		await db()("shared_runtime").where({ id: rowId }).update({ value, modified_on: new Date() });
+	} else {
+		await db()("shared_runtime").insert({ id: rowId, value, modified_on: new Date() });
+	}
+};
+
+const listSharedNodes = async () => {
+	if (!(await db().schema.hasTable("shared_runtime"))) return [];
+	const rows = await db()("shared_runtime").where("id", "like", "node:%").select("value", "modified_on");
+	const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+	return rows
+		.map((row) => {
+			try {
+				return JSON.parse(row.value);
+			} catch {
+				return null;
+			}
+		})
+		.filter((row) => row && (!row.last_seen || Date.parse(row.last_seen) >= cutoff))
+		.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+};
+
 const pollSharedDatabase = async () => {
 	if (refreshInProgress) return;
 	refreshInProgress = true;
 	try {
+		await recordSharedNodeHeartbeat();
 		const next = await fingerprint();
 		if (lastFingerprint === null) {
 			lastFingerprint = next;
@@ -374,12 +453,14 @@ const internalDatabaseManager = {
 	status: async (access) => {
 		await access.can("settings:update", "database");
 		const runtime = sanitizeRuntime();
+		const mysqlSharedMode = runtime.engine === "mysql" && runtime.shared;
 		return {
 			current: runtime,
 			migrationInProgress,
 			runtimeConfigPresent: fs.existsSync(RUNTIME_FILE),
 			supportedTargets: ["sqlite", "mysql"],
-			mysqlSharedMode: runtime.engine === "mysql" && runtime.shared,
+			mysqlSharedMode,
+			sharedNodes: mysqlSharedMode ? await listSharedNodes() : [],
 			sharedModeRequirements: [
 				"All NPM Improved nodes must use the same NPM Improved version.",
 				"All nodes must be able to reach the same MySQL/MariaDB database.",
@@ -482,6 +563,11 @@ const internalDatabaseManager = {
 			if (!inspection.npmSchema || inspection.rowCount < 1) {
 				throw new errs.ValidationError(
 					"Target does not contain an existing NPM Improved database. Use Move current data instead.",
+				);
+			}
+			if (inspection.sharedVersion && inspection.sharedVersion !== currentVersion()) {
+				throw new errs.ValidationError(
+					`Shared database belongs to NPM Improved ${inspection.sharedVersion}, but this node is ${currentVersion()}. Install the same NPM Improved version before joining.`,
 				);
 			}
 			await prepareTargetSchema(client);
