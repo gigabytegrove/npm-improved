@@ -2,7 +2,7 @@ name: npm-improved
 
 services:
   app:
-    image: npm-improved:local
+    image: ${NPM_IMAGE:-npm-improved:local}
     build:
       context: .
       dockerfile: docker/Dockerfile
@@ -19,6 +19,8 @@ services:
       TZ: ${TZ:-Etc/UTC}
       DB_SQLITE_FILE: /data/database.sqlite
       NPM_ADMIN_PORT: "81"
+      NPM_HOST_PROJECT_DIR: ${NPM_HOST_PROJECT_DIR:-}
+      NPM_DEPLOYMENT_MODE: ${NPM_DEPLOYMENT_MODE:-sqlite}
       DISABLE_IPV6: ${DISABLE_IPV6:-false}
       INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-}
       INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-}
@@ -29,6 +31,7 @@ services:
     volumes:
       - ./data:/data
       - ./letsencrypt:/etc/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
       test: ["CMD", "/usr/bin/check-health"]
       interval: 10s

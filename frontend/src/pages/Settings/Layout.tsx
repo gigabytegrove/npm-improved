@@ -6,6 +6,7 @@ import DefaultSite from "./DefaultSite";
 import DisasterRecovery from "./DisasterRecovery";
 import InstanceSync from "./InstanceSync";
 import Protection from "./Protection";
+import Update from "./Update";
 
 type SettingsPage =
 	| "default-site"
@@ -13,7 +14,8 @@ type SettingsPage =
 	| "protection"
 	| "database"
 	| "instance-sync"
-	| "disaster-recovery";
+	| "disaster-recovery"
+	| "update";
 
 export default function Layout() {
 	const [page, setPage] = useState<SettingsPage>("default-site");
@@ -93,6 +95,16 @@ export default function Layout() {
 								>
 									Backup &amp; Recovery
 								</a>
+								<a
+									href="#"
+									className={`list-group-item list-group-item-action d-flex align-items-center ${page === "update" ? "active" : ""}`}
+									onClick={(e) => {
+										e.preventDefault();
+										setPage("update");
+									}}
+								>
+									Update
+								</a>
 							</div>
 						</div>
 					</div>
@@ -107,8 +119,10 @@ export default function Layout() {
 							<Database />
 						) : page === "instance-sync" ? (
 							<InstanceSync />
-						) : (
+						) : page === "disaster-recovery" ? (
 							<DisasterRecovery />
+						) : (
+							<Update />
 						)}
 					</div>
 				</div>
