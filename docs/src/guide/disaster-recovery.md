@@ -121,6 +121,29 @@ The restore only succeeds after:
 
 If any of those steps fail, NPM Improved restores the pre-import database and filesystem snapshot and reloads the previous working configuration.
 
+## Emergency restore when the management API is down
+
+The native recovery console at:
+
+```text
+http://<npm-host>:81/recovery/
+```
+
+can stage an encrypted backup and restore a **Full Disaster Recovery** bundle even when the long-running Node management API is unavailable.
+
+This path is intentionally narrower than the normal restore workflow:
+
+- the recovery token is required;
+- only full disaster-recovery bundles are accepted;
+- the normal management API must be unhealthy;
+- the backup must be retained/staged under the configured backup directory;
+- the same pre-restore snapshot and automatic rollback safeguards are used;
+- a restart is required after a successful full-instance restore.
+
+The Go control plane launches a one-shot Node recovery helper so database migrations, models, bundle validation, Nginx regeneration, and rollback semantics stay consistent with the main application.
+
+Configuration-only backups remain a normal-UI operation because those restores remap object ownership to the authenticated destination administrator.
+
 ## Database portability
 
 The logical backup format is database-engine independent. Configuration is exported through the NPM Improved data models rather than as a SQLite/MySQL/PostgreSQL database file.
