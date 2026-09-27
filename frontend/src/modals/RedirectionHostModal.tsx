@@ -10,6 +10,7 @@ import {
 	DomainNamesField,
 	Loading,
 	NginxConfigField,
+	ProtectionProfileField,
 	SSLCertificateField,
 	SSLOptionsFields,
 } from "src/components";
@@ -81,7 +82,7 @@ const RedirectionHostModal = EasyModal.create(({ id, visible, remove }: Props) =
 							hstsSubdomains: data?.hstsSubdomains || false,
 							// Advanced tab
 							advancedConfig: data?.advancedConfig || "",
-							meta: data?.meta || {},
+							meta: { ...(data?.meta || {}), protectionProfile: data?.meta?.protectionProfile || "inherit" },
 						} as any
 					}
 					onSubmit={onSubmit}
@@ -124,6 +125,18 @@ const RedirectionHostModal = EasyModal.create(({ id, visible, remove }: Props) =
 													role="tab"
 												>
 													<T id="column.ssl" />
+												</a>
+											</li>
+											<li className="nav-item" role="presentation">
+												<a
+													href="#tab-protection"
+													className="nav-link"
+													data-bs-toggle="tab"
+													aria-selected="false"
+													tabIndex={-1}
+													role="tab"
+												>
+													Protection
 												</a>
 											</li>
 											<li className="nav-item ms-auto" role="presentation">
@@ -317,6 +330,9 @@ const RedirectionHostModal = EasyModal.create(({ id, visible, remove }: Props) =
 													allowNew
 												/>
 												<SSLOptionsFields color="bg-yellow" />
+											</div>
+											<div className="tab-pane" id="tab-protection" role="tabpanel">
+												<ProtectionProfileField />
 											</div>
 											<div className="tab-pane" id="tab-advanced" role="tabpanel">
 												<NginxConfigField />
