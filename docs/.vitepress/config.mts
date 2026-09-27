@@ -4,7 +4,7 @@ export default defineConfig({
 	title: "NPM Improved",
 	description: "A more resilient, observable, and security-focused Nginx Proxy Manager fork",
 	head: [
-		["link", { rel: "icon", href: "/icon.png" }],
+		["link", { rel: "icon", href: "/npm-improved-mark.webp", type: "image/webp" }],
 		[
 			"meta",
 			{
@@ -30,7 +30,7 @@ export default defineConfig({
 	srcDir: "./src",
 	outDir: "./dist",
 	themeConfig: {
-		logo: { src: "/logo.svg", width: 24, height: 24 },
+		logo: { src: "/npm-improved-mark.webp", width: 32, height: 21 },
 		nav: [
 			{ text: "Guide", link: "/guide/" },
 			{ text: "Architecture", link: "/architecture/" },
