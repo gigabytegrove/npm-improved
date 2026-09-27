@@ -41,6 +41,7 @@ export default defineConfig({
 				items: [
 					{ text: "Guide", link: "/guide/" },
 					{ text: "HTTP Protection", link: "/guide/protection" },
+					{ text: "Backup & Disaster Recovery", link: "/guide/disaster-recovery" },
 					{ text: "Configuration History", link: "/guide/config-history" },
 					{ text: "Architecture", link: "/architecture/" },
 					{ text: "Security", link: "/security/" },
