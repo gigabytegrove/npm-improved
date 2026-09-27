@@ -68,11 +68,31 @@ const fromLegacy = (data) => [{
 }];
 
 const normalizeProxyHostPool = (data, current = null) => {
-	const source = Array.isArray(data.upstreams)
-		? data.upstreams
-		: Array.isArray(current?.upstreams) && current.upstreams.length
-			? current.upstreams
-			: fromLegacy({ ...current, ...data });
+	const legacyFieldsProvided = ["forward_scheme", "forward_host", "forward_port"].some(
+		(key) => typeof data[key] !== "undefined",
+	);
+	let source;
+
+	if (Array.isArray(data.upstreams)) {
+		source = data.upstreams;
+	} else if (legacyFieldsProvided && Array.isArray(current?.upstreams) && current.upstreams.length > 1) {
+		source = current.upstreams.map((target, index) =>
+			index === 0
+				? {
+						...target,
+						scheme: data.forward_scheme ?? target.scheme,
+						host: data.forward_host ?? target.host,
+						port: data.forward_port ?? target.port,
+					}
+				: target,
+		);
+	} else if (legacyFieldsProvided) {
+		source = fromLegacy({ ...current, ...data });
+	} else if (Array.isArray(current?.upstreams) && current.upstreams.length) {
+		source = current.upstreams;
+	} else {
+		source = fromLegacy({ ...current, ...data });
+	}
 
 	if (!source.length) {
 		throw new Error("At least one upstream target is required");
