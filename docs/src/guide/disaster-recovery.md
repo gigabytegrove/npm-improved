@@ -78,7 +78,7 @@ Restore is deliberately destructive and requires entering:
 RESTORE
 ```
 
-Before applying the bundle, NPM Improved creates a local rollback snapshot of the current database scope and relevant persistent filesystem state.
+Before applying the bundle, NPM Improved creates a local rollback snapshot of the current database scope and relevant persistent filesystem state. It also writes an encrypted pre-restore backup under `/data/backups` using the same passphrase as the imported backup. The ten most recent automatic pre-restore bundles are retained.
 
 The imported database/filesystem state is then restored and Nginx configuration is regenerated from the imported records.
 
