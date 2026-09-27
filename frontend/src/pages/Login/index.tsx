@@ -31,12 +31,15 @@ function TwoFactorForm() {
 
 	return (
 		<>
-			<h2 className="h2 text-center mb-4">
-				<T id="login.2fa-title" />
-			</h2>
-			<p className="text-secondary text-center mb-4">
-				<T id="login.2fa-description" />
-			</p>
+			<div className={styles.formHeading}>
+				<span className={styles.eyebrow}>Secure verification</span>
+				<h1>
+					<T id="login.2fa-title" />
+				</h1>
+				<p>
+					<T id="login.2fa-subtitle" />
+				</p>
+			</div>
 			{formErr !== "" && <Alert variant="danger">{formErr}</Alert>}
 			<Formik initialValues={{ code: "" }} onSubmit={onSubmit}>
 				{({ isSubmitting }) => (
@@ -100,9 +103,15 @@ function LoginForm() {
 
 	return (
 		<>
-			<h2 className="h2 text-center mb-4">
-				<T id="login.title" />
-			</h2>
+			<div className={styles.formHeading}>
+				<span className={styles.eyebrow}>NPM Improved</span>
+				<h1>
+					<T id="login.title" />
+				</h1>
+				<p>
+					<T id="login.subtitle" />
+				</p>
+			</div>
 			{formErr !== "" && <Alert variant="danger">{formErr}</Alert>}
 			<Formik
 				initialValues={
@@ -124,8 +133,9 @@ function LoginForm() {
 											{...field}
 											ref={emailRef}
 											type="email"
+											autoComplete="username"
 											required
-											className={`form-control ${form.errors.email && form.touched.email ? " is-invalid" : ""}`}
+											className={`form-control ${form.errors.email && form.touched.email ? "is-invalid" : ""}`}
 											placeholder={intl.formatMessage({ id: "email-address" })}
 										/>
 										<div className="invalid-feedback">{form.errors.email}</div>
@@ -133,24 +143,22 @@ function LoginForm() {
 								)}
 							</Field>
 						</div>
-						<div className="mb-2">
+						<div className="mb-3">
 							<Field name="password" validate={validateString(8, 255)}>
 								{({ field, form }: any) => (
-									<>
-										<label className="form-label">
-											<T id="password" />
-											<input
-												{...field}
-												type="password"
-												autoComplete="current-password"
-												required
-												maxLength={255}
-												className={`form-control ${form.errors.password && form.touched.password ? " is-invalid" : ""}`}
-												placeholder={intl.formatMessage({ id: "password" })}
-											/>
-											<div className="invalid-feedback">{form.errors.password}</div>
-										</label>
-									</>
+									<label className="form-label">
+										<T id="password" />
+										<input
+											{...field}
+											type="password"
+											autoComplete="current-password"
+											required
+											maxLength={255}
+											className={`form-control ${form.errors.password && form.touched.password ? "is-invalid" : ""}`}
+											placeholder={intl.formatMessage({ id: "password" })}
+										/>
+										<div className="invalid-feedback">{form.errors.password}</div>
+									</label>
 								)}
 							</Field>
 						</div>
@@ -179,23 +187,64 @@ export default function Login() {
 	};
 
 	return (
-		<Page className="page page-center">
-			<div className="container container-tight py-4">
-				<div className="d-flex justify-content-between align-items-center mb-4 ps-4 pe-3">
-					<img
-						className={styles.logo}
-						src="/images/logo-text-horizontal-grey.png"
-						alt="Nginx Proxy Manager"
-					/>
-					<div className="d-flex align-items-center gap-1">
+		<Page className={`page page-center ${styles.loginPage}`}>
+			<div className={styles.authShell}>
+				<section className={styles.brandPanel}>
+					<div className={styles.brandLockup}>
+						<span className={styles.brandMark}>
+							<img src="/images/npm-improved-mark.svg" width={48} height={48} alt="" />
+						</span>
+						<div>
+							<div className={styles.brandName}>NPM Improved</div>
+							<div className={styles.brandTagline}>
+								<T id="app.tagline" />
+							</div>
+						</div>
+					</div>
+					<div className={styles.heroCopy}>
+						<span className={styles.heroEyebrow}>
+							<T id="login.hero.eyebrow" />
+						</span>
+						<h2>
+							<T id="login.hero.title" />
+						</h2>
+						<p>
+							<T id="login.hero.description" />
+						</p>
+						<div className={styles.featureGrid}>
+							<span>
+								<T id="login.hero.feature-config" />
+							</span>
+							<span>
+								<T id="login.hero.feature-recovery" />
+							</span>
+							<span>
+								<T id="login.hero.feature-health" />
+							</span>
+						</div>
+					</div>
+					<div className={styles.brandFooter}>Built for reliable self-hosted infrastructure.</div>
+				</section>
+
+				<section className={styles.formPanel}>
+					<div className={styles.toolbar}>
 						<LocalePicker />
 						<ThemeSwitcher />
 					</div>
-				</div>
-				<div className="card card-md">
-					<div className="card-body">{twoFactorChallenge ? <TwoFactorForm /> : <LoginForm />}</div>
-				</div>
-				<div className="text-center text-secondary mt-3">{getVersion()}</div>
+					<div className={styles.formWrap}>
+						<div className={styles.mobileBrand}>
+							<img src="/images/npm-improved-mark.svg" width={40} height={40} alt="" />
+							<div>
+								<strong>NPM Improved</strong>
+								<span>
+									<T id="app.tagline" />
+								</span>
+							</div>
+						</div>
+						{twoFactorChallenge ? <TwoFactorForm /> : <LoginForm />}
+						<div className={styles.version}>NPM Improved {getVersion()}</div>
+					</div>
+				</section>
 			</div>
 		</Page>
 	);
