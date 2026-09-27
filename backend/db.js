@@ -31,7 +31,7 @@ const generateDbConfigFor = (cfg) => {
 const generateDbConfig = () => {
 	if (!configHas("database")) {
 		throw new Error(
-			"Database config does not exist! Please read the instructions: https://nginxproxymanager.com/setup/",
+			"Database config does not exist. See NPM Improved setup documentation: https://www.gigabytegrove.com/projects",
 		);
 	}
 
