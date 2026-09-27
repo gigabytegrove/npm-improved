@@ -19,26 +19,33 @@ const checkDatabase = async () => {
 
 const checkNginx = async () => {
 	let pid = null;
+	let processRunning = false;
 	try {
 		pid = Number.parseInt(fs.readFileSync("/run/nginx/nginx.pid", "utf8").trim(), 10) || null;
+		if (pid) {
+			process.kill(pid, 0);
+			processRunning = true;
+		}
 	} catch {
-		// Missing PID is represented by a degraded component below.
+		processRunning = false;
 	}
 
+	let configValid = false;
 	try {
 		await internalNginx.test();
-		return ok({
-			pid,
-			config_valid: true,
-			last_reload: internalNginx.getLastReload(),
-		});
+		configValid = true;
 	} catch {
-		return degraded({
-			pid,
-			config_valid: false,
-			last_reload: internalNginx.getLastReload(),
-		});
+		configValid = false;
 	}
+
+	const details = {
+		pid,
+		process_running: processRunning,
+		config_valid: configValid,
+		last_reload: internalNginx.getLastReload(),
+	};
+
+	return processRunning && configValid ? ok(details) : degraded(details);
 };
 
 const checkLogs = async () => {
