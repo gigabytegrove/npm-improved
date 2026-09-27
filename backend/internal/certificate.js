@@ -15,6 +15,11 @@ import { restoreModelRow, snapshotModelRow } from "../lib/model-rollback.js";
 import utils from "../lib/utils.js";
 import { debug, ssl as logger } from "../logger.js";
 import certificateModel from "../models/certificate.js";
+import deadHostModel from "../models/dead_host.js";
+import proxyHostModel from "../models/proxy_host.js";
+import redirectionHostModel from "../models/redirection_host.js";
+import settingModel from "../models/setting.js";
+import streamModel from "../models/stream.js";
 import tokenModel from "../models/token.js";
 import userModel from "../models/user.js";
 import internalAuditLog from "./audit-log.js";
@@ -35,6 +40,9 @@ const internalCertificate = {
 	intervalTimeout: 1000 * 60 * 60, // 1 hour
 	interval: null,
 	intervalProcessing: false,
+	lifecycleInterval: null,
+	lifecycleProcessing: false,
+	lifecycleIntervalTimeout: 1000 * 60 * 60, // 1 hour
 	renewBeforeExpirationBy: [30, "days"],
 
 	initTimer: () => {
@@ -43,16 +51,28 @@ const internalCertificate = {
 			internalCertificate.processExpiringHosts,
 			internalCertificate.intervalTimeout,
 		);
-		// And do this now as well
+
+		logger.info("Certificate Lifecycle Timer initialized");
+		internalCertificate.lifecycleInterval = setInterval(
+			internalCertificate.processCertificateLifecycle,
+			internalCertificate.lifecycleIntervalTimeout,
+		);
+
+		// Run both maintenance passes at startup as well.
 		internalCertificate.processExpiringHosts();
+		internalCertificate.processCertificateLifecycle();
 	},
 
 	/**
 	 * Triggered by a timer, this will check for expiring hosts and renew their ssl certs if required
 	 */
-	processExpiringHosts: () => {
-		if (!internalCertificate.intervalProcessing) {
-			internalCertificate.intervalProcessing = true;
+	processExpiringHosts: async () => {
+		if (internalCertificate.intervalProcessing) {
+			return;
+		}
+
+		internalCertificate.intervalProcessing = true;
+		try {
 			logger.info(
 				`Renewing SSL certs expiring within ${internalCertificate.renewBeforeExpirationBy[0]} ${internalCertificate.renewBeforeExpirationBy[1]} ...`,
 			);
@@ -61,54 +81,218 @@ const internalCertificate = {
 				.add(internalCertificate.renewBeforeExpirationBy[0], internalCertificate.renewBeforeExpirationBy[1])
 				.format("YYYY-MM-DD HH:mm:ss");
 
-			// Fetch all the letsencrypt certs from the db that will expire within the configured threshold
-			certificateModel
-				.query()
-				.where("is_deleted", 0)
-				.andWhere("provider", "letsencrypt")
-				.andWhere("expires_on", "<", expirationThreshold)
-				.then((certificates) => {
-					if (!certificates?.length) {
-						return null;
-					}
+			const [certificates, usageMap] = await Promise.all([
+				certificateModel
+					.query()
+					.where("is_deleted", 0)
+					.andWhere("provider", "letsencrypt")
+					.andWhere("expires_on", "<", expirationThreshold),
+				internalCertificate.getUsageMap(),
+			]);
 
-					/**
-					 * Renews must be run sequentially or we'll get an error 'Another
-					 * instance of Certbot is already running.'
-					 */
-					let sequence = Promise.resolve();
+			for (const certificate of certificates) {
+				if ((usageMap.get(certificate.id) || 0) === 0) {
+					logger.info(`Skipping renewal for unused Cert #${certificate.id}`);
+					continue;
+				}
 
-					certificates.forEach((certificate) => {
-						sequence = sequence.then(() =>
-							internalCertificate
-								.renew(
-									{
-										can: () =>
-											Promise.resolve({
-												permission_visibility: "all",
-											}),
-										token: tokenModel(),
-									},
-									{ id: certificate.id },
-								)
-								.catch((err) => {
-									// Don't want to stop the train here, just log the error
-									logger.error(err.message);
-								}),
-						);
-					});
+				try {
+					await internalCertificate.renew(
+						{
+							can: () => Promise.resolve({ permission_visibility: "all" }),
+							token: tokenModel(),
+						},
+						{ id: certificate.id },
+					);
+				} catch (err) {
+					logger.error(err.message);
+				}
+			}
 
-					return sequence;
-				})
-				.then(() => {
-					logger.info("Completed SSL cert renew process");
-					internalCertificate.intervalProcessing = false;
-				})
-				.catch((err) => {
-					logger.error(err);
-					internalCertificate.intervalProcessing = false;
-				});
+			logger.info("Completed SSL cert renew process");
+		} catch (err) {
+			logger.error(err);
+		} finally {
+			internalCertificate.intervalProcessing = false;
 		}
+	},
+
+	getUsageMap: async () => {
+		const countByCertificate = async (model) =>
+			model
+				.query()
+				.select("certificate_id")
+				.count("id as count")
+				.where("is_deleted", 0)
+				.andWhere("certificate_id", ">", 0)
+				.groupBy("certificate_id");
+
+		const resultSets = await Promise.all([
+			countByCertificate(proxyHostModel),
+			countByCertificate(redirectionHostModel),
+			countByCertificate(deadHostModel),
+			countByCertificate(streamModel),
+		]);
+
+		const usageMap = new Map();
+		for (const rows of resultSets) {
+			for (const row of rows) {
+				const certificateId = Number.parseInt(row.certificate_id, 10);
+				const count = Number.parseInt(row.count, 10) || 0;
+				usageMap.set(certificateId, (usageMap.get(certificateId) || 0) + count);
+			}
+		}
+		return usageMap;
+	},
+
+	getLifecyclePolicy: async () => {
+		const row = await settingModel.query().where("id", "certificate-lifecycle").first();
+		const retention = Number.parseInt(row?.meta?.unused_retention_days, 10);
+		return {
+			enabled: row?.value !== "disabled",
+			unusedRetentionDays: Number.isInteger(retention) && retention >= 1 && retention <= 3650 ? retention : 30,
+			purgeCustomCertificates: row?.meta?.purge_custom_certificates !== false,
+		};
+	},
+
+	decorateLifecycle: (certificate, usageMap, policy) => {
+		const usageCount = usageMap.get(certificate.id) || 0;
+		const unusedSince = usageCount === 0 ? certificate.meta?.lifecycle_unused_since || null : null;
+		const purgeEligibleOn =
+			unusedSince && moment(unusedSince).isValid()
+				? moment(unusedSince).add(policy.unusedRetentionDays, "days").toISOString()
+				: null;
+		const providerEligible = certificate.provider !== "other" || policy.purgeCustomCertificates;
+
+		certificate.is_in_use = usageCount > 0;
+		certificate.usage_count = usageCount;
+		certificate.unused_since = unusedSince;
+		certificate.purge_eligible_on = purgeEligibleOn;
+		certificate.auto_purge_eligible = policy.enabled && providerEligible;
+		return certificate;
+	},
+
+	processCertificateLifecycle: async () => {
+		if (internalCertificate.lifecycleProcessing) {
+			return;
+		}
+
+		internalCertificate.lifecycleProcessing = true;
+		try {
+			const [policy, certificates, usageMap] = await Promise.all([
+				internalCertificate.getLifecyclePolicy(),
+				certificateModel.query().where("is_deleted", 0),
+				internalCertificate.getUsageMap(),
+			]);
+
+			for (const certificate of certificates) {
+				const usageCount = usageMap.get(certificate.id) || 0;
+				const meta = _.cloneDeep(certificate.meta || {});
+				let changed = false;
+
+				if (usageCount > 0) {
+					if (meta.lifecycle_unused_since || meta.lifecycle_purge_after) {
+						delete meta.lifecycle_unused_since;
+						delete meta.lifecycle_purge_after;
+						changed = true;
+					}
+					if (changed) {
+						await certificateModel.query().patchAndFetchById(certificate.id, { meta });
+					}
+					continue;
+				}
+
+				let unusedSince = meta.lifecycle_unused_since;
+				if (!unusedSince || !moment(unusedSince).isValid()) {
+					unusedSince = new Date().toISOString();
+					meta.lifecycle_unused_since = unusedSince;
+					changed = true;
+				}
+
+				const purgeAfter = moment(unusedSince).add(policy.unusedRetentionDays, "days").toISOString();
+				if (meta.lifecycle_purge_after !== purgeAfter) {
+					meta.lifecycle_purge_after = purgeAfter;
+					changed = true;
+				}
+
+				if (changed) {
+					await certificateModel.query().patchAndFetchById(certificate.id, { meta });
+				}
+
+				const providerEligible = certificate.provider !== "other" || policy.purgeCustomCertificates;
+				if (
+					policy.enabled &&
+					providerEligible &&
+					moment().isSameOrAfter(moment(purgeAfter))
+				) {
+					await internalCertificate.purgeUnusedCertificate({ ...certificate, meta });
+				}
+			}
+		} catch (err) {
+			logger.error(`Certificate lifecycle processing failed: ${err.message}`);
+		} finally {
+			internalCertificate.lifecycleProcessing = false;
+		}
+	},
+
+	purgeUnusedCertificate: async (certificate) => {
+		// Usage can change between the lifecycle scan and purge. Re-check at the
+		// final destructive boundary and abort if any host now references it.
+		const usageMap = await internalCertificate.getUsageMap();
+		if ((usageMap.get(certificate.id) || 0) > 0) {
+			const fresh = await certificateModel.query().findById(certificate.id);
+			if (fresh) {
+				const meta = _.cloneDeep(fresh.meta || {});
+				delete meta.lifecycle_unused_since;
+				delete meta.lifecycle_purge_after;
+				await certificateModel.query().patchAndFetchById(certificate.id, { meta });
+			}
+			logger.info(`Cancelled purge for Cert #${certificate.id}; it is in use again`);
+			return false;
+		}
+
+		const fresh = await certificateModel.query().findById(certificate.id);
+		if (!fresh || fresh.is_deleted) {
+			return false;
+		}
+
+		if (fresh.provider === "letsencrypt") {
+			const fullchain = `${internalCertificate.getLiveCertPath(fresh.id)}/fullchain.pem`;
+			if (fs.existsSync(fullchain)) {
+				await internalCertificate.revokeLetsEncryptSsl(fresh, true);
+			} else {
+				fs.rmSync(internalCertificate.getLiveCertPath(fresh.id), { recursive: true, force: true });
+				fs.rmSync(`/etc/letsencrypt/archive/npm-${fresh.id}`, { recursive: true, force: true });
+				fs.rmSync(`/etc/letsencrypt/renewal/npm-${fresh.id}.conf`, { force: true });
+				fs.rmSync(`/etc/letsencrypt/credentials/credentials-${fresh.id}`, { force: true });
+			}
+		} else {
+			fs.rmSync(`/data/custom_ssl/npm-${fresh.id}`, { recursive: true, force: true });
+		}
+
+		await certificateModel.query().deleteById(fresh.id);
+
+		try {
+			await internalAuditLog.add(
+				{ token: { getUserId: () => 1 } },
+				{
+					action: "auto-purged",
+					object_type: "certificate",
+					object_id: fresh.id,
+					meta: {
+						system: true,
+						provider: fresh.provider,
+						domain_names: fresh.domain_names,
+						unused_since: fresh.meta?.lifecycle_unused_since || null,
+					},
+				},
+			);
+		} catch (err) {
+			logger.error(`Cert #${fresh.id} purged but audit logging failed: ${err.message}`);
+		}
+
+		logger.info(`Auto-purged unused Cert #${fresh.id}: ${fresh.nice_name}`);
+		return true;
 	},
 
 	/**
