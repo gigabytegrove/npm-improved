@@ -1,18 +1,20 @@
 import {
-	IconBook,
-	IconDeviceDesktop,
-	IconFileText,
-	IconHome,
+	IconActivityHeartbeat,
+	IconBook2,
+	IconCertificate,
+	IconFileAnalytics,
 	IconHistory,
-	IconHeartbeat,
+	IconHome,
 	IconLock,
+	IconRoute,
+	IconServer2,
 	IconSettings,
-	IconShield,
-	IconUser,
+	IconShieldLock,
+	IconUsers,
 } from "@tabler/icons-react";
-import cn from "classnames";
 import React from "react";
-import { HasPermission, NavLink } from "src/components";
+import { useLocation, useNavigate } from "react-router-dom";
+import { HasPermission } from "src/components";
 import { T } from "src/locale";
 import {
 	ACCESS_LISTS,
@@ -26,52 +28,48 @@ import {
 	STREAMS,
 	VIEW,
 } from "src/modules/Permissions";
+import styles from "./SiteMenu.module.css";
 
 interface MenuItem {
 	label: string;
 	icon?: React.ElementType;
-	to?: string;
-	items?: MenuItem[];
+	to: string;
 	permissionSection?: Section | typeof ADMIN;
 	permission?: typeof VIEW | typeof MANAGE;
 }
 
-const menuItems: MenuItem[] = [
+const routingItems: MenuItem[] = [
 	{
-		to: "/",
-		icon: IconHome,
-		label: "dashboard",
+		to: "/nginx/proxy",
+		icon: IconRoute,
+		label: "proxy-hosts",
+		permissionSection: PROXY_HOSTS,
+		permission: VIEW,
 	},
 	{
-		icon: IconDeviceDesktop,
-		label: "hosts",
-		items: [
-			{
-				to: "/nginx/proxy",
-				label: "proxy-hosts",
-				permissionSection: PROXY_HOSTS,
-				permission: VIEW,
-			},
-			{
-				to: "/nginx/redirection",
-				label: "redirection-hosts",
-				permissionSection: REDIRECTION_HOSTS,
-				permission: VIEW,
-			},
-			{
-				to: "/nginx/stream",
-				label: "streams",
-				permissionSection: STREAMS,
-				permission: VIEW,
-			},
-			{
-				to: "/nginx/404",
-				label: "dead-hosts",
-				permissionSection: DEAD_HOSTS,
-				permission: VIEW,
-			},
-		],
+		to: "/nginx/redirection",
+		icon: IconRoute,
+		label: "redirection-hosts",
+		permissionSection: REDIRECTION_HOSTS,
+		permission: VIEW,
 	},
+	{
+		to: "/nginx/stream",
+		icon: IconServer2,
+		label: "streams",
+		permissionSection: STREAMS,
+		permission: VIEW,
+	},
+	{
+		to: "/nginx/404",
+		icon: IconShieldLock,
+		label: "dead-hosts",
+		permissionSection: DEAD_HOSTS,
+		permission: VIEW,
+	},
+];
+
+const controlItems: MenuItem[] = [
 	{
 		to: "/access",
 		icon: IconLock,
@@ -81,20 +79,23 @@ const menuItems: MenuItem[] = [
 	},
 	{
 		to: "/certificates",
-		icon: IconShield,
+		icon: IconCertificate,
 		label: "certificates",
 		permissionSection: CERTIFICATES,
 		permission: VIEW,
 	},
 	{
 		to: "/users",
-		icon: IconUser,
+		icon: IconUsers,
 		label: "users",
 		permissionSection: ADMIN,
 	},
+];
+
+const observabilityItems: MenuItem[] = [
 	{
 		to: "/audit-log",
-		icon: IconBook,
+		icon: IconBook2,
 		label: "auditlogs",
 		permissionSection: ADMIN,
 	},
@@ -106,13 +107,13 @@ const menuItems: MenuItem[] = [
 	},
 	{
 		to: "/logs",
-		icon: IconFileText,
+		icon: IconFileAnalytics,
 		label: "logs",
 		permissionSection: ADMIN,
 	},
 	{
 		to: "/system-health",
-		icon: IconHeartbeat,
+		icon: IconActivityHeartbeat,
 		label: "system-health",
 		permissionSection: ADMIN,
 	},
@@ -124,105 +125,105 @@ const menuItems: MenuItem[] = [
 	},
 ];
 
-const getMenuItem = (item: MenuItem, onClick?: () => void) => {
-	if (item.items && item.items.length > 0) {
-		return getMenuDropown(item, onClick);
-	}
+const isActive = (pathname: string, target: string) =>
+	target === "/" ? pathname === "/" : pathname === target || pathname.startsWith(`${target}/`);
+
+function MenuLink({ item, onNavigate }: { item: MenuItem; onNavigate: () => void }) {
+	const location = useLocation();
+	const navigate = useNavigate();
+	const Icon = item.icon;
+	const active = isActive(location.pathname, item.to);
 
 	return (
 		<HasPermission
-			key={`item-${item.label}`}
 			section={item.permissionSection}
 			permission={item.permission || VIEW}
 			hideError
 		>
-			<li className="nav-item">
-				<NavLink to={item.to} onClick={onClick}>
-					<span className="nav-link-icon d-md-none d-lg-inline-block">
-						{item.icon && React.createElement(item.icon, { height: 24, width: 24 })}
-					</span>
-					<span className="nav-link-title">
-						<T id={item.label} />
-					</span>
-				</NavLink>
-			</li>
+			<a
+				href={item.to}
+				className={`${styles.item} ${active ? styles.active : ""}`}
+				aria-current={active ? "page" : undefined}
+				onClick={(event) => {
+					event.preventDefault();
+					navigate(item.to);
+					onNavigate();
+				}}
+			>
+				<span className={styles.itemIcon}>{Icon ? <Icon size={19} stroke={1.8} /> : null}</span>
+				<span className={styles.itemLabel}>
+					<T id={item.label} />
+				</span>
+			</a>
 		</HasPermission>
 	);
-};
+}
 
-const getMenuDropown = (item: MenuItem, onClick?: () => void) => {
-	const cns = cn("nav-item", "dropdown");
+function MenuGroup({
+	title,
+	items,
+	onNavigate,
+}: {
+	title: string;
+	items: MenuItem[];
+	onNavigate: () => void;
+}) {
 	return (
-		<HasPermission
-			key={`item-${item.label}`}
-			section={item.permissionSection}
-			permission={item.permission || VIEW}
-			hideError
-		>
-			<li className={cns}>
-				<a
-					className="nav-link dropdown-toggle"
-					href={item.to}
-					data-bs-toggle="dropdown"
-					aria-expanded="false"
-					role="button"
-				>
-					<span className="nav-link-icon d-md-none d-lg-inline-block">
-						<IconDeviceDesktop height={24} width={24} />
-					</span>
-					<span className="nav-link-title">
-						<T id={item.label} />
-					</span>
-				</a>
-				<div className="dropdown-menu">
-					{item.items?.map((subitem, idx) => {
-						return (
-							<HasPermission
-								key={`${idx}-${subitem.to}`}
-								section={subitem.permissionSection}
-								permission={subitem.permission || VIEW}
-								hideError
-							>
-								<NavLink to={subitem.to} isDropdownItem onClick={onClick}>
-									<T id={subitem.label} />
-								</NavLink>
-							</HasPermission>
-						);
-					})}
-				</div>
-			</li>
-		</HasPermission>
+		<div className={styles.group}>
+			<div className={styles.groupLabel}>{title}</div>
+			<div className={styles.groupItems}>
+				{items.map((item) => (
+					<MenuLink key={item.to} item={item} onNavigate={onNavigate} />
+				))}
+			</div>
+		</div>
 	);
-};
+}
 
 export function SiteMenu() {
-	const closeMenu = () =>
-		setTimeout(() => {
-			const navbarToggler = document.querySelector<HTMLElement>(".navbar-toggler");
-			const navbarMenu = document.querySelector("#navbar-menu");
-			if (navbarToggler && navbarMenu?.classList.contains("show")) {
-				navbarToggler.click();
-			}
-		}, 300);
+	const closeMenu = () => {
+		const menu = document.querySelector<HTMLElement>("#navbar-menu");
+		const toggler = document.querySelector<HTMLElement>("[data-npmi-menu-toggle]");
+		if (window.innerWidth < 768 && menu?.classList.contains("show")) {
+			toggler?.click();
+		}
+	};
 
 	return (
-		<header className="navbar-expand-md">
-			<div className="collapse navbar-collapse" id="navbar-menu">
-				<div className="navbar">
-					<div className="container-xl">
-						<div className="row flex-column flex-md-row flex-fill align-items-center">
-							<div className="col">
-								<ul className="navbar-nav">
-									{menuItems.length > 0 &&
-										menuItems.map((item) => {
-											return getMenuItem(item, closeMenu);
-										})}
-								</ul>
-							</div>
+		<aside id="navbar-menu" className={`${styles.sidebar} collapse d-md-flex`}>
+			<div className={styles.inner}>
+				<a href="/" className={styles.brand} onClick={closeMenu}>
+					<img
+						src="/images/npm-improved-logo.webp"
+						alt="Nginx Proxy Manager Improved"
+						className={styles.brandLogo}
+					/>
+				</a>
+
+				<div className={styles.productMeta}>
+					<span className={styles.productDot} />
+					<span>Control Center</span>
+				</div>
+
+				<nav className={styles.navigation} aria-label="Primary navigation">
+					<div className={styles.group}>
+						<div className={styles.groupItems}>
+							<MenuLink
+								item={{ to: "/", icon: IconHome, label: "dashboard" }}
+								onNavigate={closeMenu}
+							/>
 						</div>
 					</div>
+					<MenuGroup title="Routing" items={routingItems} onNavigate={closeMenu} />
+					<MenuGroup title="Control" items={controlItems} onNavigate={closeMenu} />
+					<MenuGroup title="Observe & manage" items={observabilityItems} onNavigate={closeMenu} />
+				</nav>
+
+				<div className={styles.footer}>
+					<div className={styles.footerLabel}>NPM Improved</div>
+					<div className={styles.footerText}>Resilient reverse proxy control plane</div>
 				</div>
 			</div>
-		</header>
+		</aside>
 	);
 }
