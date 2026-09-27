@@ -10,9 +10,17 @@ No. NPM Improved is a fork based on Nginx Proxy Manager. It intentionally keeps 
 
 ## Is there a stable NPM Improved Docker image?
 
-Not yet. NPM Improved v1.0.0 is stable, but a pre-built container image is not published yet. Build from source using the repository's supported Docker installer or `scripts/buildx` helper.
+Yes. Beginning with v1.1.0, stable NPM Improved releases publish official Linux amd64 and arm64 images to `ghcr.io/gigabytegrove/npm-improved`.
 
 Do not use an upstream `jc21/nginx-proxy-manager` image and expect NPM Improved features to be present.
+
+## Can NPM Improved update itself?
+
+Yes, on normal single-node Docker deployments running v1.1.0 or newer. Open **Settings → Update** to check the latest stable release, read release notes, install the update, restart the application, or roll back to the previous image when rollback state is available.
+
+There is no permanent update-worker container. NPM Improved launches a temporary self-cleaning Docker handoff only while replacing or restarting the running application container.
+
+Shared MySQL and Instance Synchronization deployments require a coordinated maintenance update and are blocked from the single-node Update action.
 
 ## Which architectures can I build?
 
