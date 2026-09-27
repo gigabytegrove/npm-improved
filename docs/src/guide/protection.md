@@ -103,7 +103,7 @@ If a service is sensitive to connection limits or timeout behavior, set that hos
 
 ## Security event visibility
 
-Rate-limited responses use status 429 and appear in access logs. The Security Events workspace also counts denied/throttled responses alongside classified probe patterns.
+Rate-limited responses use status 429 and appear in access logs. The Security Events workspace records these as **Rate limit enforced** events, while also counting other denied/throttled responses and classified probe patterns.
 
 ## Transactional policy changes
 
