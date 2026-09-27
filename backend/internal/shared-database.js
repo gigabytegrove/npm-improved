@@ -362,7 +362,19 @@ const setRole = async ({ role, force = false, confirmation = "" }) => {
 		}
 		await claimPrimary(force);
 		writeNode({ role: "primary", last_error: null });
-		await publishNow({ force: true });
+		try {
+			// The database is already common to every node. Rebuild this node from
+			// that authoritative data before publishing its local certificate/filesystem
+			// state as the new Primary.
+			await internalDisasterRecovery.regenerateNginx();
+			await publishNow({ force: true });
+		} catch (err) {
+			writeNode({ role: current.role, last_error: err.message });
+			await db()("npmi_shared_state")
+				.where({ id: 1, primary_node_id: current.node_id })
+				.update({ primary_node_id: null, primary_seen_on: null });
+			throw err;
+		}
 	} else {
 		writeNode({ role: "secondary", initialized: false, last_applied_revision: 0, last_error: null });
 		const state = await stateRow();
