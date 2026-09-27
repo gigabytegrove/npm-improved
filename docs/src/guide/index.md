@@ -2,116 +2,89 @@
 outline: deep
 ---
 
-# Guide
+# NPM Improved Guide
 
-::: raw
-<p align="center">
-	<a href="https://hub.docker.com/repository/docker/jc21/nginx-proxy-manager" style="display:inline;margin-right:5px;">
-		<img src="https://img.shields.io/docker/stars/jc21/nginx-proxy-manager.svg?style=for-the-badge" style="display:inline;">
-	</a>
-	<a href="https://hub.docker.com/repository/docker/jc21/nginx-proxy-manager" style="display:inline;margin-right:5px;">
-		<img src="https://img.shields.io/docker/pulls/jc21/nginx-proxy-manager.svg?style=for-the-badge" style="display:inline;">
-	</a>
-</p>
-:::
+NPM Improved is a compatibility-focused fork of Nginx Proxy Manager. It keeps Nginx as the traffic engine and the familiar host/certificate workflow, but changes the failure model and management architecture so configuration mistakes are recoverable instead of destructive.
 
-This project comes as a pre-built docker image that enables you to easily forward to your websites
-running at home or otherwise, including free SSL, without having to know too much about Nginx or Letsencrypt.
+## Development status
 
-- [Quick Setup](#quick-setup)
-- [Full Setup](/setup/)
-- [Screenshots](/screenshots/)
+NPM Improved is currently pre-1.0. The `develop` branch is the integration branch. There is not yet a stable published NPM Improved container image, so production deployments should not be inferred from upstream Nginx Proxy Manager image tags.
 
-## Project Goal
+## Key differences from upstream NPM
 
-I created this project to fill a personal need to provide users with an easy way to accomplish reverse
-proxying hosts with SSL termination and it had to be so easy that a monkey could do it. This goal hasn't changed.
-While there might be advanced options they are optional and the project should be as simple as possible
-so that the barrier for entry here is low.
+- the management listener is served by a standalone Go control-plane process;
+- Nginx host changes are transactional and retain a last-known-good configuration;
+- database host state is rolled back when the Nginx transaction fails;
+- certificates have active/unused lifecycle states and quarantine cleanup;
+- raw logs and structured security events are exposed in the UI;
+- HTTP hosts can use managed Protection profiles;
+- repository rules and required checks are versioned with the project.
 
-::: raw
-<a href="https://www.buymeacoffee.com/jc21" target="_blank"><img src="http://public.jc21.com/github/by-me-a-coffee.png" alt="Buy Me A Coffee" style="height: 51px !important;width: 217px !important;" ></a>
-:::
+## Development setup
 
-## Features
+Requirements:
 
-- Beautiful and Secure Admin Interface based on [Tabler](https://tabler.io/)
-- Easily create forwarding domains, redirections, streams and 404 hosts without knowing anything about Nginx
-- Free SSL using Let's Encrypt or provide your own custom SSL certificates
-- Access Lists and basic HTTP Authentication for your hosts
-- Advanced Nginx configuration available for super users
-- User management, permissions and audit log
+- Docker and Docker Compose;
+- Git;
+- `jq`.
 
-
-## Hosting your home network
-
-I won't go in to too much detail here but here are the basics for someone new to this self-hosted world.
-
-1. Your home router will have a Port Forwarding section somewhere. Log in and find it
-2. Add port forwarding for port 80 and 443 to the server hosting this project
-3. Configure your domain name details to point to your home, either with a static ip or a service like DuckDNS or [Amazon Route53](https://github.com/jc21/route53-ddns)
-4. Use the Nginx Proxy Manager as your gateway to forward to your other web based services
-
-## Quick Setup
-
-1. Install Docker and Docker-Compose
-
-- [Docker Install documentation](https://docs.docker.com/get-docker/)
-- [Docker-Compose Install documentation](https://docs.docker.com/compose/install/)
-
-2. Create a docker-compose.yml file similar to this:
-
-```yml
-services:
-  app:
-    image: 'jc21/nginx-proxy-manager:{{VERSION}}'
-    restart: unless-stopped
-    environment:
-      TZ: "Australia/Brisbane"
-    ports:
-      - '80:80'
-      - '81:81'
-      - '443:443'
-    volumes:
-      - ./data:/data
-      - ./letsencrypt:/etc/letsencrypt
-```
-
-This is the bare minimum configuration required. See the [documentation](https://nginxproxymanager.com/setup/) for more.
-
-3. Bring up your stack by running
+Clone and start the development stack:
 
 ```bash
-docker compose up -d
+git clone https://github.com/gigabytegrove/npm-improved.git
+cd npm-improved
+./scripts/start-dev
 ```
 
-4. Log in to the Admin UI
+The startup script prints the live development endpoints. The default development mapping exposes:
 
-When your docker container is running, connect to it on port `81` for the admin interface.
+- admin UI: `http://127.0.0.1:3081`;
+- Nginx HTTP listener: `http://127.0.0.1:3080`;
+- Swagger UI: `http://127.0.0.1:3082`.
 
-[http://127.0.0.1:81](http://127.0.0.1:81)
+Stop the environment with:
 
-This startup can take a minute depending on your hardware.
+```bash
+./scripts/stop-dev
+```
 
+## Building an image from source
 
-## Contributing
+Until an official NPM Improved image is published, build directly from this repository:
 
-All are welcome to create pull requests for this project, against the `develop` branch. Official releases are created from the `master` branch.
+```bash
+./scripts/buildx --load -t npm-improved:dev
+```
 
-CI is used in this project. All PR's must pass before being considered. After passing,
-docker builds for PR's are available on dockerhub for manual verifications.
+The production Dockerfile supports `linux/amd64` and `linux/arm64`.
 
-Documentation within the `develop` branch is available for preview at
-[https://develop.nginxproxymanager.com](https://develop.nginxproxymanager.com)
+## Management and traffic separation
 
+The normal production ports remain:
 
-### Contributors
+| Port | Purpose |
+| --- | --- |
+| 80 | HTTP traffic |
+| 81 | NPM Improved management control plane |
+| 443 | HTTPS traffic |
 
-Special thanks to [all of our contributors](https://github.com/NginxProxyManager/nginx-proxy-manager/graphs/contributors).
+Port 81 is no longer owned by the Nginx traffic process.
 
+## Persistent state
 
-## Getting Support
+Back up both locations before upgrades:
 
-1. [Found a bug?](https://github.com/NginxProxyManager/nginx-proxy-manager/issues)
-2. [Discussions](https://github.com/NginxProxyManager/nginx-proxy-manager/discussions)
-3. [Reddit](https://reddit.com/r/nginxproxymanager)
+```text
+/data
+/etc/letsencrypt
+```
+
+See [Upgrading](/upgrading/) before moving between development snapshots.
+
+## Protection
+
+See [HTTP Protection](/guide/protection) for profile behavior, trusted networks, per-host overrides, and limitations.
+
+## Upstream attribution
+
+NPM Improved is based on [Nginx Proxy Manager](https://github.com/NginxProxyManager/nginx-proxy-manager) and retains the upstream MIT license and attribution.
