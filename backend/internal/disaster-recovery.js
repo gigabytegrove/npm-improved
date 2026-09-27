@@ -37,6 +37,7 @@ const TABLES = Object.freeze({
 		["redirection_host", redirectionHostModel],
 		["dead_host", deadHostModel],
 		["stream", streamModel],
+		["config_revision", configRevisionModel],
 	],
 	"disaster-recovery": [
 		["user", userModel],
@@ -224,8 +225,11 @@ const writeRows = async (trx, table, model, rows, ownerUserId = null) => {
 		if (ownerUserId && Object.hasOwn(row, "owner_user_id")) {
 			row.owner_user_id = ownerUserId;
 		}
-		if (table === "config_revision" && ownerUserId && Object.hasOwn(row, "user_id")) {
-			row.user_id = ownerUserId;
+		if (table === "config_revision" && ownerUserId) {
+			if (Object.hasOwn(row, "user_id")) row.user_id = ownerUserId;
+			if (row.snapshot && typeof row.snapshot === "object" && Object.hasOwn(row.snapshot, "owner_user_id")) {
+				row.snapshot.owner_user_id = ownerUserId;
+			}
 		}
 
 		const instance = model.fromJson(row);
@@ -238,7 +242,7 @@ const writeRows = async (trx, table, model, rows, ownerUserId = null) => {
 	if (rows.length && db().client.config.client === "pg" && rows.some((row) => Number.isInteger(row.id))) {
 		const maxId = Math.max(...rows.map((row) => Number(row.id) || 0));
 		if (maxId > 0) {
-			await trx.raw("SELECT setval(pg_get_serial_sequence(?, 'id'), ?, true)", [table, maxId]);
+			await trx.raw("SELECT setval(pg_get_serial_sequence(quote_ident(?), 'id'), ?, true)", [table, maxId]);
 		}
 	}
 };
