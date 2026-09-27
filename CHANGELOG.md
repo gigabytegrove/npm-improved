@@ -2,6 +2,35 @@
 
 All notable NPM Improved changes are documented here.
 
+## [1.1.0] - 2026-09-27
+
+NPM Improved v1.1.0 adds native lifecycle management from the Control Center and official stable container images.
+
+### Settings → Update
+
+- Added a dedicated **Settings → Update** workspace.
+- Shows the installed version, latest stable release, release date, release notes, and durable update status.
+- Added **Check for updates**, **Update**, **Restart NPM Improved**, and **Rollback to previous version** controls.
+- Requires the current administrator password for update, restart, and rollback operations.
+- Persists update state under `/data` so progress/result survives browser refresh and application replacement.
+- Automatically reconnects through the normal UI polling path after the application container returns.
+
+### Native container updates
+
+- Added a temporary, self-cleaning Docker CLI handoff used only while an update/restart/rollback is active.
+- No permanent updater or worker sidecar is introduced.
+- Preserves the existing Compose environment, ports, volumes, networks, database mode, certificates, backups, and persistent application state.
+- Verifies Docker health, the independent control-plane health endpoint, and live build identity after replacement.
+- Automatically restores the previous image configuration when a target image fails to start or pass verification.
+- Blocks unsafe automatic updates during database migration, disaster-recovery restore, Shared MySQL mode, or Primary/Secondary Instance Synchronization.
+
+### Distribution
+
+- Stable releases now publish official NPM Improved images to GitHub Container Registry.
+- Release images target Linux amd64 and arm64.
+- Versioned, `v`-prefixed, and `latest` stable tags are published.
+- v1.0.0 → v1.1.0 remains a CLI/installer upgrade; v1.1.0 establishes the in-app update path for subsequent supported stable releases.
+
 ## [1.0.0] - 2026-09-27
 
 NPM Improved v1.0.0 is the first stable release and establishes the supported 1.x baseline.
