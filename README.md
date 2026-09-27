@@ -4,6 +4,8 @@
 
 Repository: https://github.com/gigabytegrove/npm-improved
 
+Project page: https://www.gigabytegrove.com/projects
+
 > **Development status:** NPM Improved is currently pre-1.0. The `develop` branch is the integration branch and should be treated as development software until a stable release is published.
 
 ## Why NPM Improved exists
