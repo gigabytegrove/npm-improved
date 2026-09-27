@@ -10,8 +10,15 @@ export function Loading({ label, noLogo }: Props) {
 	return (
 		<div className="empty text-center">
 			{noLogo ? null : (
-				<div className="mb-3">
-					<img className={styles.logo} src="/images/logo-no-text.svg" alt="" />
+				<div className={styles.brandLoader} aria-hidden="true">
+					<div className={styles.logoFrame}>
+						<img
+							className={styles.logo}
+							src="/images/npm-improved-mark.webp"
+							alt=""
+						/>
+					</div>
+					<div className={styles.pulseRing} />
 				</div>
 			)}
 			<div className="text-secondary mb-3">{label || <T id="loading" />}</div>
