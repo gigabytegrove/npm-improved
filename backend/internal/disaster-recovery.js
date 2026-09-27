@@ -375,6 +375,7 @@ const restoreLiveFilesystemSnapshot = (rollbackRoot) => {
 		letsencrypt: "/etc/letsencrypt",
 		keys: "/data/keys.json",
 		recovery_access: "/data/recovery-access.json",
+		cluster_secret: "/data/cluster-secret",
 	};
 	for (const [name, target] of Object.entries(targets)) {
 		removePath(target);
