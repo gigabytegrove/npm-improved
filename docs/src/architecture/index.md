@@ -116,3 +116,13 @@ The policy is loaded at the Nginx `http` level. Per-host profiles can inherit th
 Trusted sources use an empty Nginx limiting key, which excludes them from managed request/connection accounting. Untrusted requests are keyed by resolved client address plus host, preventing traffic to one hostname from consuming that client's allowance on another hostname.
 
 The Protection setting itself is transactional: the database setting and generated policy remain aligned with the last configuration that successfully validated and reloaded.
+
+## Backup and disaster recovery
+
+NPM Improved backup bundles store logical application records instead of a raw database file, making the format portable across supported database engines.
+
+Configuration backups preserve runtime configuration and certificate/custom-file state while remapping ownership to the restoring administrator. Full disaster-recovery backups additionally preserve users, authentication state, configuration revisions, and JWT keys.
+
+Restore is a cross-resource transaction boundary: the importer snapshots the current database scope and relevant persistent filesystem state, restores the candidate bundle, regenerates Nginx, validates it, and reloads. A validation or reload failure restores the pre-import database and filesystem state before reloading the previous Nginx configuration.
+
+See [Backup & Disaster Recovery](/guide/disaster-recovery).
