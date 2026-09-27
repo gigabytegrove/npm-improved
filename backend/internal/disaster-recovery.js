@@ -248,7 +248,7 @@ const databaseEngineName = () => {
 	return cfg?.engine || "unknown";
 };
 
-const writeRows = async (trx, table, model, rows, ownerUserId = null) => {
+const writeRows = async (trx, table, model, rows, ownerUserId = null, targetDb = db()) => {
 	for (const input of rows) {
 		const row = structuredClone(input);
 		if (ownerUserId && Object.hasOwn(row, "owner_user_id")) {
@@ -268,7 +268,7 @@ const writeRows = async (trx, table, model, rows, ownerUserId = null) => {
 		await trx(table).insert(dbRow);
 	}
 
-	if (rows.length && db().client.config.client === "pg" && rows.some((row) => Number.isInteger(row.id))) {
+	if (rows.length && targetDb.client.config.client === "pg" && rows.some((row) => Number.isInteger(row.id))) {
 		const maxId = Math.max(...rows.map((row) => Number(row.id) || 0));
 		if (maxId > 0) {
 			await trx.raw("SELECT setval(pg_get_serial_sequence(quote_ident(?), 'id'), ?, true)", [table, maxId]);
@@ -284,6 +284,18 @@ const replaceDatabase = async (snapshot, scope, ownerUserId = null) => {
 		}
 		for (const [table, model] of tables) {
 			await writeRows(trx, table, model, snapshot[table] || [], ownerUserId);
+		}
+	});
+};
+
+const replaceDatabaseOn = async (targetDb, snapshot, scope) => {
+	const tables = TABLES[scope];
+	await targetDb.transaction(async (trx) => {
+		for (const [table] of [...tables].reverse()) {
+			await trx(table).del();
+		}
+		for (const [table, model] of tables) {
+			await writeRows(trx, table, model, snapshot[table] || [], null, targetDb);
 		}
 	});
 };
@@ -677,6 +689,41 @@ const performRestore = async ({ bundle, passphrase, currentUserId = null, access
 };
 
 const internalDisasterRecovery = {
+	captureDatabaseMigrationSnapshot: async () => captureDatabase("disaster-recovery"),
+
+	replaceDatabaseMigrationSnapshot: async (targetDb, snapshot) =>
+		replaceDatabaseOn(targetDb, snapshot, "disaster-recovery"),
+
+	captureSharedFilesystem: () => captureFilesystem("cluster"),
+
+	applySharedFilesystem: async (filesystem) => {
+		if (!filesystem?.roots || typeof filesystem.roots !== "object") {
+			throw new errs.ValidationError("Shared filesystem payload is invalid");
+		}
+		const rollbackRoot = snapshotLiveFilesystem();
+		restoreInProgress = true;
+		try {
+			restoreFilesystem({ scope: "cluster", filesystem });
+			await regenerateNginx();
+			removePath(rollbackRoot);
+			return { ok: true };
+		} catch (err) {
+			try {
+				restoreLiveFilesystemSnapshot(rollbackRoot);
+				await internalNginx.test();
+				await internalNginx.reload();
+			} catch (rollbackErr) {
+				err.rollbackError = rollbackErr;
+			}
+			throw err;
+		} finally {
+			restoreInProgress = false;
+			removePath(rollbackRoot);
+		}
+	},
+
+	regenerateNginx,
+
 	status: async (access) => {
 		await access.can("settings:update", "disaster-recovery");
 		const counts = {};
