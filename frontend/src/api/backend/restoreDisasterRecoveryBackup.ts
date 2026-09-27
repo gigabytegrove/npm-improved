@@ -6,6 +6,7 @@ export interface DisasterRecoveryRestoreResult {
 	scope: "configuration" | "disaster-recovery";
 	restoredAt: string;
 	restartRequired: boolean;
+	safetyBackupPath: string;
 	summary: DisasterRecoveryBackupSummary;
 }
 
