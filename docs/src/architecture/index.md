@@ -77,4 +77,6 @@ The generated policy lives at:
 
 The policy is loaded at the Nginx `http` level. Per-host profiles can inherit the global policy, override it with Standard/Aggressive values, or explicitly disable managed limits for that host.
 
-Trusted sources use an empty Nginx limiting key, which excludes them from managed request/connection accounting.
+Trusted sources use an empty Nginx limiting key, which excludes them from managed request/connection accounting. Untrusted requests are keyed by resolved client address plus host, preventing traffic to one hostname from consuming that client's allowance on another hostname.
+
+The Protection setting itself is transactional: the database setting and generated policy remain aligned with the last configuration that successfully validated and reloaded.
