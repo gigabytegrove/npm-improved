@@ -59,6 +59,9 @@ router
 			await res.locals.access.can("settings:get");
 			const refresh = req.query.refresh === "1" || req.query.refresh === "true";
 			const release = await internalRemoteVersion.get(refresh);
+			await internalUpdateManager.reconcileAudit().catch((err) => {
+				debug(logger, `Update audit reconciliation failed: ${err}`);
+			});
 			res.status(200).send({
 				release,
 				capabilities: internalUpdateManager.capabilities(),
