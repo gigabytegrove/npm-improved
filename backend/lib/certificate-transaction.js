@@ -14,6 +14,7 @@ const safeMode = (mode, fallback) => typeof mode === "number" ? mode : fallback;
 
 const restoreAtomicFiles = async (records, activate, log) => {
 	for (const record of [...records].reverse()) {
+		if (!record.touched) continue;
 		removeIfExists(record.target);
 		if (record.hadPrevious && fs.existsSync(record.backup)) {
 			fs.renameSync(record.backup, record.target);
@@ -59,6 +60,7 @@ export const applyAtomicCertificateFiles = async ({
 			content: file.content,
 			mode: safeMode(file.mode, 0o644),
 			hadPrevious: false,
+			touched: false,
 		};
 	});
 
@@ -81,15 +83,14 @@ export const applyAtomicCertificateFiles = async ({
 		throw err;
 	}
 
-	let swapped = false;
 	try {
 		for (const record of records) {
 			record.hadPrevious = fs.existsSync(record.target);
+			record.touched = true;
 			if (record.hadPrevious) {
 				fs.renameSync(record.target, record.backup);
 			}
 			fs.renameSync(record.candidate, record.target);
-			swapped = true;
 		}
 
 		if (activate) {
@@ -102,7 +103,7 @@ export const applyAtomicCertificateFiles = async ({
 		for (const record of records) removeIfExists(record.backup);
 		return true;
 	} catch (err) {
-		if (swapped) {
+		if (records.some((record) => record.touched)) {
 			try {
 				await restoreAtomicFiles(records, activate, log);
 			} catch (rollbackErr) {
