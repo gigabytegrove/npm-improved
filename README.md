@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/src/public/npm-improved-logo.webp" alt="Nginx Proxy Manager Improved" width="720">
+</p>
+
 # NPM Improved
 
 **NPM Improved** is a compatibility-focused fork of [Nginx Proxy Manager](https://github.com/NginxProxyManager/nginx-proxy-manager) that keeps the familiar reverse-proxy workflow while fixing reliability, recovery, certificate lifecycle, observability, and security gaps that are difficult to solve as small upstream UI changes.
