@@ -146,6 +146,31 @@ NPM Improved can export encrypted portable configuration backups or full-instanc
 Optional scheduled encrypted backups can be retained under `/data/backups` using deployment environment variables. The backup passphrase is not stored in the application database, and retained bundles remain downloadable from the native recovery console when the normal management API is unavailable.
 
 
+
+### Proxy Host high availability
+
+A Proxy Host can use multiple backend targets instead of a single scheme/host/port destination. NPM Improved generates native Nginx upstream pools with:
+
+- weighted round-robin;
+- least-connections balancing;
+- client-IP affinity;
+- ordered primary/failover mode;
+- per-target passive failure thresholds and timeouts;
+- automatic retry on connection errors, timeouts, invalid headers, and HTTP 500/502/503/504 responses.
+
+Existing single-target hosts and legacy API clients remain compatible. See [Proxy Host High Availability](docs/src/guide/high-availability.md).
+
+### Instance synchronization
+
+Two or more NPM Improved installations can share the same operational configuration through a primary/secondary synchronization model.
+
+Secondaries periodically pull an authenticated, AES-256-GCM encrypted configuration snapshot from the primary, apply it transactionally, regenerate Nginx configuration, run `nginx -t`, and roll back if activation fails. Synchronized secondaries remain independent HTTP/HTTPS proxy entry points but are read-only for synchronized configuration until explicitly promoted.
+
+NPM Improved intentionally permits only one writable primary at a time to avoid split-brain changes. DNS, a load balancer, or an external virtual-IP mechanism can direct clients to multiple synchronized NPM Improved nodes.
+
+See [Instance Synchronization](docs/src/guide/instance-sync.md).
+
+
 ## Docker installation
 
 Production Docker Compose files now live at the repository root.
