@@ -33,13 +33,26 @@ See [Backup & Disaster Recovery](/guide/disaster-recovery).
 
 ## Recommended process
 
-1. stop or snapshot the existing deployment;
-2. back up persistent data and the external database, if used;
-3. build the target NPM Improved commit/image;
-4. start it against a copy of production data first;
+1. create a current NPM Improved backup;
+2. snapshot or back up `/data`, `/etc/letsencrypt`, and the external database when one is used;
+3. pull the target NPM Improved revision;
+4. rebuild with the installer target that matches the deployment;
 5. verify management access on port 81;
-6. verify proxy hosts, redirects, 404 hosts, streams, certificates, logs, and Protection settings;
-7. only then upgrade the live deployment.
+6. verify Proxy Hosts, redirects, 404 hosts, Streams, certificates, logs, Protection, Database & Storage, and System Health;
+7. verify Instance Synchronization or Shared MySQL node status when those features are in use.
+
+For a typical SQLite installation:
+
+```bash
+cd ~/npm-improved
+git checkout develop
+git pull --ff-only
+./scripts/install-docker sqlite --clean-build
+```
+
+Use `mysql` or `postgres` instead of `sqlite` when that is the underlying deployment target.
+
+A database selected through **Settings → Database & Storage** is stored under `/data/database-config.json` and survives the application rebuild.
 
 ## Configuration History on upgrade
 
@@ -56,6 +69,19 @@ NPM Improved creates `/data/nginx/protection/policy.conf` when the managed prote
 After upgrading, review **Settings → Protection** and test applications that legitimately generate high request rates, maintain many concurrent connections, or use long-lived WebSockets. Per-host overrides can be set to Inherit, Off, Standard, or Aggressive.
 
 Protection policy changes are transactional, but an upgrade is still the right time to validate expected application traffic before relying on the new defaults.
+
+## Shared MySQL on upgrade
+
+Run the same NPM Improved version on every node using one shared MySQL/MariaDB database.
+
+Upgrade shared-database nodes as a coordinated maintenance operation. Before returning all nodes to service, confirm:
+
+- every node is running the intended NPM Improved version;
+- **Database & Storage** shows the expected shared nodes;
+- shared certificate/custom file storage is mounted and current;
+- Proxy Hosts and certificates are serving correctly from more than one node.
+
+Do not intentionally run different NPM Improved schema versions against the same shared database.
 
 ## Important compatibility note
 
