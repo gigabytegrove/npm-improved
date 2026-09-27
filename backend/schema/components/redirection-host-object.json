@@ -93,8 +93,23 @@
 		"meta": {
 			"type": "object",
 			"example": {
+				"protection_profile": "inherit",
 				"nginx_online": true,
 				"nginx_err": null
+			},
+			"description": "Runtime metadata plus NPM Improved host controls.",
+			"properties": {
+				"protection_profile": {
+					"type": "string",
+					"enum": [
+						"inherit",
+						"off",
+						"standard",
+						"aggressive"
+					],
+					"default": "inherit",
+					"description": "Managed HTTP Protection profile for this host. inherit uses the global Settings > Protection policy."
+				}
 			}
 		},
 		"certificate": {
