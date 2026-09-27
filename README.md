@@ -65,13 +65,21 @@ Each revision records the operation, actor, database snapshot, generated Nginx c
 
 Existing hosts receive a baseline revision automatically before their first post-upgrade change. Failed candidates remain inspectable but cannot be restored. Superseded known-good revisions can be restored by an administrator; a restore regenerates and validates Nginx through the normal transactional path and creates a new active revision rather than rewriting history.
 
+### Native recovery console
+
+The standalone Go control plane exposes an emergency console at `/recovery/`. It remains available independently of the Node management API and normal React application.
+
+The console uses a separate recovery token stored under `/data/recovery-access.json` with mode `0600`; the token is never emitted to application logs. It can report control-plane/backend/Nginx/storage health, run `nginx -t`, perform a validated Nginx reload, show failed configuration candidates, and download retained encrypted recovery backups.
+
+See [Native Recovery Console](docs/src/guide/recovery-console.md).
+
 ### Backup & disaster recovery
 
 Settings → **Backup & Recovery** can create encrypted, versioned `.npmibak` bundles.
 
 **Configuration backups** are portable and contain hosts, streams, access lists, settings, configuration history, certificate records/material, Let's Encrypt state, and custom Nginx/default-site files while leaving destination user/JWT identity intact.
 
-**Full disaster recovery backups** additionally preserve users, permissions, authentication/2FA records, configuration history, and the instance JWT keys so the same NPM Improved installation can be rebuilt after host or storage loss.
+**Full disaster recovery backups** additionally preserve users, permissions, authentication/2FA records, configuration history, the instance JWT keys, and the native recovery credential so the same NPM Improved installation can be rebuilt after host or storage loss.
 
 Backups require a passphrase and are encrypted with AES-256-GCM. Restore supports a non-destructive inspection step first, takes a local rollback snapshot before applying changes, regenerates all Nginx configuration, and automatically restores the prior database/filesystem state if `nginx -t` or reload fails.
 

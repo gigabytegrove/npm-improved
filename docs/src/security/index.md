@@ -14,6 +14,12 @@ The control-plane health endpoint is:
 /__npm_improved/health
 ```
 
+## Recovery authentication
+
+The native recovery console at `/recovery/` uses a separate high-entropy token stored at `/data/recovery-access.json` with mode `0600`. Normal application credentials are deliberately not required for recovery because the database or backend may be the failed component.
+
+Treat this recovery token as an administrative secret and keep it in a password manager or disaster-recovery record.
+
 ## Configuration safety
 
 Generated changes are validated with `nginx -t` before they are allowed to replace the last-known-good configuration. Failed candidates are retained for diagnostics.

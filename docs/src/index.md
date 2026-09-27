@@ -26,6 +26,8 @@ features:
     details: New Nginx configurations are rendered, validated, activated, reloaded, and committed with automatic last-known-good rollback on failure.
   - title: Configuration History
     details: Durable Active, Superseded, and Failed revisions preserve database snapshots, generated Nginx configuration, activation errors, and safe restore points.
+  - title: Native Recovery Console
+    details: A separately authenticated Go recovery console remains available even if the Node API or normal admin application is unavailable.
   - title: Backup & Disaster Recovery
     details: Encrypted configuration/full-instance bundles can be inspected before restore, with local rollback if regenerated Nginx state fails validation.
   - title: Certificate Lifecycle
