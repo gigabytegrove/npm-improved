@@ -46,6 +46,18 @@ Certificates referenced by active database objects cannot be removed through nor
 
 DNS-provider credentials are only written to the Certbot credential file when needed for a Certbot operation and are removed afterward.
 
+## Database credentials
+
+When a database is selected through **Settings → Database & Storage**, the connection is stored locally in:
+
+```text
+/data/database-config.json
+```
+
+The file is written with owner-only permissions. The saved database password is not returned by the management API after configuration.
+
+For Shared MySQL deployments, protect database transport with TLS when the database connection crosses an untrusted network.
+
 ## Vulnerability reporting
 
 Do not disclose an unpatched vulnerability in a public issue or pull request.

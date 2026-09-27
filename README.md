@@ -37,6 +37,8 @@ NPM Improved keeps that simple workflow, but adds the things that become importa
 - automatic rollback when a change breaks Nginx;
 - high availability for backend applications;
 - synchronization between multiple NPM Improved servers;
+- SQLite ↔ MySQL/MariaDB migration from the UI;
+- shared MySQL mode for multiple NPM Improved nodes;
 - encrypted backup and disaster recovery;
 - configuration history;
 - a recovery console that can stay available when the normal app is unhealthy;

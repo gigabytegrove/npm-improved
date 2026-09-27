@@ -4,94 +4,190 @@ outline: deep
 
 # NPM Improved Guide
 
-NPM Improved is a compatibility-focused fork of Nginx Proxy Manager. It keeps Nginx as the traffic engine and the familiar host/certificate workflow, but changes the failure model and management architecture so configuration mistakes are recoverable instead of destructive.
+NPM Improved is a modernized Nginx Proxy Manager fork built around a simple idea: running a reverse proxy should stay easy even after your setup grows beyond one server and a few test sites.
 
-## Development status
+You can still create a hostname, point it at an app, turn on HTTPS, and move on. NPM Improved adds safer changes, better recovery, high availability, shared databases, observability, and a redesigned Control Center without requiring you to manage raw Nginx files for everyday work.
 
-NPM Improved is currently pre-1.0. The `develop` branch is the integration branch. There is not yet a stable published NPM Improved container image, so production deployments should not be inferred from upstream Nginx Proxy Manager image tags.
+## Project status
 
-## Key differences from upstream NPM
+NPM Improved is currently **pre-1.0**.
 
-- the management listener is served by a standalone Go control-plane process;
-- Nginx host changes are transactional and retain a last-known-good configuration;
-- database host state is rolled back when the Nginx transaction fails;
-- durable Configuration History records active, superseded, and failed revisions with safe restore;
-- certificates have active/unused lifecycle states and quarantine cleanup;
-- raw logs and structured security events are exposed in the UI;
-- HTTP hosts can use managed Protection profiles;
-- Proxy Hosts can use native Nginx upstream pools for backend load balancing and failover;
-- multiple NPM Improved instances can synchronize through a primary/secondary HA model;
-- repository rules and required checks are versioned with the project.
+The active integration branch is:
 
-## Development setup
+```text
+develop
+```
+
+There is not yet a stable published NPM Improved container image. Current installations build from this repository using the included Docker installer.
+
+Do not use an upstream Nginx Proxy Manager container image when you expect NPM Improved features to be present.
+
+## What NPM Improved adds
+
+### A redesigned Control Center
+
+The management interface is built around NPM Improved rather than the inherited upstream layout.
+
+It includes dedicated areas for:
+
+- Proxy Hosts;
+- redirects and Streams;
+- certificates;
+- users and Access Lists;
+- logs and security events;
+- Configuration History;
+- System Health;
+- Database & Storage;
+- Instance Synchronization;
+- Backup & Disaster Recovery.
+
+### Safer configuration changes
+
+Nginx changes are tested before they are activated.
+
+If a generated configuration does not validate or reload correctly, NPM Improved restores the previous working state instead of leaving the proxy partially broken.
+
+Configuration History records active, superseded, and failed revisions so administrators can see what changed and restore known-good states.
+
+[Read about Configuration History](/guide/config-history).
+
+### Backend high availability
+
+A Proxy Host can use more than one backend server.
+
+Available balancing/failover choices include:
+
+- round robin;
+- least connections;
+- client IP affinity;
+- primary + failover.
+
+This lets one hostname survive an application-server failure without changing the public URL.
+
+[Read about Proxy Host High Availability](/guide/high-availability).
+
+### Multiple NPM Improved servers
+
+There are two supported ways to run more than one NPM Improved node.
+
+**Instance Synchronization** uses one Primary and one or more Secondary servers. Each server keeps its own database, and the Primary securely replicates configuration to the Secondary nodes.
+
+[Read about Instance Synchronization](/guide/instance-sync).
+
+**Shared MySQL mode** lets several NPM Improved servers use one MySQL/MariaDB database. Each node watches the common state and keeps its own Nginx configuration refreshed.
+
+[Read about Database & Shared MySQL](/guide/database).
+
+### SQLite today, MySQL later
+
+You do not have to decide on a permanent database during the first install.
+
+From **Settings → Database & Storage**, NPM Improved can:
+
+- move SQLite to MySQL/MariaDB;
+- move MySQL/MariaDB back to SQLite;
+- join an existing shared NPM Improved MySQL database;
+- test the destination before changing anything;
+- copy and verify data before switching.
+
+The original source database is left in place so you have a straightforward recovery path while you verify the move.
+
+### Backup and disaster recovery
+
+NPM Improved can create encrypted configuration or full disaster-recovery backups.
+
+Full recovery backups can include users, authentication state, certificates, configuration, custom Nginx files, recovery credentials, and other state needed to rebuild the same installation.
+
+Restore operations validate the resulting Nginx configuration and roll back if the recovered state cannot safely start.
+
+[Read about Backup & Disaster Recovery](/guide/disaster-recovery).
+
+### Recovery Console
+
+The native Recovery Console is separate from the normal application workflow and is designed for situations where the main management application is unhealthy.
+
+It can help you inspect health, validate Nginx, review failed configuration candidates, and restore retained backups.
+
+[Read about the Native Recovery Console](/guide/recovery-console).
+
+### System Health and observability
+
+The Control Center exposes health information for the major services NPM Improved depends on, including Nginx, database access, certificate processing, logs, and configuration processing.
+
+Logs and structured security-event views are also available in the UI so common troubleshooting does not have to begin at a shell prompt.
+
+[Read about System Health](/guide/system-health).
+
+### HTTP protection
+
+Managed HTTP protection profiles provide common request-rate and connection controls without requiring hand-written Nginx directives for each host.
+
+[Read about HTTP Protection](/guide/protection).
+
+## Quick start
 
 Requirements:
 
-- Docker and Docker Compose;
-- Git;
-- `jq`.
+- Docker Engine 24 or newer;
+- Docker Compose v2;
+- Git.
 
-Clone and start the development stack:
+For the simplest SQLite installation:
 
 ```bash
 git clone https://github.com/gigabytegrove/npm-improved.git
 cd npm-improved
-./scripts/start-dev
+./scripts/install-docker sqlite
 ```
 
-The startup script prints the live development endpoints. The default development mapping exposes:
+When the installer finishes, open:
 
-- admin UI: `http://127.0.0.1:3081`;
-- Nginx HTTP listener: `http://127.0.0.1:3080`;
-- Swagger UI: `http://127.0.0.1:3082`.
-
-Stop the environment with:
-
-```bash
-./scripts/stop-dev
+```text
+http://<your-server>:81
 ```
 
-## Building an image from source
+For detailed installation, database, port, update, and storage guidance, see [Docker installation](/setup/) and [DOCKER.md](https://github.com/gigabytegrove/npm-improved/blob/develop/DOCKER.md).
 
-Until an official NPM Improved image is published, build directly from this repository:
-
-```bash
-./scripts/buildx --load -t npm-improved:dev
-```
-
-The production Dockerfile supports `linux/amd64` and `linux/arm64`.
-
-## Management and traffic separation
-
-The normal production ports remain:
+## Normal ports
 
 | Port | Purpose |
-| --- | --- |
+| ---: | --- |
 | 80 | HTTP traffic |
-| 81 | NPM Improved management control plane |
+| 81 | NPM Improved Control Center |
 | 443 | HTTPS traffic |
 
-Port 81 is no longer owned by the Nginx traffic process.
+The host-side mappings can be changed without changing the internal application ports.
 
 ## Persistent state
 
-Back up both locations before upgrades:
+The main persistent locations are:
 
 ```text
 /data
 /etc/letsencrypt
 ```
 
-See [Upgrading](/upgrading/) before moving between development snapshots.
+Keep both on persistent storage and include them in your normal infrastructure backup plan.
 
-## Configuration History
+Shared MySQL deployments also need shared or replicated certificate/custom file storage between nodes.
 
-Administrators can inspect generated configuration revisions and restore superseded known-good states from **Configuration History**. See [Configuration History](/guide/config-history).
+## Updating a source-based installation
 
-## Protection
+For a typical SQLite installation:
 
-See [HTTP Protection](/guide/protection) for profile behavior, trusted networks, per-host overrides, and limitations.
+```bash
+cd ~/npm-improved
+git checkout develop
+git pull --ff-only
+./scripts/install-docker sqlite --clean-build
+```
+
+Use the matching installer target for MySQL or PostgreSQL deployments.
+
+Before upgrading a pre-1.0 system, keep a current backup and verify the important proxy, certificate, database, and recovery workflows after the update.
 
 ## Upstream attribution
 
-NPM Improved is based on [Nginx Proxy Manager](https://github.com/NginxProxyManager/nginx-proxy-manager) and retains the upstream MIT license and attribution.
+NPM Improved is based on [Nginx Proxy Manager](https://github.com/NginxProxyManager/nginx-proxy-manager) and retains the applicable upstream MIT license and attribution.
+
+Project page: [Gigabyte Grove Projects](https://www.gigabytegrove.com/projects)

@@ -21,6 +21,32 @@ The production build script targets:
 - `linux/amd64`
 - `linux/arm64`
 
+## Can I start with SQLite and move to MySQL later?
+
+Yes. Open **Settings → Database & Storage**.
+
+NPM Improved can copy SQLite to MySQL/MariaDB, verify the destination, switch the backend, and restart. It can also move a MySQL/MariaDB installation back to SQLite.
+
+The source database is not automatically deleted after a migration.
+
+## Can several NPM Improved servers use the same MySQL database?
+
+Yes. Enable **Shared MySQL mode**.
+
+Every node uses the same database, coordinates login signing identity, publishes node presence, and refreshes its own local Nginx configuration when shared state changes.
+
+Certificate and custom files are still filesystem data, so those paths must also be shared or replicated between nodes.
+
+See [Database & Shared MySQL](/guide/database).
+
+## Should I use Shared MySQL or Instance Synchronization?
+
+Use **Shared MySQL** when all NPM Improved nodes can reliably reach one common MySQL/MariaDB database.
+
+Use **Instance Synchronization** when each node should keep its own database and one Primary should replicate configuration to Secondary nodes.
+
+NPM Improved does not run both database-replication models at the same time.
+
 ## Why does the management UI stay up when Nginx is broken?
 
 Port 81 is served by the standalone Go control-plane process. It is deliberately separate from the Nginx traffic process.
