@@ -148,6 +148,10 @@ const captureFilesystem = (scope) => {
 		}
 	}
 
+	if (state.bytes > MAX_CAPTURE_BYTES) {
+		throw new Error("Backup filesystem payload exceeds the 384 MiB safety limit");
+	}
+
 	return { roots, bytes: state.bytes };
 };
 
