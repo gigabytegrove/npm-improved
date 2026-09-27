@@ -48,6 +48,7 @@ export default defineConfig({
 					{ text: "Native Recovery Console", link: "/guide/recovery-console" },
 					{ text: "Configuration History", link: "/guide/config-history" },
 					{ text: "System Health", link: "/guide/system-health" },
+					{ text: "Update", link: "/guide/update" },
 					{ text: "Architecture", link: "/architecture/" },
 					{ text: "Security", link: "/security/" },
 					{ text: "Setup Instructions", link: "/setup/" },
