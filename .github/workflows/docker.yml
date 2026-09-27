@@ -58,7 +58,12 @@ jobs:
           sed -i 's/^HTTPS_PORT=.*/HTTPS_PORT=18443/' .env
 
       - name: Validate installer shell
-        run: bash -n scripts/install-docker
+        run: |
+          bash -n scripts/install-docker
+          sh -n scripts/update-handoff.sh
+
+      - name: Verify temporary updater image has Docker Compose
+        run: docker run --rm docker:27-cli docker compose version
 
       - name: Validate installer preflight
         run: ./scripts/install-docker sqlite --check-only
