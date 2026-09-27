@@ -1,3 +1,4 @@
+import type { ElementType, ReactNode } from "react";
 import {
 	IconCertificate,
 	IconDatabase,
@@ -34,9 +35,9 @@ const HealthCard = ({
 	children,
 }: {
 	title: string;
-	icon: typeof IconHeartbeat;
+	icon: ElementType;
 	check: ComponentHealth;
-	children?: React.ReactNode;
+	children?: ReactNode;
 }) => (
 	<div className="col-md-6 col-xl-4">
 		<div className="card h-100">
@@ -103,6 +104,7 @@ const SystemHealth = () => {
 
 							<HealthCard title="Nginx" icon={IconServer} check={data.checks.nginx}>
 								<div>PID: {data.checks.nginx.pid || "not detected"}</div>
+								<div>Process: {data.checks.nginx.processRunning ? "running" : "not running"}</div>
 								<div>Configuration: {data.checks.nginx.configValid ? "valid" : "invalid"}</div>
 								<div>
 									Last reload:{" "}
