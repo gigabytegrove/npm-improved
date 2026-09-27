@@ -50,3 +50,48 @@ jobs:
         run: |
           bash -n scripts/apply-repository-rulesets.sh
           jq empty .github/rulesets/*.json
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Yarn
+        working-directory: .
+        run: npm install --global yarn@1.22.22
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: yarn install --frozen-lockfile
+
+      - name: Backend tests
+        working-directory: backend
+        run: yarn test
+
+      - name: Backend lint
+        working-directory: backend
+        run: yarn lint
+
+      - name: Validate API schema
+        working-directory: backend
+        run: yarn validate-schema
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: yarn install --frozen-lockfile
+
+      - name: Frontend tests
+        working-directory: frontend
+        run: yarn test --run
+
+      - name: Frontend lint
+        working-directory: frontend
+        run: yarn lint
+
+      - name: Frontend build
+        working-directory: frontend
+        run: yarn build
+
+      - name: Validate frontend locales
+        working-directory: frontend
+        run: node check-locales.cjs
