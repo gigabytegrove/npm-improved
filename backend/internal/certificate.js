@@ -490,16 +490,22 @@ const internalCertificate = {
 			query.withGraphFetched(`[${data.expand.join(", ")}]`);
 		}
 
-		const row = await query.then(utils.omitRow(omissions()));
+		let row = await query.then(utils.omitRow(omissions()));
 		if (!row?.id) {
 			throw new error.ItemNotFoundError(data.id);
 		}
-		// Custom omissions
+
+		row = internalCertificate.cleanExpansions(row);
+		const [usageMap, policy] = await Promise.all([
+			internalCertificate.getUsageMap(),
+			internalCertificate.getLifecyclePolicy(),
+		]);
+		row = internalCertificate.decorateLifecycle(row, usageMap, policy);
+
 		if (typeof data.omit !== "undefined" && data.omit !== null) {
 			return _.omit(row, [...data.omit]);
 		}
-
-		return internalCertificate.cleanExpansions(row);
+		return row;
 	},
 
 	cleanExpansions: (row) => {
@@ -630,7 +636,6 @@ const internalCertificate = {
 			query.andWhere("owner_user_id", access.token.getUserId(1));
 		}
 
-		// Query is used for searching
 		if (typeof searchQuery === "string") {
 			query.where(function () {
 				this.where("nice_name", "like", `%${searchQuery}%`);
@@ -641,11 +646,20 @@ const internalCertificate = {
 			query.withGraphFetched(`[${expand.join(", ")}]`);
 		}
 
-		const r = await query.then(utils.omitRows(omissions()));
-		for (let i = 0; i < r.length; i++) {
-			r[i] = internalCertificate.cleanExpansions(r[i]);
+		const [rows, usageMap, policy] = await Promise.all([
+			query.then(utils.omitRows(omissions())),
+			internalCertificate.getUsageMap(),
+			internalCertificate.getLifecyclePolicy(),
+		]);
+
+		for (let i = 0; i < rows.length; i++) {
+			rows[i] = internalCertificate.decorateLifecycle(
+				internalCertificate.cleanExpansions(rows[i]),
+				usageMap,
+				policy,
+			);
 		}
-		return r;
+		return rows;
 	},
 
 	/**
