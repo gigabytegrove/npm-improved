@@ -85,10 +85,16 @@ jobs:
         run: |
           set -euo pipefail
 
+          cp .env /tmp/npmi-update-test.env
+
           cleanup_update_test() {
             docker compose -f compose.yaml --env-file .env down --remove-orphans >/dev/null 2>&1 || true
             docker ps -aq --filter label=com.gigabytegrove.npm-improved.role=update-handoff | xargs -r docker rm -f >/dev/null 2>&1 || true
             sudo rm -rf ./data ./letsencrypt
+            if [ -f /tmp/npmi-update-test.env ]; then
+              cp /tmp/npmi-update-test.env .env
+              rm -f /tmp/npmi-update-test.env
+            fi
           }
           trap cleanup_update_test EXIT
 
@@ -180,7 +186,18 @@ jobs:
             docker network rm npmi-db-wizard >/dev/null 2>&1 || true
             sudo rm -rf /tmp/npmi-db-wizard
           }
-          trap cleanup EXIT
+          dump_failure() {
+            status=$?
+            if [ "$status" -ne 0 ]; then
+              echo "===== DATABASE WIZARD APP LOGS ====="
+              docker logs npmi-db-wizard-app 2>&1 || true
+              echo "===== DATABASE WIZARD MYSQL LOGS ====="
+              docker logs npmi-db-wizard-mysql 2>&1 || true
+            fi
+            cleanup
+            exit "$status"
+          }
+          trap dump_failure EXIT
 
           docker network create npmi-db-wizard
 
@@ -239,13 +256,13 @@ jobs:
           test -n "$TOKEN"
           test "$TOKEN" != "null"
 
-          curl -fsS \
+          curl --fail-with-body -sS \
             -H "Authorization: Bearer $TOKEN" \
             -H 'Content-Type: application/json' \
             -d '{"engine":"mysql","shared":true,"mysql":{"host":"npmi-db-wizard-mysql","port":3306,"user":"npmi","password":"ci-database-password","name":"npmi_target","ssl":false}}' \
             http://127.0.0.1:19081/api/database/test | jq -e '.ok == true'
 
-          curl -fsS \
+          curl --fail-with-body -sS \
             -H "Authorization: Bearer $TOKEN" \
             -H 'Content-Type: application/json' \
             -d '{"engine":"mysql","shared":true,"mysql":{"host":"npmi-db-wizard-mysql","port":3306,"user":"npmi","password":"ci-database-password","name":"npmi_target","ssl":false},"confirmation":"MIGRATE"}' \
@@ -271,13 +288,13 @@ jobs:
           )"
           test "$USER_COUNT" = "1"
 
-          curl -fsS \
+          curl --fail-with-body -sS \
             -H "Authorization: Bearer $TOKEN" \
             -H 'Content-Type: application/json' \
             -d '{"engine":"sqlite","sqlite":{"filename":"/data/database.sqlite"}}' \
             http://127.0.0.1:19081/api/database/test | jq -e '.ok == true'
 
-          curl -fsS \
+          curl --fail-with-body -sS \
             -H "Authorization: Bearer $TOKEN" \
             -H 'Content-Type: application/json' \
             -d '{"engine":"sqlite","sqlite":{"filename":"/data/database.sqlite"},"replace_target":true,"confirmation":"MIGRATE"}' \
