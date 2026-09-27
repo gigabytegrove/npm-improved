@@ -329,6 +329,9 @@
 	"column.status": {
 		"defaultMessage": "Olek"
 	},
+	"config-history": {
+		"defaultMessage": "Konfiguratsiooni ajalugu"
+	},
 	"created-on": {
 		"defaultMessage": "Loodud: {date}"
 	},
