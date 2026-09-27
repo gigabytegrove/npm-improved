@@ -336,6 +336,22 @@ const internalNginx = {
 				host.forward_scheme = "$scheme";
 			}
 
+			if (nice_host_type === "proxy_host") {
+				const activeUpstreams = Array.isArray(host.upstreams)
+					? host.upstreams.filter((target) => target.enabled !== false)
+					: [];
+
+				host.upstream_pool_enabled = activeUpstreams.length > 1;
+				host.upstream_count = activeUpstreams.length;
+				host.upstream_name = `npm_improved_proxy_${host.id}`;
+				host.upstream_scheme = activeUpstreams[0]?.scheme || host.forward_scheme;
+				host.render_upstreams = activeUpstreams.map((target, index) => ({
+					...target,
+					nginx_host: net.isIPv6(target.host) ? `[${target.host}]` : target.host,
+					backup: host.upstream_mode === "failover" && index > 0,
+				}));
+			}
+
 			// A stream forwarding to an IPv6 literal must have the address wrapped in
 			// square brackets before nginx appends ":<port>". Without the brackets nginx
 			// reads the trailing ":<port>" as part of the address and rejects the upstream
