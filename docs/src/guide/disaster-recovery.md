@@ -54,6 +54,36 @@ For that reason, NPM Improved requires an encryption passphrase of at least 12 c
 
 Store both the backup and its passphrase according to your normal disaster-recovery procedures. Losing the passphrase means the backup cannot be decrypted.
 
+## Automated retained backups
+
+NPM Improved can create encrypted backups automatically under:
+
+```text
+/data/backups
+```
+
+Automation is deliberately configured through deployment environment variables rather than storing the backup passphrase in the application database.
+
+Set:
+
+```text
+NPM_BACKUP_PASSPHRASE=<at least 12 characters>
+NPM_BACKUP_SCOPE=disaster-recovery
+NPM_BACKUP_INTERVAL_HOURS=24
+NPM_BACKUP_RETENTION=7
+```
+
+- `NPM_BACKUP_PASSPHRASE` enables the scheduler. If it is absent or shorter than 12 characters, scheduled backups stay disabled.
+- `NPM_BACKUP_SCOPE` may be `configuration` or `disaster-recovery`. The default is `disaster-recovery`.
+- `NPM_BACKUP_INTERVAL_HOURS` defaults to 24 and is constrained to 1–8760 hours.
+- `NPM_BACKUP_RETENTION` defaults to 7 and is constrained to 1–365 retained scheduled backups.
+
+The first scheduled backup is attempted shortly after backend startup, then at the configured interval. Scheduled files use the `.npmibak` format and are visible in the native recovery console even when the normal Node management API is unhealthy.
+
+The scheduler only retains the configured number of **scheduled** backups. Automatic pre-restore safety backups use their own retention policy and are not counted against this value.
+
+For real disaster recovery, copy retained backups off the NPM Improved host. A backup stored only on the same disk as the application does not protect against storage or host loss.
+
 ## Inspect before restore
 
 Selecting a backup and entering its passphrase does **not** immediately restore it.
