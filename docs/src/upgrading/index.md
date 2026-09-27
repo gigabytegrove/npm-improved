@@ -17,6 +17,12 @@ Back up:
 
 For external MySQL/MariaDB/PostgreSQL deployments, back up the database as well.
 
+## Recovery token
+
+The Go control plane creates `/data/recovery-access.json` when native recovery support is introduced. Preserve this file with `/data` and record the recovery token in your disaster-recovery documentation.
+
+The native emergency console is available at `/recovery/` even when the Node API is unavailable.
+
 ## NPM Improved backup bundles
 
 In addition to infrastructure snapshots, **Settings → Backup & Recovery** can create encrypted Configuration or Full Disaster Recovery bundles.
