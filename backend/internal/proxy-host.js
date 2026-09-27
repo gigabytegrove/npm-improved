@@ -59,7 +59,10 @@ const internalProxyHost = {
 			});
 
 			if (freshRow.enabled) {
-				const newMeta = await internalNginx.configure(proxyHostModel, "proxy_host", freshRow);
+				const newMeta = await internalNginx.configure(proxyHostModel, "proxy_host", freshRow, {
+					userId: access.token.getUserId(1),
+					operation: "create",
+				});
 				freshRow.meta = newMeta;
 			}
 		} catch (err) {
@@ -136,7 +139,11 @@ const internalProxyHost = {
 			});
 
 			if (updatedRow.enabled) {
-				const newMeta = await internalNginx.configure(proxyHostModel, "proxy_host", updatedRow);
+				const newMeta = await internalNginx.configure(proxyHostModel, "proxy_host", updatedRow, {
+					userId: access.token.getUserId(1),
+					operation: "update",
+					previousSnapshot: previousState,
+				});
 				updatedRow.meta = newMeta;
 			}
 		} catch (err) {
@@ -215,7 +222,11 @@ const internalProxyHost = {
 		await proxyHostModel.query().where("id", row.id).patch({ is_deleted: 1 });
 
 		try {
-			await internalNginx.removeConfigTransactional("proxy_host", row);
+			await internalNginx.removeConfigTransactional(proxyHostModel, "proxy_host", row, {
+				userId: access.token.getUserId(1),
+				operation: "delete",
+				previousSnapshot: previousState,
+			});
 		} catch (err) {
 			await restoreModelRow(proxyHostModel, row.id, previousState);
 			throw err;
@@ -255,7 +266,11 @@ const internalProxyHost = {
 		await proxyHostModel.query().where("id", row.id).patch({ enabled: 1 });
 
 		try {
-			await internalNginx.configure(proxyHostModel, "proxy_host", row);
+			await internalNginx.configure(proxyHostModel, "proxy_host", row, {
+				userId: access.token.getUserId(1),
+				operation: "enable",
+				previousSnapshot: previousState,
+			});
 		} catch (err) {
 			await restoreModelRow(proxyHostModel, row.id, previousState);
 			throw err;
@@ -292,7 +307,11 @@ const internalProxyHost = {
 		await proxyHostModel.query().where("id", row.id).patch({ enabled: 0 });
 
 		try {
-			await internalNginx.removeConfigTransactional("proxy_host", row);
+			await internalNginx.removeConfigTransactional(proxyHostModel, "proxy_host", row, {
+				userId: access.token.getUserId(1),
+				operation: "disable",
+				previousSnapshot: previousState,
+			});
 		} catch (err) {
 			await restoreModelRow(proxyHostModel, row.id, previousState);
 			throw err;
