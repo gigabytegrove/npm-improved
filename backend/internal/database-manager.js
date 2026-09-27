@@ -29,6 +29,26 @@ const latestMigrationName = () => localMigrationNames().at(-1) || null;
 
 const activePublicConfig = () => publicDatabaseConfig({ database: configGet("database") });
 
+const withExistingMysqlPassword = (input) => {
+	if (String(input?.engine || "").toLowerCase() !== "mysql" || String(input?.password || "")) {
+		return input;
+	}
+	const current = activePublicConfig();
+	const probe = publicDatabaseConfig(
+		normalizeRuntimeDatabaseConfig({
+			...input,
+			password: "__probe__",
+		}),
+	);
+	if (sameMysqlDatabase(current, probe)) {
+		return {
+			...input,
+			password: String(configGet("database")?.password || ""),
+		};
+	}
+	return input;
+};
+
 const currentEngine = () => (isSqlite() ? "sqlite" : isMysql() ? "mysql" : configGet("database")?.engine || "unknown");
 
 const createTarget = (normalized) => knex(generateDbConfigFor(normalized.database));
@@ -151,7 +171,7 @@ const internalDatabaseManager = {
 		await access.can("settings:update", "database");
 		let normalized;
 		try {
-			normalized = normalizeRuntimeDatabaseConfig(candidateInput);
+			normalized = normalizeRuntimeDatabaseConfig(withExistingMysqlPassword(candidateInput));
 		} catch (err) {
 			throw new errs.ValidationError(err.message);
 		}
@@ -193,7 +213,7 @@ const internalDatabaseManager = {
 
 		let normalized;
 		try {
-			normalized = normalizeRuntimeDatabaseConfig(targetInput);
+			normalized = normalizeRuntimeDatabaseConfig(withExistingMysqlPassword(targetInput));
 		} catch (err) {
 			throw new errs.ValidationError(err.message);
 		}
@@ -273,7 +293,7 @@ const internalDatabaseManager = {
 							host: targetPublic.host,
 							port: targetPublic.port,
 							user: targetPublic.user,
-							password: String(targetInput.password || ""),
+							password: String(withExistingMysqlPassword(targetInput).password || ""),
 							name: targetPublic.name,
 							ssl: {
 								enabled: Boolean(targetInput.ssl?.enabled ?? targetInput.ssl),
