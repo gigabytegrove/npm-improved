@@ -1,8 +1,8 @@
 {
-	"name": "nginx-proxy-manager",
-	"version": "2.0.0",
+	"name": "npm-improved-frontend",
+	"version": "2.16.0",
 	"type": "module",
-	"author": "Jamie Curnow <jc@jc21.com>",
+	"author": "Gigabyte Grove",
 	"license": "MIT",
 	"scripts": {
 		"dev": "vite",
@@ -64,5 +64,6 @@
 		"vite": "^8.3.0",
 		"vite-plugin-checker": "^0.14.5",
 		"vitest": "^4.1.11"
-	}
+	},
+	"description": "NPM Improved management interface"
 }
