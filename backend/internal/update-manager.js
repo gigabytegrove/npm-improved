@@ -1,0 +1,349 @@
+import fs from "node:fs";
+import http from "node:http";
+import path from "node:path";
+import authModel from "../models/auth.js";
+import errs from "../lib/error.js";
+import internalAuditLog from "./audit-log.js";
+
+const DOCKER_SOCKET = "/var/run/docker.sock";
+const STATUS_FILE = "/data/update-status.json";
+const HELPER_IMAGE = "docker:27-cli";
+const OFFICIAL_IMAGE_PREFIX = "ghcr.io/gigabytegrove/npm-improved:";
+const ACTIVE_STATES = new Set(["preflight", "pulling", "staging", "restarting", "verifying", "rolling_back"]);
+const VALID_MODES = new Set(["sqlite", "mysql", "postgres"]);
+
+const now = () => new Date().toISOString();
+
+const readJsonFile = (filename, fallback = null) => {
+	try {
+		return JSON.parse(fs.readFileSync(filename, "utf8"));
+	} catch {
+		return fallback;
+	}
+};
+
+const writeJsonFile = (filename, value) => {
+	fs.mkdirSync(path.dirname(filename), { recursive: true });
+	const temporary = `${filename}.tmp`;
+	fs.writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
+	fs.renameSync(temporary, filename);
+};
+
+const dockerRequest = (method, requestPath, body) =>
+	new Promise((resolve, reject) => {
+		const payload = body === undefined ? null : Buffer.from(JSON.stringify(body));
+		const req = http.request(
+			{
+				socketPath: DOCKER_SOCKET,
+				path: requestPath,
+				method,
+				headers: payload
+					? {
+							"Content-Type": "application/json",
+							"Content-Length": payload.length,
+						}
+					: undefined,
+			},
+			(res) => {
+				let raw = "";
+				res.setEncoding("utf8");
+				res.on("data", (chunk) => {
+					raw += chunk;
+				});
+				res.on("end", () => {
+					if ((res.statusCode || 500) < 200 || (res.statusCode || 500) >= 300) {
+						reject(new Error(`Docker API ${method} ${requestPath} failed with HTTP ${res.statusCode}: ${raw.slice(0, 500)}`));
+						return;
+					}
+					resolve({ statusCode: res.statusCode || 0, raw });
+				});
+			},
+		);
+		req.on("error", reject);
+		if (payload) req.write(payload);
+		req.end();
+	});
+
+const ensureHelperImage = async () => {
+	const result = await dockerRequest(
+		"POST",
+		"/images/create?fromImage=docker&tag=27-cli",
+	);
+	for (const line of result.raw.split(/\r?\n/)) {
+		if (!line.trim()) continue;
+		try {
+			const event = JSON.parse(line);
+			if (event.error) {
+				throw new Error(event.error);
+			}
+		} catch (err) {
+			if (err instanceof SyntaxError) continue;
+			throw err;
+		}
+	}
+};
+
+const configuredMode = () => {
+	const mode = (process.env.NPM_DEPLOYMENT_MODE || "sqlite").trim().toLowerCase();
+	return VALID_MODES.has(mode) ? mode : "sqlite";
+};
+
+const capabilities = () => {
+	const projectDir = (process.env.NPM_HOST_PROJECT_DIR || "").trim();
+	const socketAvailable = fs.existsSync(DOCKER_SOCKET);
+
+	return {
+		enabled: socketAvailable && projectDir !== "",
+		docker_socket_available: socketAvailable,
+		host_project_configured: projectDir !== "",
+		host_project_dir: projectDir || null,
+		deployment_mode: configuredMode(),
+		helper_image: HELPER_IMAGE,
+		reason:
+			!socketAvailable
+				? "Docker socket is not available to this NPM Improved container."
+				: projectDir === ""
+					? "The host project directory is not configured. Run the current NPM Improved Docker installer once to enable UI updates."
+					: null,
+	};
+};
+
+const getStatus = () => {
+	const saved = readJsonFile(STATUS_FILE, null);
+	return (
+		saved || {
+			state: "idle",
+			message: "No update has been run yet.",
+			action: null,
+			started_at: null,
+			completed_at: null,
+			source_version: null,
+			target_version: null,
+			previous_image: null,
+			target_image: null,
+			error: null,
+		}
+	);
+};
+
+const assertIdle = () => {
+	const status = getStatus();
+	if (ACTIVE_STATES.has(status.state)) {
+		throw new errs.ValidationError(`An update operation is already active (${status.state}).`);
+	}
+};
+
+const verifyCurrentPassword = async (access, password) => {
+	if (typeof password !== "string" || password.length < 1) {
+		throw new errs.ValidationError("Current administrator password is required.");
+	}
+
+	const userId = access.token.getUserId(0);
+	if (!userId) {
+		throw new errs.AuthError("Unable to identify the authenticated administrator.");
+	}
+
+	const auth = await authModel
+		.query()
+		.where("user_id", "=", userId)
+		.where("type", "=", "password")
+		.first();
+
+	if (!auth || !(await auth.verifyPassword(password))) {
+		throw new errs.AuthError("Current administrator password is incorrect.");
+	}
+};
+
+const launchHandoff = async ({ action, targetImage, sourceVersion, targetVersion }) => {
+	const caps = capabilities();
+	if (!caps.enabled) {
+		throw new errs.ValidationError(caps.reason || "Automatic updates are unavailable.");
+	}
+
+	const projectDir = caps.host_project_dir;
+	const helperName = `npm-improved-update-${Date.now()}`;
+	const scriptPath = path.posix.join(projectDir, "scripts/update-handoff.sh");
+
+	await ensureHelperImage();
+
+	const create = await dockerRequest(
+		"POST",
+		`/containers/create?name=${encodeURIComponent(helperName)}`,
+		{
+			Image: HELPER_IMAGE,
+			Cmd: ["sh", scriptPath, action, targetImage || "", caps.deployment_mode, sourceVersion || "", targetVersion || ""],
+			WorkingDir: projectDir,
+			Env: [
+				`NPM_UPDATE_STATUS_FILE=${path.posix.join(projectDir, "data/update-status.json")}`,
+				`NPM_UPDATE_PROJECT_DIR=${projectDir}`,
+			],
+			Labels: {
+				"com.gigabytegrove.npm-improved.role": "update-handoff",
+				"com.gigabytegrove.npm-improved.temporary": "true",
+			},
+			HostConfig: {
+				AutoRemove: true,
+				Binds: [
+					"/var/run/docker.sock:/var/run/docker.sock",
+					`${projectDir}:${projectDir}`,
+				],
+			},
+		},
+	);
+
+	const created = JSON.parse(create.raw || "{}");
+	if (!created.Id) {
+		throw new Error("Docker did not return an updater handoff container ID.");
+	}
+
+	await dockerRequest("POST", `/containers/${created.Id}/start`);
+	return { helper_id: created.Id, helper_name: helperName };
+};
+
+const startUpdate = async (access, release, password) => {
+	await access.can("settings:update");
+	await verifyCurrentPassword(access, password);
+	assertIdle();
+
+	if (!release?.latest || !release.update_available) {
+		throw new errs.ValidationError("No newer stable NPM Improved release is available.");
+	}
+	if (!/^v\d+\.\d+\.\d+$/.test(release.latest)) {
+		throw new errs.ValidationError("The published release tag is not a supported stable version.");
+	}
+
+	const sourceVersion = release.current;
+	const targetVersion = release.latest;
+	const targetImage = `${OFFICIAL_IMAGE_PREFIX}${targetVersion}`;
+	const startedAt = now();
+
+	writeJsonFile(STATUS_FILE, {
+		state: "preflight",
+		action: "update",
+		message: `Preparing update from ${sourceVersion} to ${targetVersion}.`,
+		started_at: startedAt,
+		completed_at: null,
+		source_version: sourceVersion,
+		target_version: targetVersion,
+		previous_version: sourceVersion,
+		previous_image: null,
+		target_image: targetImage,
+		target_digest: null,
+		error: null,
+	});
+
+	try {
+		const helper = await launchHandoff({
+			action: "update",
+			targetImage,
+			sourceVersion,
+			targetVersion,
+		});
+		await internalAuditLog.add(access, {
+			action: "update_started",
+			object_type: "system",
+			meta: {
+				source_version: sourceVersion,
+				target_version: targetVersion,
+				target_image: targetImage,
+				helper_id: helper.helper_id,
+			},
+		});
+		return { ...getStatus(), helper };
+	} catch (err) {
+		writeJsonFile(STATUS_FILE, {
+			...getStatus(),
+			state: "failed",
+			message: "The update handoff could not be started.",
+			completed_at: now(),
+			error: err instanceof Error ? err.message : String(err),
+		});
+		throw err;
+	}
+};
+
+const rollback = async (access, password) => {
+	await access.can("settings:update");
+	await verifyCurrentPassword(access, password);
+	assertIdle();
+
+	const status = getStatus();
+	if (!status.previous_image) {
+		throw new errs.ValidationError("No previous image is available for rollback.");
+	}
+
+	const sourceVersion = process.env.NPM_BUILD_VERSION || status.target_version || "unknown";
+	const targetVersion = status.previous_version || "previous";
+	const targetImage = status.previous_image;
+
+	writeJsonFile(STATUS_FILE, {
+		...status,
+		state: "preflight",
+		action: "rollback",
+		message: `Preparing rollback to ${targetVersion}.`,
+		started_at: now(),
+		completed_at: null,
+		source_version: sourceVersion,
+		target_version: targetVersion,
+		target_image: targetImage,
+		error: null,
+	});
+
+	const helper = await launchHandoff({
+		action: "rollback",
+		targetImage,
+		sourceVersion,
+		targetVersion,
+	});
+	await internalAuditLog.add(access, {
+		action: "rollback_started",
+		object_type: "system",
+		meta: {
+			source_version: sourceVersion,
+			target_version: targetVersion,
+			target_image: targetImage,
+			helper_id: helper.helper_id,
+		},
+	});
+	return { ...getStatus(), helper };
+};
+
+const restart = async (access, password) => {
+	await access.can("settings:update");
+	await verifyCurrentPassword(access, password);
+	assertIdle();
+
+	const sourceVersion = process.env.NPM_BUILD_VERSION || "unknown";
+	writeJsonFile(STATUS_FILE, {
+		...getStatus(),
+		state: "preflight",
+		action: "restart",
+		message: "Preparing NPM Improved restart.",
+		started_at: now(),
+		completed_at: null,
+		source_version: sourceVersion,
+		target_version: sourceVersion,
+		error: null,
+	});
+
+	const helper = await launchHandoff({
+		action: "restart",
+		targetImage: "",
+		sourceVersion,
+		targetVersion: sourceVersion,
+	});
+	await internalAuditLog.add(access, {
+		action: "restart_started",
+		object_type: "system",
+		meta: { version: sourceVersion, helper_id: helper.helper_id },
+	});
+	return { ...getStatus(), helper };
+};
+
+export default {
+	capabilities,
+	getStatus,
+	startUpdate,
+	rollback,
+	restart,
+};
