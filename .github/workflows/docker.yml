@@ -269,15 +269,17 @@ jobs:
           secondary_role="$(docker compose -f compose.mysql.yaml exec -T db             mariadb -unpm -pci-mysql-password npm -Nse             "SELECT role FROM npmi_shared_node WHERE node_id='ci-secondary'")"
           test "$secondary_role" = "secondary"
 
-      - name: Shared MySQL smoke diagnostics
+      - name: Database smoke diagnostics
         if: failure()
         run: |
           docker compose -f compose.mysql.yaml ps || true
           docker compose -f compose.mysql.yaml logs --tail=250 || true
+          docker logs --tail=250 npmi-migrate || true
           docker logs --tail=250 npmi-secondary || true
 
-      - name: Stop Shared MySQL smoke stack
+      - name: Stop database smoke stack
         if: always()
         run: |
+          docker rm -f npmi-migrate >/dev/null 2>&1 || true
           docker rm -f npmi-secondary >/dev/null 2>&1 || true
           docker compose -f compose.mysql.yaml down -v --remove-orphans || true
