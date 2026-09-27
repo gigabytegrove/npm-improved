@@ -155,11 +155,10 @@ SQLite quick start:
 ```bash
 git clone https://github.com/gigabytegrove/npm-improved.git
 cd npm-improved
-cp .env.example .env
-docker compose up -d --build
+./scripts/install-docker sqlite
 ```
 
-The default stack persists `/data` and `/etc/letsencrypt` in local bind-mounted directories and exposes HTTP on port 80, the independent management control plane on port 81, and HTTPS on port 443.
+The installer creates `.env` on first run, validates the Compose stack, checks that the configured host ports are free before building, starts the service, and waits for the container healthcheck. The default stack persists `/data` and `/etc/letsencrypt` in local bind-mounted directories and exposes HTTP on port 80, the independent management control plane on port 81, and HTTPS on port 443.
 
 Database alternatives are included:
 

@@ -13,6 +13,7 @@ on:
       - ".dockerignore"
       - ".env.example"
       - "DOCKER.md"
+      - "scripts/install-docker"
       - ".github/workflows/docker.yml"
   push:
     branches:
@@ -27,6 +28,7 @@ on:
       - ".dockerignore"
       - ".env.example"
       - "DOCKER.md"
+      - "scripts/install-docker"
       - ".github/workflows/docker.yml"
 
 permissions:
@@ -51,6 +53,15 @@ jobs:
           sed -i 's/^MYSQL_PASSWORD=.*/MYSQL_PASSWORD=ci-mysql-password/' .env
           sed -i 's/^MYSQL_ROOT_PASSWORD=.*/MYSQL_ROOT_PASSWORD=ci-mysql-root-password/' .env
           sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci-postgres-password/' .env
+          sed -i 's/^HTTP_PORT=.*/HTTP_PORT=18080/' .env
+          sed -i 's/^ADMIN_PORT=.*/ADMIN_PORT=18081/' .env
+          sed -i 's/^HTTPS_PORT=.*/HTTPS_PORT=18443/' .env
+
+      - name: Validate installer shell
+        run: bash -n scripts/install-docker
+
+      - name: Validate installer preflight
+        run: ./scripts/install-docker sqlite --check-only
 
       - name: Validate SQLite Compose
         run: docker compose -f compose.yaml config --quiet
