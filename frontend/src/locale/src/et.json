@@ -143,6 +143,12 @@
 	"action.view-details": {
 		"defaultMessage": "Vaata üksikasju"
 	},
+	"app.name": {
+		"defaultMessage": "NPM Improved"
+	},
+	"app.tagline": {
+		"defaultMessage": "Töökindel pöördproksi haldus"
+	},
 	"auditlogs": {
 		"defaultMessage": "Auditilogid"
 	},
@@ -494,11 +500,35 @@
 	"login.2fa-description": {
 		"defaultMessage": "Sisesta kood autentimisäpist"
 	},
+	"login.2fa-subtitle": {
+		"defaultMessage": "Kinnitage oma identiteet, et jätkata NPM Improvediga."
+	},
 	"login.2fa-title": {
 		"defaultMessage": "Kaheastmeline autentimine"
 	},
 	"login.2fa-verify": {
 		"defaultMessage": "Kinnita"
+	},
+	"login.hero.description": {
+		"defaultMessage": "Tehinguline konfiguratsioon, taastetööriistad, sertifikaatide elutsükli haldus ja jälgitavus ühes juhtpaneelis."
+	},
+	"login.hero.eyebrow": {
+		"defaultMessage": "NPM Improved juhtimistasand"
+	},
+	"login.hero.feature-config": {
+		"defaultMessage": "Tehinguline konfiguratsioon"
+	},
+	"login.hero.feature-health": {
+		"defaultMessage": "Süsteemi tervis"
+	},
+	"login.hero.feature-recovery": {
+		"defaultMessage": "Sisseehitatud taaste"
+	},
+	"login.hero.title": {
+		"defaultMessage": "Pöördproksi haldus, mis jääb kasutatavaks ka siis, kui midagi läheb valesti."
+	},
+	"login.subtitle": {
+		"defaultMessage": "Logige sisse, et hallata hoste, sertifikaate, taastet ja süsteemi tervist."
 	},
 	"login.title": {
 		"defaultMessage": "Logi kontole sisse"
@@ -748,6 +778,15 @@
 	},
 	"settings.default-site.redirect": {
 		"defaultMessage": "Ümbersuunamine"
+	},
+	"setup.hero.description": {
+		"defaultMessage": "Looge esimene administraatori konto ning seadistage seejärel ühest kohast proksihostid, sertifikaadid, kaitse, varukoopiad ja taaste."
+	},
+	"setup.hero.eyebrow": {
+		"defaultMessage": "Esmane seadistus"
+	},
+	"setup.hero.title": {
+		"defaultMessage": "Alustage puhta ja turvalise juhtimistasandiga."
 	},
 	"setup.preamble": {
 		"defaultMessage": "Alustuseks loo endale administraatori konto."

@@ -143,6 +143,12 @@
 	"action.view-details": {
 		"defaultMessage": "View Details"
 	},
+	"app.name": {
+		"defaultMessage": "NPM Improved"
+	},
+	"app.tagline": {
+		"defaultMessage": "Resilient reverse proxy management"
+	},
 	"auditlogs": {
 		"defaultMessage": "Audit Logs"
 	},
@@ -216,22 +222,22 @@
 		"defaultMessage": "This section requires some knowledge about Certbot and its DNS plugins. Please consult the respective plugins documentation."
 	},
 	"certificates.http.reachability-404": {
-		"defaultMessage": "There is a server found at this domain but it does not seem to be Nginx Proxy Manager. Please make sure your domain points to the IP where your NPM instance is running."
+		"defaultMessage": "There is a server found at this domain but it does not seem to be NPM Improved. Please make sure your domain points to the IP where your NPM Improved instance is running."
 	},
 	"certificates.http.reachability-failed-to-check": {
 		"defaultMessage": "Failed to check the reachability due to a communication error with site24x7.com."
 	},
 	"certificates.http.reachability-not-resolved": {
-		"defaultMessage": "There is no server available at this domain. Please make sure your domain exists and points to the IP where your NPM instance is running and if necessary port 80 is forwarded in your router."
+		"defaultMessage": "There is no server available at this domain. Please make sure your domain exists and points to the IP where your NPM Improved instance is running and, if necessary, port 80 is forwarded in your router."
 	},
 	"certificates.http.reachability-ok": {
 		"defaultMessage": "Your server is reachable and creating certificates should be possible."
 	},
 	"certificates.http.reachability-other": {
-		"defaultMessage": "There is a server found at this domain but it returned an unexpected status code {code}. Is it the NPM server? Please make sure your domain points to the IP where your NPM instance is running."
+		"defaultMessage": "There is a server found at this domain but it returned an unexpected status code {code}. Is it the NPM Improved server? Please make sure your domain points to the IP where your NPM Improved instance is running."
 	},
 	"certificates.http.reachability-wrong-data": {
-		"defaultMessage": "There is a server found at this domain but it returned an unexpected data. Is it the NPM server? Please make sure your domain points to the IP where your NPM instance is running."
+		"defaultMessage": "There is a server found at this domain but it returned unexpected data. Is it the NPM Improved server? Please make sure your domain points to the IP where your NPM Improved instance is running."
 	},
 	"certificates.http.test-results": {
 		"defaultMessage": "Test Results"
@@ -438,7 +444,7 @@
 		"defaultMessage": "Expires: {date}"
 	},
 	"footer.github-fork": {
-		"defaultMessage": "Fork me on Github"
+		"defaultMessage": "NPM Improved on GitHub"
 	},
 	"host.flags.block-exploits": {
 		"defaultMessage": "Block Common Exploits"
@@ -494,14 +500,38 @@
 	"login.2fa-description": {
 		"defaultMessage": "Enter the code from your authenticator app"
 	},
+	"login.2fa-subtitle": {
+		"defaultMessage": "Confirm your identity to continue to NPM Improved."
+	},
 	"login.2fa-title": {
 		"defaultMessage": "Two-Factor Authentication"
 	},
 	"login.2fa-verify": {
 		"defaultMessage": "Verify"
 	},
+	"login.hero.description": {
+		"defaultMessage": "Transactional configuration, recovery tooling, certificate lifecycle management, and observability in one control surface."
+	},
+	"login.hero.eyebrow": {
+		"defaultMessage": "NPM Improved control plane"
+	},
+	"login.hero.feature-config": {
+		"defaultMessage": "Transactional config"
+	},
+	"login.hero.feature-health": {
+		"defaultMessage": "System health"
+	},
+	"login.hero.feature-recovery": {
+		"defaultMessage": "Built-in recovery"
+	},
+	"login.hero.title": {
+		"defaultMessage": "Reverse proxy management that stays usable when things go wrong."
+	},
+	"login.subtitle": {
+		"defaultMessage": "Sign in to manage hosts, certificates, recovery, and system health."
+	},
 	"login.title": {
-		"defaultMessage": "Login to your account"
+		"defaultMessage": "Welcome back"
 	},
 	"logs": {
 		"defaultMessage": "Logs"
@@ -749,11 +779,20 @@
 	"settings.default-site.redirect": {
 		"defaultMessage": "Redirect"
 	},
+	"setup.hero.description": {
+		"defaultMessage": "Create the first administrator account, then configure proxy hosts, certificates, protection, backups, and recovery from one place."
+	},
+	"setup.hero.eyebrow": {
+		"defaultMessage": "First-run setup"
+	},
+	"setup.hero.title": {
+		"defaultMessage": "Start with a clean, secure control plane."
+	},
 	"setup.preamble": {
-		"defaultMessage": "Get started by creating your admin account."
+		"defaultMessage": "Create the administrator account for this installation."
 	},
 	"setup.title": {
-		"defaultMessage": "Welcome!"
+		"defaultMessage": "Set up NPM Improved"
 	},
 	"sign-in": {
 		"defaultMessage": "Sign in"
@@ -792,7 +831,7 @@
 		"defaultMessage": "Test"
 	},
 	"update-available": {
-		"defaultMessage": "Update Available: {latestVersion}"
+		"defaultMessage": "NPM Improved update available: {latestVersion}"
 	},
 	"user": {
 		"defaultMessage": "User"
