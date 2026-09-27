@@ -22,6 +22,7 @@ import settingModel from "../models/setting.js";
 import streamModel from "../models/stream.js";
 import userModel from "../models/user.js";
 import userPermissionModel from "../models/user_permission.js";
+import internalAuditLog from "./audit-log.js";
 import internalNginx from "./nginx.js";
 
 const MAX_BUNDLE_BYTES = 512 * 1024 * 1024;
@@ -395,6 +396,50 @@ const regenerateNginx = async () => {
 	await internalNginx.reload();
 };
 
+
+const makePayload = (scope, database, filesystem) => ({
+	scope,
+	created_at: new Date().toISOString(),
+	source: {
+		product: "NPM Improved",
+		version: pjson.version,
+		database: databaseEngineName(),
+		hostname: os.hostname(),
+	},
+	database,
+	filesystem,
+});
+
+const writePreRestoreBackup = (scope, database, passphrase) => {
+	const backupDir = "/data/backups";
+	fs.mkdirSync(backupDir, { recursive: true, mode: 0o700 });
+	const payload = makePayload(scope, database, captureFilesystem(scope));
+	const filename =
+		"pre-restore-" +
+		new Date().toISOString().replace(/[:.]/g, "-") +
+		"-" +
+		scope +
+		".npmibak";
+	const fullPath = path.join(backupDir, filename);
+	fs.writeFileSync(fullPath, createBackupEnvelope(payload, passphrase), { mode: 0o600 });
+
+	const retained = fs
+		.readdirSync(backupDir)
+		.filter((name) => name.startsWith("pre-restore-") && name.endsWith(".npmibak"))
+		.map((name) => ({
+			name,
+			path: path.join(backupDir, name),
+			mtime: fs.statSync(path.join(backupDir, name)).mtimeMs,
+		}))
+		.sort((a, b) => b.mtime - a.mtime);
+
+	for (const stale of retained.slice(10)) {
+		fs.rmSync(stale.path, { force: true });
+	}
+
+	return fullPath;
+};
+
 const parseUploadedBundle = (file, passphrase) => {
 	const buffer = file?.data;
 	if (!Buffer.isBuffer(buffer) || !buffer.length) {
@@ -436,27 +481,26 @@ const internalDisasterRecovery = {
 
 		const database = await captureDatabase(scope);
 		const filesystem = captureFilesystem(scope);
-		const payload = {
-			scope,
-			created_at: new Date().toISOString(),
-			source: {
-				product: "NPM Improved",
-				version: pjson.version,
-				database: databaseEngineName(),
-				hostname: os.hostname(),
-			},
-			database,
-			filesystem,
-		};
+		const payload = makePayload(scope, database, filesystem);
 		const data = createBackupEnvelope(payload, passphrase);
+		const filename =
+			"npm-improved-" +
+			scope +
+			"-" +
+			new Date().toISOString().replace(/[:.]/g, "-") +
+			".npmibak";
+		await internalAuditLog.add(access, {
+			action: "exported",
+			object_type: "disaster-recovery",
+			object_id: 0,
+			meta: {
+				scope,
+				filename,
+			},
+		});
 		return {
 			data,
-			filename:
-				"npm-improved-" +
-				scope +
-				"-" +
-				new Date().toISOString().replace(/[:.]/g, "-") +
-				".npmibak",
+			filename,
 			summary: summarize({ ...payload, format_version: 1 }),
 		};
 	},
@@ -479,6 +523,7 @@ const internalDisasterRecovery = {
 		const currentUserId = access.token.getUserId(1);
 		const rollbackScope = bundle.scope === "disaster-recovery" ? "disaster-recovery" : "configuration";
 		const previousDatabase = await captureDatabase(rollbackScope);
+		const safetyBackupPath = writePreRestoreBackup(rollbackScope, previousDatabase, passphrase);
 		const rollbackRoot = snapshotLiveFilesystem();
 
 		restoreInProgress = true;
@@ -492,11 +537,22 @@ const internalDisasterRecovery = {
 			await regenerateNginx();
 
 			removePath(rollbackRoot);
+			await internalAuditLog.add(access, {
+				action: "restored",
+				object_type: "disaster-recovery",
+				object_id: 0,
+				meta: {
+					scope: bundle.scope,
+					source_version: bundle.source?.version || "unknown",
+					safety_backup_path: safetyBackupPath,
+				},
+			});
 			return {
 				ok: true,
 				scope: bundle.scope,
 				restoredAt: new Date().toISOString(),
 				restartRequired: bundle.scope === "disaster-recovery",
+				safetyBackupPath,
 				summary: summarize(bundle),
 			};
 		} catch (err) {
