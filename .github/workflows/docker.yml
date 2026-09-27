@@ -73,4 +73,128 @@ jobs:
         run: docker compose -f compose.postgres.yaml config --quiet
 
       - name: Build production image
-        run: docker build --pull --progress=plain -f docker/Dockerfile -t npm-improved:ci .
+        run: docker build --pull --progress=plain -f docker/Dockerfile -t npm-improved:local .
+
+      - name: Smoke test Shared MySQL with two NPMi nodes
+        run: |
+          set -Eeuo pipefail
+
+          mkdir -p data/nginx/custom letsencrypt
+          cat > data/database-config.json <<'JSON'
+          {
+            "version": 1,
+            "database": {
+              "engine": "mysql2",
+              "host": "db",
+              "port": 3306,
+              "user": "npm",
+              "password": "ci-mysql-password",
+              "name": "npm",
+              "ssl": false,
+              "shared": true
+            }
+          }
+          JSON
+          cat > data/shared-database-node.json <<'JSON'
+          {
+            "version": 1,
+            "node_id": "ci-primary",
+            "node_name": "CI Primary",
+            "role": "primary",
+            "public_url": "",
+            "last_applied_revision": 0,
+            "initialized": false,
+            "last_error": null
+          }
+          JSON
+          printf '%s\n' '# Shared MySQL replication smoke test' > data/nginx/custom/ci-shared.conf
+          chmod 600 data/database-config.json data/shared-database-node.json
+
+          docker compose -f compose.mysql.yaml up -d --no-build
+
+          primary_id="$(docker compose -f compose.mysql.yaml ps -q app)"
+          for _ in $(seq 1 90); do
+            state="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$primary_id")"
+            if [ "$state" = "healthy" ]; then
+              break
+            fi
+            if [ "$state" = "unhealthy" ] || [ "$state" = "exited" ] || [ "$state" = "dead" ]; then
+              docker compose -f compose.mysql.yaml logs app
+              exit 1
+            fi
+            sleep 2
+          done
+          test "$(docker inspect --format '{{.State.Health.Status}}' "$primary_id")" = "healthy"
+
+          docker compose -f compose.mysql.yaml exec -T db             mariadb -unpm -pci-mysql-password npm -Nse             "SELECT COUNT(*) FROM npmi_shared_state WHERE id=1" | grep -qx '1'
+
+          mkdir -p ci-secondary/data ci-secondary/letsencrypt
+          cat > ci-secondary/data/database-config.json <<'JSON'
+          {
+            "version": 1,
+            "database": {
+              "engine": "mysql2",
+              "host": "db",
+              "port": 3306,
+              "user": "npm",
+              "password": "ci-mysql-password",
+              "name": "npm",
+              "ssl": false,
+              "shared": true
+            }
+          }
+          JSON
+          cat > ci-secondary/data/shared-database-node.json <<'JSON'
+          {
+            "version": 1,
+            "node_id": "ci-secondary",
+            "node_name": "CI Secondary",
+            "role": "secondary",
+            "public_url": "",
+            "last_applied_revision": 0,
+            "initialized": false,
+            "last_error": null
+          }
+          JSON
+          chmod 600 ci-secondary/data/database-config.json ci-secondary/data/shared-database-node.json
+
+          docker run -d             --name npmi-secondary             --network npm-improved_default             -v "$PWD/ci-secondary/data:/data"             -v "$PWD/ci-secondary/letsencrypt:/etc/letsencrypt"             npm-improved:local
+
+          for _ in $(seq 1 90); do
+            if docker exec npmi-secondary /usr/bin/check-health >/dev/null 2>&1; then
+              break
+            fi
+            state="$(docker inspect --format '{{.State.Status}}' npmi-secondary)"
+            if [ "$state" = "exited" ] || [ "$state" = "dead" ]; then
+              docker logs npmi-secondary
+              exit 1
+            fi
+            sleep 2
+          done
+          docker exec npmi-secondary /usr/bin/check-health
+
+          test -f ci-secondary/data/nginx/custom/ci-shared.conf
+          grep -Fq 'Shared MySQL replication smoke test' ci-secondary/data/nginx/custom/ci-shared.conf
+
+          primary_keys="$(sha256sum data/keys.json | awk '{print $1}')"
+          secondary_keys="$(sha256sum ci-secondary/data/keys.json | awk '{print $1}')"
+          test "$primary_keys" = "$secondary_keys"
+
+          node_count="$(docker compose -f compose.mysql.yaml exec -T db             mariadb -unpm -pci-mysql-password npm -Nse             "SELECT COUNT(*) FROM npmi_shared_node WHERE node_id IN ('ci-primary','ci-secondary')")"
+          test "$node_count" -eq 2
+
+          secondary_role="$(docker compose -f compose.mysql.yaml exec -T db             mariadb -unpm -pci-mysql-password npm -Nse             "SELECT role FROM npmi_shared_node WHERE node_id='ci-secondary'")"
+          test "$secondary_role" = "secondary"
+
+      - name: Shared MySQL smoke diagnostics
+        if: failure()
+        run: |
+          docker compose -f compose.mysql.yaml ps || true
+          docker compose -f compose.mysql.yaml logs --tail=250 || true
+          docker logs --tail=250 npmi-secondary || true
+
+      - name: Stop Shared MySQL smoke stack
+        if: always()
+        run: |
+          docker rm -f npmi-secondary >/dev/null 2>&1 || true
+          docker compose -f compose.mysql.yaml down -v --remove-orphans || true
