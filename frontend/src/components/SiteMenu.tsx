@@ -181,6 +181,8 @@ function MenuGroup({
 }
 
 export function SiteMenu() {
+	const navigate = useNavigate();
+
 	const closeMenu = () => {
 		const menu = document.querySelector<HTMLElement>("#navbar-menu");
 		const toggler = document.querySelector<HTMLElement>("[data-npmi-menu-toggle]");
@@ -192,7 +194,15 @@ export function SiteMenu() {
 	return (
 		<aside id="navbar-menu" className={`${styles.sidebar} collapse d-md-flex`}>
 			<div className={styles.inner}>
-				<a href="/" className={styles.brand} onClick={closeMenu}>
+				<a
+					href="/"
+					className={styles.brand}
+					onClick={(event) => {
+						event.preventDefault();
+						navigate("/");
+						closeMenu();
+					}}
+				>
 					<img
 						src="/images/npm-improved-logo.webp"
 						alt="Nginx Proxy Manager Improved"
