@@ -1,0 +1,27 @@
+{
+	"operationId": "inspectDisasterRecoveryBackup",
+	"summary": "Decrypt and validate a backup without changing the instance",
+	"tags": ["disaster-recovery"],
+	"security": [{"bearerAuth": ["admin"]}],
+	"requestBody": {
+		"required": true,
+		"content": {
+			"multipart/form-data": {
+				"schema": {
+					"type": "object",
+					"required": ["backup", "passphrase"],
+					"properties": {
+						"backup": {"type": "string", "format": "binary"},
+						"passphrase": {"type": "string", "minLength": 12}
+					}
+				}
+			}
+		}
+	},
+	"responses": {
+		"200": {
+			"description": "Validated backup metadata",
+			"content": {"application/json": {"schema": {"type": "object"}}}
+		}
+	}
+}
