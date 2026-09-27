@@ -48,7 +48,7 @@ The native console reports independent health for:
 
 It also displays:
 
-- failed generated configuration candidates retained as `.err` files;
+- failed generated configuration candidates retained as `.err` files, including authenticated read-only inspection of the rejected generated config;
 - encrypted `.npmibak` recovery backups retained under `/data/backups`.
 
 Available recovery operations include:
