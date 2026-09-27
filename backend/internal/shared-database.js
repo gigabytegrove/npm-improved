@@ -258,10 +258,10 @@ const markChanged = () => {
 	publishTimer.unref?.();
 };
 
-const reconcileNow = async () => {
+const reconcileNow = async ({ allowPrimary = false } = {}) => {
 	if (!isSharedDatabase() || reconcileRunning) return null;
 	const node = readNode();
-	if (node.role !== "secondary") return null;
+	if (node.role !== "secondary" && !allowPrimary) return null;
 
 	reconcileRunning = true;
 	try {
@@ -469,9 +469,7 @@ const initTimer = async () => {
 				// This node may be a former Primary returning after another node
 				// handled failover. Adopt the newer shared filesystem/JWT generation
 				// before it is allowed to reclaim the Primary lease.
-				writeNode({ role: "secondary" });
-				const result = await reconcileNow();
-				writeNode({ role: "primary" });
+				const result = await reconcileNow({ allowPrimary: true });
 				if (result?.restartRequired) {
 					logger.info("Restarting backend before reclaiming Primary so shared JWT identity is active");
 					process.exit(0);
