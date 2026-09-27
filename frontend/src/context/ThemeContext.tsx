@@ -1,11 +1,11 @@
 import type React from "react";
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 
-const StorageKey = "tabler-theme";
+const StorageKey = "npm-improved-theme";
+const LegacyStorageKey = "tabler-theme";
 export const Light = "light";
 export const Dark = "dark";
 
-// Define theme types
 export type Theme = "light" | "dark";
 
 interface ThemeContextType {
@@ -28,21 +28,34 @@ const getBrowserDefault = (): Theme => {
 	return Light;
 };
 
+const getStoredTheme = (): Theme => {
+	if (typeof window === "undefined") {
+		return Light;
+	}
+
+	const stored = localStorage.getItem(StorageKey) as Theme | null;
+	if (stored === Light || stored === Dark) {
+		return stored;
+	}
+
+	const legacy = localStorage.getItem(LegacyStorageKey) as Theme | null;
+	if (legacy === Light || legacy === Dark) {
+		return legacy;
+	}
+
+	return getBrowserDefault();
+};
+
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
-	const [theme, setThemeState] = useState<Theme>(() => {
-		// Try to read theme from localStorage or use 'light' as default
-		if (typeof window !== "undefined") {
-			const stored = localStorage.getItem(StorageKey) as Theme | null;
-			return stored || getBrowserDefault();
-		}
-		return getBrowserDefault();
-	});
+	const [theme, setThemeState] = useState<Theme>(getStoredTheme);
 
 	useEffect(() => {
 		document.body.dataset.theme = theme;
 		document.body.classList.remove(theme === Light ? Dark : Light);
 		document.body.classList.add(theme);
+		document.documentElement.setAttribute("data-bs-theme", theme);
 		localStorage.setItem(StorageKey, theme);
+		localStorage.removeItem(LegacyStorageKey);
 	}, [theme]);
 
 	const toggleTheme = () => {
@@ -53,11 +66,8 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
 		setThemeState(newTheme);
 	};
 
-	const getTheme = () => {
-		return theme;
-	};
+	const getTheme = () => theme;
 
-	document.documentElement.setAttribute("data-bs-theme", theme);
 	return <ThemeContext.Provider value={{ theme, toggleTheme, setTheme, getTheme }}>{children}</ThemeContext.Provider>;
 };
 
