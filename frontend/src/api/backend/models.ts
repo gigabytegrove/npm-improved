@@ -68,6 +68,45 @@ export interface LogTail {
 	exists: boolean;
 }
 
+export interface SecurityLogCount {
+	key: string;
+	count: number;
+}
+
+export interface SecurityLogEvent {
+	category: string;
+	label: string;
+	severity: "low" | "medium" | "high" | "critical";
+	confidence: "heuristic" | "strong";
+	timestamp: string | null;
+	status: number;
+	method: string;
+	host: string;
+	uri: string;
+	clientIp: string;
+	userAgent: string;
+	sourceHostType: LogHostType | null;
+	sourceHostId: number | null;
+}
+
+export interface SecurityLogSummary {
+	requestsAnalyzed: number;
+	eventsDetected: number;
+	blockedResponses: number;
+	uniqueIps: number;
+	topSources: SecurityLogCount[];
+	topHosts: SecurityLogCount[];
+	categories: SecurityLogCount[];
+	statuses: SecurityLogCount[];
+	events: SecurityLogEvent[];
+	hours: number;
+	sourcesScanned: number;
+	filesMissing: number;
+	filesTruncated: number;
+	hostLimitReached: boolean;
+	generatedAt: string;
+}
+
 export interface AccessList {
 	id?: number;
 	createdOn?: string;
