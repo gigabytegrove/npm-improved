@@ -30,6 +30,8 @@ const (
 	defaultLetsEncryptDir    = "/etc/letsencrypt"
 	defaultNginxBinary       = "/usr/sbin/nginx"
 	defaultNginxPIDFile      = "/run/nginx/nginx.pid"
+	defaultNodeBinary        = "/usr/local/bin/node"
+	defaultRecoveryScript    = "/app/backend/scripts/recovery-restore.js"
 )
 
 type config struct {
@@ -42,6 +44,8 @@ type config struct {
 	LetsEncryptDir    string
 	NginxBinary       string
 	NginxPIDFile      string
+	NodeBinary        string
+	RecoveryScript    string
 }
 
 func main() {
@@ -135,6 +139,8 @@ func loadConfig(logger *log.Logger) (config, error) {
 		LetsEncryptDir:    envOrDefault("NPM_LETSENCRYPT_DIR", defaultLetsEncryptDir),
 		NginxBinary:       envOrDefault("NPM_NGINX_BINARY", defaultNginxBinary),
 		NginxPIDFile:      envOrDefault("NPM_NGINX_PID_FILE", defaultNginxPIDFile),
+		NodeBinary:        envOrDefault("NPM_NODE_BINARY", defaultNodeBinary),
+		RecoveryScript:    envOrDefault("NPM_RECOVERY_RESTORE_SCRIPT", defaultRecoveryScript),
 	}, nil
 }
 
