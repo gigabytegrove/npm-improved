@@ -97,6 +97,21 @@ The database is persisted under:
 
 The application receives the existing `DB_MYSQL_*` environment variables from the Compose definition.
 
+## Change databases later from the UI
+
+You do not have to reinstall NPM Improved just because your database needs change.
+
+After installation, open **Settings → Database & Storage** to:
+
+- move SQLite to MySQL/MariaDB;
+- move MySQL/MariaDB back to SQLite;
+- join an existing Shared MySQL deployment;
+- test and inspect a target database before switching.
+
+The wizard copies and verifies data before changing the active database and leaves the original source database in place.
+
+See [Database & Shared MySQL](/guide/database).
+
 ## PostgreSQL deployment
 
 Edit `.env` and set the PostgreSQL password:
@@ -209,28 +224,35 @@ The independent control plane also exposes:
 
 Before upgrading, back up `./data`, `./letsencrypt`, and the external database data when MariaDB or PostgreSQL is used.
 
+Use the installer target that matches the deployment:
+
 SQLite:
 
 ```bash
+git checkout develop
 git pull --ff-only
-docker compose up -d --build
+./scripts/install-docker sqlite --clean-build
 ```
 
-MariaDB:
+MariaDB / MySQL:
 
 ```bash
+git checkout develop
 git pull --ff-only
-docker compose -f compose.mysql.yaml up -d --build
+./scripts/install-docker mysql --clean-build
 ```
 
 PostgreSQL:
 
 ```bash
+git checkout develop
 git pull --ff-only
-docker compose -f compose.postgres.yaml up -d --build
+./scripts/install-docker postgres --clean-build
 ```
 
-After an upgrade, verify the management control plane, proxy hosts, certificates, streams, logs, and System Health.
+If **Settings → Database & Storage** selected a runtime database, that selection is stored under `/data` and survives the rebuild.
+
+After an upgrade, verify the Control Center, Proxy Hosts, certificates, Streams, Database & Storage, logs, System Health, and any HA/synchronization features you rely on.
 
 ## Logs and status
 

@@ -4,7 +4,7 @@ layout: home
 hero:
   name: "NPM Improved"
   text: "Nginx Proxy Manager, with safer failure modes."
-  tagline: Independent management, transactional rollback, backend high availability, multi-instance synchronization, recovery, observability, and managed protection.
+  tagline: Independent management, transactional rollback, backend high availability, shared MySQL, multi-instance synchronization, recovery, observability, and managed protection.
   image:
     src: /npm-improved-logo.webp
     alt: Nginx Proxy Manager Improved
@@ -42,6 +42,8 @@ features:
     details: One hostname can use multiple Nginx upstream targets with round-robin, least-connections, client-IP affinity, or primary/failover behavior.
   - title: Instance Synchronization
     details: Primary/secondary NPM Improved nodes replicate encrypted configuration so multiple proxy nodes can serve the same sites and a secondary can be promoted during a primary failure.
+  - title: Database Mobility & Shared MySQL
+    details: Start on SQLite, move to MySQL/MariaDB from the UI, move back when needed, or let multiple NPM Improved nodes share one coordinated MySQL database.
   - title: NPM Compatibility
     details: Keeps familiar proxy hosts, redirects, streams, certificates, access lists, users, and API patterns where practical.
 ---

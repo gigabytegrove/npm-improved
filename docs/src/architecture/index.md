@@ -138,6 +138,30 @@ Trusted sources use an empty Nginx limiting key, which excludes them from manage
 
 The Protection setting itself is transactional: the database setting and generated policy remain aligned with the last configuration that successfully validated and reloaded.
 
+## Database deployment models
+
+NPM Improved supports two multi-node state models.
+
+### Primary / Secondary Instance Synchronization
+
+Each node has its own database. The Primary is authoritative and sends encrypted configuration snapshots to Secondary nodes. Secondary configuration is read-only until a node is deliberately promoted.
+
+### Shared MySQL
+
+Several nodes connect to one MySQL/MariaDB database.
+
+Each node still has its own Nginx process and local generated configuration. A shared-database watcher detects relevant changes and regenerates/reloads that node's Nginx state.
+
+Shared MySQL also coordinates:
+
+- JWT signing identity, so authenticated sessions can move between proxy nodes;
+- node heartbeat/presence;
+- scheduled certificate-maintenance locking.
+
+Filesystem certificate/custom assets remain outside the SQL database and must be shared or replicated separately.
+
+The two state models are mutually exclusive so two replication systems do not compete for the same configuration.
+
 ## Backup and disaster recovery
 
 NPM Improved backup bundles store logical application records instead of a raw database file, making the format portable across supported database engines.
