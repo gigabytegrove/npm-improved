@@ -134,6 +134,10 @@ a:hover {
 	overflow-x: auto;
 }
 
+.npmi-content > .mt-4 {
+	margin-top: 0 !important;
+}
+
 @media (max-width: 767.98px) {
 	.npmi-content {
 		padding: 1rem 0.85rem 1.7rem;
@@ -234,12 +238,7 @@ h3 {
 }
 
 .card-status-top {
-	top: -1px;
-	left: 1.15rem;
-	right: auto;
-	width: 54px;
-	height: 3px;
-	border-radius: 0 0 999px 999px;
+	display: none;
 }
 
 .card-header {
