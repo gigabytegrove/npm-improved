@@ -41,6 +41,8 @@ export default defineConfig({
 				items: [
 					{ text: "Guide", link: "/guide/" },
 					{ text: "HTTP Protection", link: "/guide/protection" },
+					{ text: "Proxy Host High Availability", link: "/guide/high-availability" },
+					{ text: "Instance Synchronization", link: "/guide/instance-sync" },
 					{ text: "Backup & Disaster Recovery", link: "/guide/disaster-recovery" },
 					{ text: "Native Recovery Console", link: "/guide/recovery-console" },
 					{ text: "Configuration History", link: "/guide/config-history" },
