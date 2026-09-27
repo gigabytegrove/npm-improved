@@ -73,10 +73,24 @@ body {
 
 .npm-improved-header {
 	position: relative;
+	z-index: 1040;
+	overflow: visible;
 	background: color-mix(in srgb, var(--npi-surface) 92%, transparent);
 	border-bottom: 1px solid var(--npi-border);
 	box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
 	backdrop-filter: blur(14px);
+}
+
+/*
+ * Keep both navigation layers above page content while leaving Bootstrap
+ * modals/backdrops above navigation. The blurred primary header creates its
+ * own stacking context, so it needs an explicit z-index for child dropdowns
+ * to escape the normal document paint order.
+ */
+header.navbar-expand-md:not(.npm-improved-header) {
+	position: relative;
+	z-index: 1030;
+	overflow: visible;
 }
 
 .npm-improved-header::before {
@@ -103,6 +117,7 @@ body {
 }
 
 .dropdown-menu {
+	z-index: 1045;
 	padding: 0.45rem;
 	border: 1px solid var(--npi-border);
 	border-radius: 0.85rem;
