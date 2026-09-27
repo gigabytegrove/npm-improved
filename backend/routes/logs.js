@@ -103,4 +103,47 @@ router
 		}
 	});
 
+/**
+ * /api/logs/security
+ */
+router
+	.route("/security")
+	.options((_, res) => {
+		res.sendStatus(204);
+	})
+	.all(jwtdecode())
+
+	/**
+	 * GET /api/logs/security
+	 *
+	 * Aggregate recent HTTP access-log security events across visible hosts.
+	 */
+	.get(async (req, res, next) => {
+		try {
+			const data = await validator(
+				{
+					additionalProperties: false,
+					properties: {
+						hours: {
+							anyOf: [{ type: "null" }, { type: "integer", minimum: 1, maximum: 168 }],
+						},
+						limit: {
+							anyOf: [{ type: "null" }, { type: "integer", minimum: 1, maximum: 500 }],
+						},
+					},
+				},
+				{
+					hours: typeof req.query.hours !== "undefined" ? req.query.hours : null,
+					limit: typeof req.query.limit !== "undefined" ? req.query.limit : null,
+				},
+			);
+
+			const result = await internalLogViewer.securitySummary(res.locals.access, data);
+			res.status(200).send(result);
+		} catch (err) {
+			debug(logger, `${req.method.toUpperCase()} ${req.path}: ${err}`);
+			next(err);
+		}
+	});
+
 export default router;
