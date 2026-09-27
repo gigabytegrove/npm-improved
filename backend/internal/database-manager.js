@@ -307,6 +307,9 @@ const copySnapshot = async (target, snapshot, replaceTarget) => {
 		for (const table of [...commonTables].reverse()) {
 			await trx(table).del();
 		}
+		if (replaceTarget && targetTables.includes("shared_runtime")) {
+			await trx("shared_runtime").del();
+		}
 		for (const table of commonTables) {
 			const rows = snapshot.rows[table] || [];
 			for (let offset = 0; offset < rows.length; offset += COPY_BATCH_SIZE) {
