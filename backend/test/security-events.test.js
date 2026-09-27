@@ -63,3 +63,20 @@ test("summarizes events, sources, hosts and blocked responses", () => {
 	assert.equal(summary.uniqueIps, 2);
 	assert.deepEqual(summary.topSources[0], { key: "198.51.100.20", count: 2 });
 });
+
+test("reports HTTP 429 as an enforced rate-limit security event", () => {
+	const events = classifyAccessRecord(parseAccessLogLine(line("/api/search", 429, "203.0.113.55")));
+	const event = events.find((item) => item.category === "rate-limit");
+	assert.ok(event);
+	assert.equal(event.label, "Rate limit enforced");
+	assert.equal(event.confidence, "strong");
+	assert.equal(event.status, 429);
+});
+
+test("rate-limit responses participate in blocked and category summaries", () => {
+	const records = [parseAccessLogLine(line("/api/search", 429, "203.0.113.55"))].filter(Boolean);
+	const summary = summarizeSecurityRecords(records);
+	assert.equal(summary.blockedResponses, 1);
+	assert.equal(summary.eventsDetected, 1);
+	assert.deepEqual(summary.categories[0], { key: "rate-limit", count: 1 });
+});
