@@ -69,7 +69,7 @@ Existing hosts receive a baseline revision automatically before their first post
 
 Settings → **Backup & Recovery** can create encrypted, versioned `.npmibak` bundles.
 
-**Configuration backups** are portable and contain hosts, streams, access lists, settings, certificate records/material, Let's Encrypt state, and custom Nginx/default-site files while leaving destination user/JWT identity intact.
+**Configuration backups** are portable and contain hosts, streams, access lists, settings, configuration history, certificate records/material, Let's Encrypt state, and custom Nginx/default-site files while leaving destination user/JWT identity intact.
 
 **Full disaster recovery backups** additionally preserve users, permissions, authentication/2FA records, configuration history, and the instance JWT keys so the same NPM Improved installation can be rebuilt after host or storage loss.
 
