@@ -169,9 +169,12 @@ jobs:
             sleep 1
           done
 
-          docker exec npmi-db-wizard-mysql \
-            mariadb -unpmi -pci-database-password npmi_target \
-            -e 'SELECT COUNT(*) AS users FROM user;' | grep -Eq '[[:space:]]1
+          USER_COUNT="$(
+            docker exec npmi-db-wizard-mysql \
+              mariadb -N -B -unpmi -pci-database-password npmi_target \
+              -e 'SELECT COUNT(*) FROM user;'
+          )"
+          test "$USER_COUNT" = "1"
 
           curl -fsS \
             -H "Authorization: Bearer $TOKEN" \
@@ -183,7 +186,7 @@ jobs:
             -H "Authorization: Bearer $TOKEN" \
             -H 'Content-Type: application/json' \
             -d '{"engine":"sqlite","sqlite":{"filename":"/data/database.sqlite"},"replace_target":true,"confirmation":"MIGRATE"}' \
-            http://127.0.0.1:19081/api/database/migrate | jq -e '.ok == true and .restart_scheduled == true'
+            http://127.0.0.1:19081/api/database/migrate | jq -e '.ok == true and .restartScheduled == true'
 
           for attempt in $(seq 1 60); do
             STATUS="$(curl -fsS -H "Authorization: Bearer $TOKEN" http://127.0.0.1:19081/api/database/status 2>/dev/null || true)"
