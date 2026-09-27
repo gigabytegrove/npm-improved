@@ -83,7 +83,7 @@ jobs:
           cleanup() {
             docker rm -f npmi-db-wizard-app npmi-db-wizard-mysql >/dev/null 2>&1 || true
             docker network rm npmi-db-wizard >/dev/null 2>&1 || true
-            rm -rf /tmp/npmi-db-wizard
+            sudo rm -rf /tmp/npmi-db-wizard
           }
           trap cleanup EXIT
 
