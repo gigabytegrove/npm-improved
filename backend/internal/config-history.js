@@ -50,6 +50,18 @@ const internalConfigHistory = {
 		const limit = Math.min(Math.max(Number.parseInt(data.limit, 10) || 100, 1), 250);
 		const query = configRevisionModel
 			.query()
+			.select(
+				"id",
+				"created_on",
+				"modified_on",
+				"user_id",
+				"object_type",
+				"object_id",
+				"operation",
+				"status",
+				"error_text",
+				"meta",
+			)
 			.orderBy("created_on", "DESC")
 			.orderBy("id", "DESC")
 			.limit(limit)
