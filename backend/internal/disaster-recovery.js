@@ -131,15 +131,21 @@ const captureFilesystem = (scope) => {
 		roots[name] = entries;
 	}
 
-	if (scope === "disaster-recovery" && fs.existsSync("/data/keys.json")) {
-		const stat = fs.statSync("/data/keys.json");
-		state.bytes += stat.size;
-		roots.jwt_keys = [{
-			path: "keys.json",
-			type: "file",
-			mode: stat.mode & 0o777,
-			data: fs.readFileSync("/data/keys.json").toString("base64"),
-		}];
+	if (scope === "disaster-recovery") {
+		for (const [name, filename] of [
+			["jwt_keys", "/data/keys.json"],
+			["recovery_access", "/data/recovery-access.json"],
+		]) {
+			if (!fs.existsSync(filename)) continue;
+			const stat = fs.statSync(filename);
+			state.bytes += stat.size;
+			roots[name] = [{
+				path: path.basename(filename),
+				type: "file",
+				mode: stat.mode & 0o777,
+				data: fs.readFileSync(filename).toString("base64"),
+			}];
+		}
 	}
 
 	return { roots, bytes: state.bytes };
@@ -196,7 +202,7 @@ const validateBundle = (bundle) => {
 	}
 
 	for (const [rootName, entries] of Object.entries(bundle.filesystem.roots)) {
-		if (![...Object.keys(FILE_ROOTS), "jwt_keys"].includes(rootName) || !Array.isArray(entries)) {
+		if (![...Object.keys(FILE_ROOTS), "jwt_keys", "recovery_access"].includes(rootName) || !Array.isArray(entries)) {
 			throw new Error("Backup contains an unsupported filesystem root");
 		}
 		for (const entry of entries) {
@@ -304,9 +310,15 @@ const restoreFilesystem = (bundle) => {
 	}
 
 	if (bundle.scope === "disaster-recovery") {
-		const entry = bundle.filesystem.roots.jwt_keys?.find((item) => item.type === "file");
-		if (entry) {
-			fs.writeFileSync("/data/keys.json", Buffer.from(entry.data, "base64"), { mode: 0o600 });
+		for (const [rootName, filename] of [
+			["jwt_keys", "/data/keys.json"],
+			["recovery_access", "/data/recovery-access.json"],
+		]) {
+			const entry = bundle.filesystem.roots[rootName]?.find((item) => item.type === "file");
+			if (entry) {
+				fs.writeFileSync(filename, Buffer.from(entry.data, "base64"), { mode: 0o600 });
+				fs.chmodSync(filename, 0o600);
+			}
 		}
 	}
 };
@@ -320,6 +332,7 @@ const snapshotLiveFilesystem = () => {
 		custom_ssl: "/data/custom_ssl",
 		letsencrypt: "/etc/letsencrypt",
 		keys: "/data/keys.json",
+		recovery_access: "/data/recovery-access.json",
 	};
 	for (const [name, source] of Object.entries(sources)) {
 		if (fs.existsSync(source)) {
@@ -339,6 +352,7 @@ const restoreLiveFilesystemSnapshot = (rollbackRoot) => {
 		custom_ssl: "/data/custom_ssl",
 		letsencrypt: "/etc/letsencrypt",
 		keys: "/data/keys.json",
+		recovery_access: "/data/recovery-access.json",
 	};
 	for (const [name, target] of Object.entries(targets)) {
 		removePath(target);
