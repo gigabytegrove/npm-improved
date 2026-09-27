@@ -96,3 +96,11 @@ jobs:
         continue-on-error: true
         working-directory: frontend
         run: node check-locales.cjs
+
+      - name: Install documentation dependencies
+        working-directory: docs
+        run: yarn install --frozen-lockfile
+
+      - name: Build documentation
+        working-directory: docs
+        run: yarn build
