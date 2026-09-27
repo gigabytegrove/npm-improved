@@ -3,9 +3,10 @@ import { T } from "src/locale";
 import CertificateLifecycle from "./CertificateLifecycle";
 import DefaultSite from "./DefaultSite";
 import DisasterRecovery from "./DisasterRecovery";
+import InstanceSync from "./InstanceSync";
 import Protection from "./Protection";
 
-type SettingsPage = "default-site" | "certificate-lifecycle" | "protection" | "disaster-recovery";
+type SettingsPage = "default-site" | "certificate-lifecycle" | "protection" | "instance-sync" | "disaster-recovery";
 
 export default function Layout() {
 	const [page, setPage] = useState<SettingsPage>("default-site");
@@ -57,6 +58,16 @@ export default function Layout() {
 								</a>
 								<a
 									href="#"
+									className={`list-group-item list-group-item-action d-flex align-items-center ${page === "instance-sync" ? "active" : ""}`}
+									onClick={(e) => {
+										e.preventDefault();
+										setPage("instance-sync");
+									}}
+								>
+									<T id="sync.title" />
+								</a>
+								<a
+									href="#"
 									className={`list-group-item list-group-item-action d-flex align-items-center ${page === "disaster-recovery" ? "active" : ""}`}
 									onClick={(e) => {
 										e.preventDefault();
@@ -69,7 +80,17 @@ export default function Layout() {
 						</div>
 					</div>
 					<div className="col-12 col-md-9 d-flex flex-column">
-						{page === "default-site" ? <DefaultSite /> : page === "certificate-lifecycle" ? <CertificateLifecycle /> : page === "protection" ? <Protection /> : <DisasterRecovery />}
+						{page === "default-site" ? (
+							<DefaultSite />
+						) : page === "certificate-lifecycle" ? (
+							<CertificateLifecycle />
+						) : page === "protection" ? (
+							<Protection />
+						) : page === "instance-sync" ? (
+							<InstanceSync />
+						) : (
+							<DisasterRecovery />
+						)}
 					</div>
 				</div>
 			</div>
