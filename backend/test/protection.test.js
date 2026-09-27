@@ -4,6 +4,7 @@ import {
 	normalizeHostProtectionProfile,
 	normalizeProtectionSetting,
 	renderProtectionPolicy,
+	validateHostProtectionProfile,
 } from "../lib/protection.js";
 
 test("normalizes trusted IPs and CIDRs", () => {
@@ -44,6 +45,7 @@ test("renders a standard global policy with trusted-network bypass", () => {
 	});
 
 	assert.match(config, /10\.0\.0\.0\/8 1;/);
+	assert.match(config, /\$binary_remote_addr:\$host/);
 	assert.match(config, /zone=npm_protection_standard burst=60 nodelay/);
 	assert.match(config, /limit_conn npm_protection_conn 40/);
 	assert.match(config, /limit_req_status 429/);
@@ -65,4 +67,10 @@ test("invalid host protection profiles inherit safely", () => {
 	assert.equal(normalizeHostProtectionProfile("aggressive"), "aggressive");
 	assert.equal(normalizeHostProtectionProfile("anything-else"), "inherit");
 	assert.equal(normalizeHostProtectionProfile(undefined), "inherit");
+});
+
+test("host protection validation rejects unsupported values", () => {
+	assert.equal(validateHostProtectionProfile(undefined), "inherit");
+	assert.equal(validateHostProtectionProfile("standard"), "standard");
+	assert.throws(() => validateHostProtectionProfile("maximum"), /inherit, off, standard, or aggressive/);
 });

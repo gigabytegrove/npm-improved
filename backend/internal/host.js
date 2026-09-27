@@ -1,4 +1,6 @@
 import _ from "lodash";
+import errs from "../lib/error.js";
+import { validateHostProtectionProfile } from "../lib/protection.js";
 import { castJsonIfNeed } from "../lib/helpers.js";
 import deadHostModel from "../models/dead_host.js";
 import proxyHostModel from "../models/proxy_host.js";
@@ -14,6 +16,26 @@ const internalHost = {
 	 * @param   {object} [existing_data]
 	 * @returns {object}
 	 */
+	cleanProtectionData: (data, existingData) => {
+		const existingMeta = existingData?.meta && typeof existingData.meta === "object" ? existingData.meta : {};
+		const suppliedMeta = data?.meta && typeof data.meta === "object" ? data.meta : {};
+		let profile;
+		try {
+			profile = validateHostProtectionProfile(suppliedMeta.protection_profile ?? existingMeta.protection_profile);
+		} catch (err) {
+			throw new errs.ValidationError(err instanceof Error ? err.message : String(err));
+		}
+
+		return {
+			...data,
+			meta: {
+				...existingMeta,
+				...suppliedMeta,
+				protection_profile: profile,
+			},
+		};
+	},
+
 	cleanSslHstsData: (data, existingData) => {
 		const combinedData = _.assign({}, existingData || {}, data);
 

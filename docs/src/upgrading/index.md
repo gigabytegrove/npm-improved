@@ -27,6 +27,14 @@ For external MySQL/MariaDB/PostgreSQL deployments, back up the database as well.
 6. verify proxy hosts, redirects, 404 hosts, streams, certificates, logs, and Protection settings;
 7. only then upgrade the live deployment.
 
+## HTTP Protection on upgrade
+
+NPM Improved creates `/data/nginx/protection/policy.conf` when the managed protection system is introduced. The default global profile is **Standard**.
+
+After upgrading, review **Settings → Protection** and test applications that legitimately generate high request rates, maintain many concurrent connections, or use long-lived WebSockets. Per-host overrides can be set to Inherit, Off, Standard, or Aggressive.
+
+Protection policy changes are transactional, but an upgrade is still the right time to validate expected application traffic before relying on the new defaults.
+
 ## Important compatibility note
 
 NPM Improved is based on Nginx Proxy Manager and intentionally preserves its database/API concepts where practical, but this fork introduces additional settings, generated configuration, certificate lifecycle state, and control-plane behavior.

@@ -84,12 +84,14 @@ These classifications describe observed request patterns; they are not presented
 
 NPM Improved provides managed application-layer protection profiles for HTTP proxy, redirection, and 404 hosts:
 
-- **Off** — no managed global limiting;
-- **Standard** — balanced request, connection, and slow-client controls;
-- **Aggressive** — stricter limits for high-risk or low-volume services;
+- **Off** — no managed request/connection limiting;
+- **Standard** — 30 requests/second per client per host, burst 60, up to 40 concurrent connections, and conservative slow-client timeouts;
+- **Aggressive** — 10 requests/second per client per host, burst 20, up to 15 concurrent connections, and tighter slow-client timeouts;
 - **Inherit** — per-host option that uses the global policy.
 
-Trusted IPv4/IPv6 addresses and CIDR networks can bypass managed rate/connection accounting.
+The global profile is managed from **Settings → Protection**. Hosts can override it individually without raw Nginx directives. Trusted IPv4/IPv6 addresses and CIDR networks can bypass managed request/connection accounting.
+
+The policy is generated under `/data/nginx/protection/policy.conf` and changed transactionally: a new policy must pass `nginx -t` and reload successfully or the previous policy and database setting are restored.
 
 Protection uses native Nginx request-rate, concurrent-connection, timeout, and timed-out-connection controls. It is intended to reduce application-layer floods and resource exhaustion. It cannot stop a volumetric DDoS attack that saturates the network connection before packets reach Nginx.
 
