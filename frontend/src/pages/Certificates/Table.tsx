@@ -86,6 +86,20 @@ export default function Table({ data, isFetching, onDelete, onRenew, onDownload,
 				header: intl.formatMessage({ id: "column.status" }),
 				cell: (info: any) => {
 					const r = info.getValue();
+					if (r.isInUse === false) {
+						return (
+							<div>
+								<span className="badge bg-yellow-lt">Unused</span>
+								{r.autoPurgeEligible && r.purgeEligibleOn ? (
+									<div className="text-secondary small mt-1">
+										Auto purge <DateFormatter value={r.purgeEligibleOn} />
+									</div>
+								) : (
+									<div className="text-secondary small mt-1">Automatic cleanup disabled</div>
+								)}
+							</div>
+						);
+					}
 					return (
 						<CertificateInUseFormatter
 							proxyHosts={r.proxyHosts}

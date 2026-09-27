@@ -11,6 +11,25 @@ const internalSetting = {
 	 * @return {Promise}
 	 */
 	update: (access, data) => {
+		if (data.id === "certificate-lifecycle") {
+			if (!["enabled", "disabled"].includes(data.value)) {
+				return Promise.reject(new errs.ValidationError("Certificate lifecycle must be enabled or disabled"));
+			}
+
+			const retentionDays = Number.parseInt(data.meta?.unused_retention_days, 10);
+			if (!Number.isInteger(retentionDays) || retentionDays < 1 || retentionDays > 3650) {
+				return Promise.reject(new errs.ValidationError("Unused certificate retention must be between 1 and 3650 days"));
+			}
+			if (typeof data.meta?.purge_custom_certificates !== "boolean") {
+				return Promise.reject(new errs.ValidationError("Custom certificate purge setting must be true or false"));
+			}
+
+			data.meta = {
+				unused_retention_days: retentionDays,
+				purge_custom_certificates: data.meta.purge_custom_certificates,
+			};
+		}
+
 		return access
 			.can("settings:update", data.id)
 			.then((/*access_data*/) => {
