@@ -32,6 +32,7 @@ const internalDeadHost = {
 
 		thisData.owner_user_id = access.token.getUserId(1);
 		thisData = internalHost.cleanSslHstsData(thisData);
+		thisData = internalHost.cleanProtectionData(thisData);
 		if (typeof thisData.advanced_config === "undefined") thisData.advanced_config = "";
 
 		const row = await deadHostModel.query().insertAndFetch(thisData).then(utils.omitRow(omissions()));
@@ -110,6 +111,7 @@ const internalDeadHost = {
 
 		thisData = _.assign({}, { domain_names: currentRow.domain_names }, thisData);
 		thisData = internalHost.cleanSslHstsData(thisData, currentRow);
+		thisData = internalHost.cleanProtectionData(thisData, currentRow);
 		await deadHostModel.query().where({ id: thisData.id }).patch(thisData);
 
 		let updatedRow;
