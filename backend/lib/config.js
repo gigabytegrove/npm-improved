@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import NodeRSA from "node-rsa";
 import { global as logger } from "../logger.js";
+import { readRuntimeDatabaseConfig, runtimeDatabaseConfigExists } from "./database-runtime-config.js";
 
 const keysFile = "/data/keys.json";
 const mysqlEngine = "mysql2";
@@ -15,6 +16,22 @@ let instance = null;
 // 1. Load from config file first (not recommended anymore)
 // 2. Use config env variables next
 const configure = () => {
+	if (runtimeDatabaseConfigExists()) {
+		try {
+			const runtime = readRuntimeDatabaseConfig();
+			if (runtime?.database) {
+				logger.info("Using runtime database configuration from /data");
+				instance = runtime;
+				instance.keys = getKeys();
+				instance.__databaseSource = "runtime";
+				return;
+			}
+		} catch (err) {
+			logger.error(`Could not read runtime database configuration: ${err.message}`);
+			throw err;
+		}
+	}
+
 	const filename = `${process.env.NODE_CONFIG_DIR || "./config"}/${process.env.NODE_ENV || "default"}.json`;
 	if (fs.existsSync(filename)) {
 		let configData;
@@ -36,6 +53,7 @@ const configure = () => {
 
 			instance = configData;
 			instance.keys = getKeys();
+			instance.__databaseSource = "config-file";
 			return;
 		}
 	}
@@ -70,6 +88,7 @@ const configure = () => {
 					: false,
 			},
 			keys: getKeys(),
+			__databaseSource: "environment",
 		};
 		return;
 	}
@@ -90,6 +109,7 @@ const configure = () => {
 				name: envPostgresName,
 			},
 			keys: getKeys(),
+			__databaseSource: "environment",
 		};
 		return;
 	}
@@ -109,6 +129,7 @@ const configure = () => {
 			},
 		},
 		keys: getKeys(),
+		__databaseSource: "environment",
 	};
 };
 
@@ -186,6 +207,27 @@ const configGet = (key) => {
 		return instance[key];
 	}
 	return instance;
+};
+
+
+/**
+ * Returns where the active database configuration came from.
+ *
+ * @returns {string}
+ */
+const getDatabaseSource = () => {
+	instance === null && configure();
+	return instance.__databaseSource || "unknown";
+};
+
+/**
+ * Shared database mode is currently supported for MySQL/MariaDB only.
+ *
+ * @returns {boolean}
+ */
+const isSharedDatabase = () => {
+	instance === null && configure();
+	return instance.database?.engine === mysqlEngine && instance.database?.shared === true;
 };
 
 /**
@@ -271,6 +313,8 @@ export {
 	isCI,
 	configHas,
 	configGet,
+	getDatabaseSource,
+	isSharedDatabase,
 	isSqlite,
 	isMysql,
 	isPostgres,
