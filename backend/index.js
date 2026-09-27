@@ -26,8 +26,8 @@ async function appStart() {
 				logger.error("IP Ranges fetch failed, continuing anyway:", err.message);
 			});
 		})
-		.then(() => {
-			internalSharedDatabase.initTimer();
+		.then(async () => {
+			await internalSharedDatabase.initTimer();
 			if (internalSharedDatabase.isSecondary()) {
 				logger.info("Shared database secondary: certificate renewal/lifecycle writers are disabled on this node");
 			} else {
