@@ -43,6 +43,9 @@ export interface AppVersion {
 	major: number;
 	minor: number;
 	revision: number;
+	display?: string;
+	buildCommit?: string | null;
+	buildDate?: string | null;
 }
 
 export interface UserPermissions {
