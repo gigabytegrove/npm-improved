@@ -138,26 +138,36 @@ Backups are retained under `/data/backups`. Copy disaster-recovery backups off t
 
 ## Updating
 
-For the current source-build installation model:
+Use the same installer target that matches the deployment you are running. The installer rebuilds the application, recreates the live app container, and verifies the running NPM Improved build.
+
+SQLite:
 
 ```bash
+cd ~/npm-improved
+git checkout develop
 git pull --ff-only
-docker compose up -d --build
+./scripts/install-docker sqlite --clean-build
 ```
 
-For MariaDB:
+MariaDB / MySQL:
 
 ```bash
+cd ~/npm-improved
+git checkout develop
 git pull --ff-only
-docker compose -f compose.mysql.yaml up -d --build
+./scripts/install-docker mysql --clean-build
 ```
 
-For PostgreSQL:
+PostgreSQL:
 
 ```bash
+cd ~/npm-improved
+git checkout develop
 git pull --ff-only
-docker compose -f compose.postgres.yaml up -d --build
+./scripts/install-docker postgres --clean-build
 ```
+
+If the database was selected dynamically from **Settings → Database & Storage**, keep using the installer target for the underlying deployment. The saved runtime database selection under `/data` remains in place across the rebuild.
 
 Before upgrading, keep a current backup of `./data`, `./letsencrypt`, and the external database volume when one is used.
 
