@@ -2,7 +2,7 @@
 
 NPM Improved includes production-ready Docker Compose definitions in the repository root.
 
-> NPM Improved is pre-1.0 and does not yet publish a stable container image. The Compose files build the image from the checked-out source.
+> NPM Improved v1.0.0 is the first stable release. A pre-built container image is not published yet; the Compose files build the image from the checked-out source.
 
 ## Requirements
 

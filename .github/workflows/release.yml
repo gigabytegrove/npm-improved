@@ -1,0 +1,81 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - ".version"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: npm-improved-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Publish tagged GitHub release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate release metadata
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          VERSION="$(tr -d '[:space:]' < .version)"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid .version value: $VERSION" >&2
+            exit 1
+          fi
+
+          BACKEND_VERSION="$(node -p "require('./backend/package.json').version")"
+          FRONTEND_VERSION="$(node -p "require('./frontend/package.json').version")"
+
+          if [[ "$BACKEND_VERSION" != "$VERSION" ]]; then
+            echo "backend/package.json version $BACKEND_VERSION does not match $VERSION" >&2
+            exit 1
+          fi
+
+          if [[ "$FRONTEND_VERSION" != "$VERSION" ]]; then
+            echo "frontend/package.json version $FRONTEND_VERSION does not match $VERSION" >&2
+            exit 1
+          fi
+
+          NOTES=".github/release-notes/v${VERSION}.md"
+          if [[ ! -f "$NOTES" ]]; then
+            echo "Missing release notes: $NOTES" >&2
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "notes=$NOTES" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          NOTES: ${{ steps.version.outputs.notes }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TAG="v${VERSION}"
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "$TAG already exists; leaving the existing release unchanged."
+            exit 0
+          fi
+
+          gh release create "$TAG" \
+            --target "$GITHUB_SHA" \
+            --title "NPM Improved $TAG" \
+            --notes-file "$NOTES"
