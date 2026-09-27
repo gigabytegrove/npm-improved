@@ -16,61 +16,32 @@ export function SiteFooter() {
 	};
 
 	return (
-		<footer className="footer d-print-none py-3 npm-improved-footer">
-			<div className="container-xl">
-				<div className="row text-center align-items-center flex-row-reverse">
-					<div className="col-lg-auto ms-lg-auto">
-						<ul className="list-inline list-inline-dots mb-0">
-							<li className="list-inline-item">
-								<a
-									href={repositoryUrl}
-									target="_blank"
-									className="link-secondary"
-									rel="noopener noreferrer"
-								>
-									<T id="footer.github-fork" />
-								</a>
-							</li>
-							<li className="list-inline-item">
-								<a
-									href={`${repositoryUrl}/releases`}
-									target="_blank"
-									className="link-secondary"
-									rel="noopener noreferrer"
-								>
-									Release history
-								</a>
-							</li>
-						</ul>
-					</div>
-					<div className="col-12 col-lg-auto mt-3 mt-lg-0">
-						<ul className="list-inline list-inline-dots mb-0">
-							<li className="list-inline-item">© 2026 Gigabyte Grove</li>
-							<li className="list-inline-item">
-								<a
-									href={`${repositoryUrl}/releases`}
-									className="link-secondary"
-									target="_blank"
-									rel="noopener noreferrer"
-								>
-									NPM Improved {getVersion()}
-								</a>
-							</li>
-							{versionData?.updateAvailable && versionData?.latest && (
-								<li className="list-inline-item">
-									<a
-										href={`${repositoryUrl}/releases/tag/${versionData.latest}`}
-										className="link-warning fw-bold"
-										target="_blank"
-										rel="noopener noreferrer"
-										title={`NPM Improved ${versionData.latest} is available`}
-									>
-										<T id="update-available" data={{ latestVersion: versionData.latest }} />
-									</a>
-								</li>
-							)}
-						</ul>
-					</div>
+		<footer className="npm-improved-footer">
+			<div className="npmi-footer-inner">
+				<div className="npmi-footer-brand">
+					<span className="npmi-footer-dot" />
+					<span>NPM Improved {getVersion()}</span>
+					<span className="npmi-footer-separator">·</span>
+					<span>Gigabyte Grove</span>
+				</div>
+				<div className="npmi-footer-links">
+					<a href={repositoryUrl} target="_blank" rel="noopener noreferrer">
+						<T id="footer.github-fork" />
+					</a>
+					<a href={`${repositoryUrl}/releases`} target="_blank" rel="noopener noreferrer">
+						Release history
+					</a>
+					{versionData?.updateAvailable && versionData?.latest ? (
+						<a
+							href={`${repositoryUrl}/releases/tag/${versionData.latest}`}
+							className="npmi-footer-update"
+							target="_blank"
+							rel="noopener noreferrer"
+							title={`NPM Improved ${versionData.latest} is available`}
+						>
+							<T id="update-available" data={{ latestVersion: versionData.latest }} />
+						</a>
+					) : null}
 				</div>
 			</div>
 		</footer>
