@@ -74,17 +74,32 @@ const setupDefaultUser = async () => {
  * @returns {Promise}
  */
 const setupDefaultSettings = async () => {
-	const row = await settingModel.query().select("id").where({ id: "default-site" }).first();
-
-	if (!row?.id) {
-		await settingModel.query().insert({
+	const defaults = [
+		{
 			id: "default-site",
 			name: "Default Site",
 			description: "What to show when Nginx is hit with an unknown Host",
 			value: "congratulations",
 			meta: {},
-		});
-		logger.info("Default settings added");
+		},
+		{
+			id: "certificate-lifecycle",
+			name: "Certificate Lifecycle",
+			description: "Controls quarantine and automatic cleanup of unused certificates",
+			value: "enabled",
+			meta: {
+				unused_retention_days: 30,
+				purge_custom_certificates: true,
+			},
+		},
+	];
+
+	for (const setting of defaults) {
+		const row = await settingModel.query().select("id").where({ id: setting.id }).first();
+		if (!row?.id) {
+			await settingModel.query().insert(setting);
+			logger.info(`Default setting added: ${setting.id}`);
+		}
 	}
 };
 
