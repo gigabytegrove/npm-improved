@@ -277,7 +277,7 @@ const internalInstanceSync = {
 			const configured = readSecret();
 			const supplied = String(req.get("X-NPMi-Cluster-Secret") || "");
 			if (!configured || !safeEqual(configured, supplied)) {
-				throw new errs.AuthError("Invalid cluster credentials");
+				throw new errs.TokenRevokedError("Invalid cluster credentials");
 			}
 			next();
 		} catch (err) {
