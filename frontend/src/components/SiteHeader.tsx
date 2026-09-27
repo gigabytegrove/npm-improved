@@ -31,8 +31,8 @@ export function SiteHeader() {
 							<span className={styles.mark}>
 								<img
 									src="/images/npm-improved-mark.webp"
-									width={36}
-									height={36}
+									width={58}
+									height={38}
 									className="navbar-brand-image"
 									alt="Nginx Proxy Manager Improved"
 								/>
