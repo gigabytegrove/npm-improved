@@ -2,9 +2,10 @@ import { useState } from "react";
 import { T } from "src/locale";
 import CertificateLifecycle from "./CertificateLifecycle";
 import DefaultSite from "./DefaultSite";
+import DisasterRecovery from "./DisasterRecovery";
 import Protection from "./Protection";
 
-type SettingsPage = "default-site" | "certificate-lifecycle" | "protection";
+type SettingsPage = "default-site" | "certificate-lifecycle" | "protection" | "disaster-recovery";
 
 export default function Layout() {
 	const [page, setPage] = useState<SettingsPage>("default-site");
@@ -54,11 +55,21 @@ export default function Layout() {
 								>
 									Protection
 								</a>
+								<a
+									href="#"
+									className={`list-group-item list-group-item-action d-flex align-items-center ${page === "disaster-recovery" ? "active" : ""}`}
+									onClick={(e) => {
+										e.preventDefault();
+										setPage("disaster-recovery");
+									}}
+								>
+									Backup &amp; Recovery
+								</a>
 							</div>
 						</div>
 					</div>
 					<div className="col-12 col-md-9 d-flex flex-column">
-						{page === "default-site" ? <DefaultSite /> : page === "certificate-lifecycle" ? <CertificateLifecycle /> : <Protection />}
+						{page === "default-site" ? <DefaultSite /> : page === "certificate-lifecycle" ? <CertificateLifecycle /> : page === "protection" ? <Protection /> : <DisasterRecovery />}
 					</div>
 				</div>
 			</div>
