@@ -158,7 +158,7 @@ cd npm-improved
 ./scripts/install-docker sqlite
 ```
 
-The installer creates `.env` on first run, validates the Compose stack, checks that the configured host ports are free before building, starts the service, and waits for the container healthcheck. The default stack persists `/data` and `/etc/letsencrypt` in local bind-mounted directories and exposes HTTP on port 80, the independent management control plane on port 81, and HTTPS on port 443.
+The installer creates `.env` on first run, validates the Compose stack, checks that the configured host ports are free before building, starts the service, and waits for the container healthcheck. If the host already uses the configured ports, rerun it with `--auto-ports` to select and persist free host-side mappings automatically. The default stack persists `/data` and `/etc/letsencrypt` in local bind-mounted directories and exposes HTTP on port 80, the independent management control plane on port 81, and HTTPS on port 443.
 
 Database alternatives are included:
 
