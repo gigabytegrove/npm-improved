@@ -44,7 +44,10 @@ const internalStream = {
 				expand: ["certificate", "owner"],
 			});
 			if (freshRow.enabled) {
-				const newMeta = await internalNginx.configure(streamModel, "stream", freshRow);
+				const newMeta = await internalNginx.configure(streamModel, "stream", freshRow, {
+					userId: access.token.getUserId(1),
+					operation: "create",
+				});
 				freshRow.meta = newMeta;
 			}
 		} catch (err) {
@@ -104,7 +107,11 @@ const internalStream = {
 				expand: ["owner", "certificate"],
 			});
 			if (updatedRow.enabled) {
-				const newMeta = await internalNginx.configure(streamModel, "stream", updatedRow);
+				const newMeta = await internalNginx.configure(streamModel, "stream", updatedRow, {
+					userId: access.token.getUserId(1),
+					operation: "update",
+					previousSnapshot: previousState,
+				});
 				updatedRow.meta = newMeta;
 			}
 		} catch (err) {
@@ -180,7 +187,11 @@ const internalStream = {
 		const previousState = await snapshotModelRow(streamModel, row.id);
 		await streamModel.query().where("id", row.id).patch({ is_deleted: 1 });
 		try {
-			await internalNginx.removeConfigTransactional("stream", row);
+			await internalNginx.removeConfigTransactional(streamModel, "stream", row, {
+				userId: access.token.getUserId(1),
+				operation: "delete",
+				previousSnapshot: previousState,
+			});
 		} catch (err) {
 			await restoreModelRow(streamModel, row.id, previousState);
 			throw err;
@@ -215,7 +226,11 @@ const internalStream = {
 		row.enabled = 1;
 		await streamModel.query().where("id", row.id).patch({ enabled: 1 });
 		try {
-			await internalNginx.configure(streamModel, "stream", row);
+			await internalNginx.configure(streamModel, "stream", row, {
+				userId: access.token.getUserId(1),
+				operation: "enable",
+				previousSnapshot: previousState,
+			});
 		} catch (err) {
 			await restoreModelRow(streamModel, row.id, previousState);
 			throw err;
@@ -247,7 +262,11 @@ const internalStream = {
 		row.enabled = 0;
 		await streamModel.query().where("id", row.id).patch({ enabled: 0 });
 		try {
-			await internalNginx.removeConfigTransactional("stream", row);
+			await internalNginx.removeConfigTransactional(streamModel, "stream", row, {
+				userId: access.token.getUserId(1),
+				operation: "disable",
+				previousSnapshot: previousState,
+			});
 		} catch (err) {
 			await restoreModelRow(streamModel, row.id, previousState);
 			throw err;
