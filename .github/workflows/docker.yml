@@ -75,6 +75,89 @@ jobs:
       - name: Build production image
         run: docker build --pull --progress=plain -f docker/Dockerfile -t npm-improved:local .
 
+      - name: Smoke test SQLite to MySQL to SQLite migration
+        run: |
+          set -Eeuo pipefail
+
+          docker compose -f compose.mysql.yaml up -d db
+          db_id="$(docker compose -f compose.mysql.yaml ps -q db)"
+          for _ in $(seq 1 90); do
+            state="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$db_id")"
+            if [ "$state" = "healthy" ]; then
+              break
+            fi
+            if [ "$state" = "unhealthy" ] || [ "$state" = "exited" ] || [ "$state" = "dead" ]; then
+              docker compose -f compose.mysql.yaml logs db
+              exit 1
+            fi
+            sleep 2
+          done
+          test "$(docker inspect --format '{{.State.Health.Status}}' "$db_id")" = "healthy"
+
+          mkdir -p ci-migrate/data ci-migrate/letsencrypt
+          docker run -d             --name npmi-migrate             --network npm-improved_default             -p 18081:81             -e INITIAL_ADMIN_EMAIL=ci@example.com             -e INITIAL_ADMIN_PASSWORD=ci-admin-password             -v "$PWD/ci-migrate/data:/data"             -v "$PWD/ci-migrate/letsencrypt:/etc/letsencrypt"             npm-improved:local
+
+          for _ in $(seq 1 90); do
+            if docker exec npmi-migrate /usr/bin/check-health >/dev/null 2>&1; then
+              break
+            fi
+            state="$(docker inspect --format '{{.State.Status}}' npmi-migrate)"
+            if [ "$state" = "exited" ] || [ "$state" = "dead" ]; then
+              docker logs npmi-migrate
+              exit 1
+            fi
+            sleep 2
+          done
+          docker exec npmi-migrate /usr/bin/check-health
+
+          token="$(curl -fsS             -H 'Content-Type: application/json'             -d '{"identity":"ci@example.com","secret":"ci-admin-password"}'             http://127.0.0.1:18081/api/tokens | jq -r '.token')"
+          test -n "$token"
+          test "$token" != "null"
+
+          mysql_target='{"engine":"mysql","host":"db","port":3306,"name":"npm","user":"npm","password":"ci-mysql-password","shared":false,"ssl":{"enabled":false,"rejectUnauthorized":true,"verifyIdentity":true}}'
+
+          curl -fsS             -H "Authorization: Bearer $token"             -H 'Content-Type: application/json'             -d "{\"target\":$mysql_target}"             http://127.0.0.1:18081/api/database/test | jq -e '.ok == true'
+
+          curl -fsS             -H "Authorization: Bearer $token"             -H 'Content-Type: application/json'             -d "{\"target\":$mysql_target,\"operation\":\"migrate\",\"confirmation\":\"MIGRATE\"}"             http://127.0.0.1:18081/api/database/migrate | jq -e '.ok == true'
+
+          for _ in $(seq 1 90); do
+            if docker exec npmi-migrate /usr/bin/check-health >/dev/null 2>&1; then
+              engine="$(curl -fsS -H "Authorization: Bearer $token"                 http://127.0.0.1:18081/api/database/status | jq -r '.engine' || true)"
+              if [ "$engine" = "mysql" ]; then
+                break
+              fi
+            fi
+            sleep 2
+          done
+
+          test "$(curl -fsS -H "Authorization: Bearer $token"             http://127.0.0.1:18081/api/database/status | jq -r '.engine')" = "mysql"
+
+          mysql_users="$(docker compose -f compose.mysql.yaml exec -T db             mariadb -unpm -pci-mysql-password npm -Nse 'SELECT COUNT(*) FROM user')"
+          test "$mysql_users" -ge 1
+
+          sqlite_target='{"engine":"sqlite","filename":"/data/roundtrip.sqlite"}'
+
+          curl -fsS             -H "Authorization: Bearer $token"             -H 'Content-Type: application/json'             -d "{\"target\":$sqlite_target}"             http://127.0.0.1:18081/api/database/test | jq -e '.ok == true'
+
+          curl -fsS             -H "Authorization: Bearer $token"             -H 'Content-Type: application/json'             -d "{\"target\":$sqlite_target,\"operation\":\"migrate\",\"confirmation\":\"MIGRATE\"}"             http://127.0.0.1:18081/api/database/migrate | jq -e '.ok == true'
+
+          for _ in $(seq 1 90); do
+            if docker exec npmi-migrate /usr/bin/check-health >/dev/null 2>&1; then
+              engine="$(curl -fsS -H "Authorization: Bearer $token"                 http://127.0.0.1:18081/api/database/status | jq -r '.engine' || true)"
+              if [ "$engine" = "sqlite" ]; then
+                break
+              fi
+            fi
+            sleep 2
+          done
+
+          test "$(curl -fsS -H "Authorization: Bearer $token"             http://127.0.0.1:18081/api/database/status | jq -r '.engine')" = "sqlite"
+          docker exec npmi-migrate node --input-type=module -e             "import Database from 'better-sqlite3'; const d=new Database('/data/roundtrip.sqlite',{readonly:true}); const n=d.prepare('SELECT COUNT(*) AS count FROM user').get().count; if(n<1) process.exit(1); console.log(n);"
+
+          docker rm -f npmi-migrate
+
+          docker compose -f compose.mysql.yaml exec -T db             mariadb -uroot -pci-mysql-root-password -e             "DROP DATABASE npm; CREATE DATABASE npm; GRANT ALL PRIVILEGES ON npm.* TO 'npm'@'%'; FLUSH PRIVILEGES;"
+
       - name: Smoke test Shared MySQL with two NPMi nodes
         run: |
           set -Eeuo pipefail
