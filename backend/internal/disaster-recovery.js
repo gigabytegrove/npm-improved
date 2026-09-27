@@ -475,6 +475,73 @@ const parseUploadedBundle = (file, passphrase) => {
 	}
 };
 
+
+const readScheduledBackupConfig = () => {
+	const passphrase = process.env.NPM_BACKUP_PASSPHRASE || "";
+	const requestedScope = process.env.NPM_BACKUP_SCOPE || "disaster-recovery";
+	const scope = TABLES[requestedScope] ? requestedScope : "disaster-recovery";
+	const intervalHoursRaw = Number.parseInt(process.env.NPM_BACKUP_INTERVAL_HOURS || "24", 10);
+	const retentionRaw = Number.parseInt(process.env.NPM_BACKUP_RETENTION || "7", 10);
+	const intervalHours = Number.isInteger(intervalHoursRaw) ? Math.min(Math.max(intervalHoursRaw, 1), 8760) : 24;
+	const retention = Number.isInteger(retentionRaw) ? Math.min(Math.max(retentionRaw, 1), 365) : 7;
+
+	return {
+		enabled: passphrase.length >= 12,
+		scope,
+		intervalHours,
+		retention,
+		passphrase,
+	};
+};
+
+const listRetainedBackups = () => {
+	const backupDir = "/data/backups";
+	if (!fs.existsSync(backupDir)) return [];
+	return fs
+		.readdirSync(backupDir)
+		.filter((name) => name.endsWith(".npmibak"))
+		.map((name) => {
+			const fullPath = path.join(backupDir, name);
+			const stat = fs.statSync(fullPath);
+			return {
+				name,
+				size: stat.size,
+				modifiedAt: stat.mtime.toISOString(),
+				type: name.startsWith("scheduled-") ? "scheduled" : name.startsWith("pre-restore-") ? "pre-restore" : "manual",
+				mtime: stat.mtimeMs,
+			};
+		})
+		.sort((a, b) => b.mtime - a.mtime);
+};
+
+const createRetainedBackup = async ({ scope, passphrase, prefix = "scheduled", retention = 7 }) => {
+	if (!TABLES[scope]) throw new Error("Backup scope is unsupported");
+	const database = await captureDatabase(scope);
+	const filesystem = captureFilesystem(scope);
+	const payload = makePayload(scope, database, filesystem);
+	const backupDir = "/data/backups";
+	fs.mkdirSync(backupDir, { recursive: true, mode: 0o700 });
+	const filename =
+		prefix +
+		"-" +
+		new Date().toISOString().replace(/[:.]/g, "-") +
+		"-" +
+		scope +
+		".npmibak";
+	const fullPath = path.join(backupDir, filename);
+	fs.writeFileSync(fullPath, createBackupEnvelope(payload, passphrase), { mode: 0o600 });
+
+	const retained = listRetainedBackups().filter((item) => item.type === prefix);
+	for (const stale of retained.slice(retention)) {
+		fs.rmSync(path.join(backupDir, stale.name), { force: true });
+	}
+	return {
+		path: fullPath,
+		name: filename,
+		summary: summarize({ ...payload, format_version: 1 }),
+	};
+};
+
 const internalDisasterRecovery = {
 	status: async (access) => {
 		await access.can("settings:update", "disaster-recovery");
@@ -490,6 +557,18 @@ const internalDisasterRecovery = {
 			encryptionRequired: true,
 			minimumPassphraseLength: 12,
 			restoreInProgress,
+			automation: (() => {
+				const config = readScheduledBackupConfig();
+				const retained = listRetainedBackups().filter((item) => item.type === "scheduled");
+				return {
+					enabled: config.enabled,
+					scope: config.scope,
+					intervalHours: config.intervalHours,
+					retention: config.retention,
+					retainedCount: retained.length,
+					latestBackup: retained[0] || null,
+				};
+			})(),
 		};
 	},
 
@@ -526,6 +605,34 @@ const internalDisasterRecovery = {
 	inspect: async (access, { file, passphrase }) => {
 		await access.can("settings:update", "disaster-recovery");
 		return validateBundle(parseUploadedBundle(file, passphrase));
+	},
+
+	runScheduledBackup: async () => {
+		const config = readScheduledBackupConfig();
+		if (!config.enabled) {
+			return { enabled: false, skipped: true };
+		}
+		const result = await createRetainedBackup({
+			scope: config.scope,
+			passphrase: config.passphrase,
+			prefix: "scheduled",
+			retention: config.retention,
+		});
+		return {
+			enabled: true,
+			skipped: false,
+			...result,
+		};
+	},
+
+	getScheduledBackupConfig: () => {
+		const config = readScheduledBackupConfig();
+		return {
+			enabled: config.enabled,
+			scope: config.scope,
+			intervalHours: config.intervalHours,
+			retention: config.retention,
+		};
 	},
 
 	restore: async (access, { file, passphrase, confirmation }) => {
