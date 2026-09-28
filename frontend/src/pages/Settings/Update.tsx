@@ -8,7 +8,7 @@ import {
 	IconShieldLock,
 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Alert, Modal, ProgressBar } from "react-bootstrap";
 import {
 	getUpdateManager,
@@ -76,6 +76,7 @@ const badgeClass = (state?: string) => {
 type AuthAction = "update" | "rollback" | "restart";
 
 export default function Update() {
+	const initialStatusLoad = useRef(true);
 	const {
 		data,
 		isLoading,
@@ -83,7 +84,12 @@ export default function Update() {
 		refetch,
 	} = useQuery({
 		queryKey: ["update-manager"],
-		queryFn: () => getUpdateManager(false),
+		queryFn: async () => {
+			const clearFailed = initialStatusLoad.current;
+			const result = await getUpdateManager(false, clearFailed);
+			initialStatusLoad.current = false;
+			return result;
+		},
 		refetchInterval: 3000,
 		retry: true,
 	});
