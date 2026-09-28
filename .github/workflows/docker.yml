@@ -62,8 +62,14 @@ jobs:
           bash -n scripts/install-docker
           sh -n scripts/update-handoff.sh
 
-      - name: Verify temporary updater image has Docker Compose
-        run: docker run --rm docker:27-cli docker compose version
+      - name: Verify temporary updater image requirements
+        run: |
+          docker run --rm docker:27-cli sh -c '
+            docker compose version &&
+            command -v wget &&
+            command -v gzip &&
+            command -v sha256sum
+          '
 
       - name: Validate installer preflight
         run: ./scripts/install-docker sqlite --check-only
