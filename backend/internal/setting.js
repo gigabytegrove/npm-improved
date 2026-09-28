@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import errs from "../lib/error.js";
 import { applyConfigTransaction } from "../lib/nginx-transaction.js";
 import { normalizeProtectionSetting, renderProtectionPolicy } from "../lib/protection.js";
@@ -64,6 +65,10 @@ const validateSetting = (data) => {
 };
 
 const configureDefaultSite = async (row, previousRow) => {
+	const htmlPath = "/data/nginx/default_www/index.html";
+	const previousHtmlExists = fs.existsSync(htmlPath);
+	const previousHtml = previousHtmlExists ? fs.readFileSync(htmlPath) : null;
+
 	try {
 		await applyConfigTransaction({
 			livePath: internalNginx.getConfigName("default", 0),
@@ -73,6 +78,12 @@ const configureDefaultSite = async (row, previousRow) => {
 		});
 	} catch (err) {
 		await restoreSetting(previousRow);
+		if (previousHtmlExists && previousHtml) {
+			fs.mkdirSync("/data/nginx/default_www", { recursive: true, mode: 0o750 });
+			fs.writeFileSync(htmlPath, previousHtml, { mode: 0o640 });
+		} else if (fs.existsSync(htmlPath)) {
+			fs.rmSync(htmlPath, { force: true });
+		}
 		throw err;
 	}
 };
