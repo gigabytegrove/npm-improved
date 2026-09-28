@@ -1,0 +1,101 @@
+.releaseNotes {
+	max-height: 28rem;
+	overflow: auto;
+	padding: 1rem 1.05rem;
+	border: 1px solid var(--npi-border);
+	border-radius: 0.85rem;
+	background: var(--npi-surface-soft);
+	color: var(--npi-label);
+	font-size: 0.78rem;
+	line-height: 1.62;
+}
+
+.releaseNotes :global(h1),
+.releaseNotes :global(h2),
+.releaseNotes :global(h3),
+.releaseNotes :global(h4) {
+	margin: 1.2rem 0 0.55rem;
+	color: var(--npi-heading);
+	line-height: 1.25;
+}
+
+.releaseNotes :global(h1:first-child),
+.releaseNotes :global(h2:first-child),
+.releaseNotes :global(h3:first-child) {
+	margin-top: 0;
+}
+
+.releaseNotes :global(h1) {
+	font-size: 1.15rem;
+}
+
+.releaseNotes :global(h2) {
+	font-size: 1rem;
+}
+
+.releaseNotes :global(h3),
+.releaseNotes :global(h4) {
+	font-size: 0.9rem;
+}
+
+.releaseNotes :global(p) {
+	margin: 0.55rem 0;
+}
+
+.releaseNotes :global(ul),
+.releaseNotes :global(ol) {
+	margin: 0.55rem 0;
+	padding-left: 1.25rem;
+}
+
+.releaseNotes :global(li + li) {
+	margin-top: 0.25rem;
+}
+
+.releaseNotes :global(code) {
+	padding: 0.12rem 0.3rem;
+	border: 1px solid color-mix(in srgb, var(--npi-border) 82%, transparent);
+	border-radius: 0.35rem;
+	background: var(--npi-surface);
+	color: var(--npi-primary);
+	font-size: 0.74rem;
+}
+
+.releaseNotes :global(pre) {
+	overflow-x: auto;
+	margin: 0.75rem 0;
+	padding: 0.8rem;
+	border: 1px solid var(--npi-border);
+	border-radius: 0.7rem;
+	background: var(--npi-surface-inset);
+}
+
+.releaseNotes :global(pre code) {
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--npi-label);
+}
+
+.releaseNotes :global(a) {
+	font-weight: 700;
+	text-decoration: none;
+}
+
+.releaseNotes :global(a:hover) {
+	text-decoration: underline;
+}
+
+.releaseNotes :global(hr) {
+	margin: 1rem 0;
+	border-color: var(--npi-border);
+	opacity: 1;
+}
+
+.releaseNotes :global(blockquote) {
+	margin: 0.75rem 0;
+	padding: 0.65rem 0.8rem;
+	border-left: 3px solid var(--npi-primary);
+	background: color-mix(in srgb, var(--npi-primary) 5%, var(--npi-surface));
+	color: var(--npi-muted);
+}
