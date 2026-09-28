@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.2.2] - 2026-09-28
+
+NPM Improved v1.2.2 focuses on Control Center usability and Settings navigation.
+
+### Settings workspace
+
+- Settings sections now use URL-addressable `?section=` deep links.
+- Reloading a Settings page preserves the active section instead of resetting to Default Site.
+- Browser back/forward navigation now works naturally between Settings sections.
+- Redesigned desktop Settings navigation with icons, short explanations, clearer active state, and an update-available badge.
+- Added a compact mobile Settings selector for narrow screens.
+- The global header subtitle now reflects the active Settings section.
+
+### Faster navigation
+
+- Footer update alerts now open **Settings → Update** directly instead of opening the GitHub release page.
+- The Dashboard high-availability action now opens **Settings → Instance Synchronization** directly.
+
+### Default Site usability
+
+- Added plain-language explanations to every Default Site mode.
+- Template variables are now presented as copyable cards instead of a raw table.
+- Added copy confirmation feedback for template variables.
+- Added a clearer Default Site section introduction.
+
+### Update and settings polish
+
+- Update release notes now render as formatted Markdown.
+- Update status changes are announced through an ARIA live region.
+- Added a clearer Certificate Lifecycle section introduction.
+
 ## [1.2.1] - 2026-09-28
 
 NPM Improved v1.2.1 fixes the first-release updater experience and substantially redesigns **Settings → Update**.
