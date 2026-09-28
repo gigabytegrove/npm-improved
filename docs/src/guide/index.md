@@ -10,7 +10,7 @@ You can still create a hostname, point it at an app, turn on HTTPS, and move on.
 
 ## Project status
 
-NPM Improved **v1.1.0** adds native Control Center updates and official stable container images.
+NPM Improved **v1.2.0** adds NPMX secure node pairing/synchronization and cluster-aware Default Site templates.
 
 The active integration branch is:
 

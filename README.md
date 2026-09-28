@@ -25,7 +25,7 @@
 
 > **Current release**
 >
-> NPM Improved **v1.1.0** adds the built-in **Settings → Update** manager and official stable multi-architecture container images. The `develop` branch remains the active integration branch.
+> NPM Improved **v1.2.0** adds **NPMX (NPM Improved Exchange)** secure node pairing/synchronization and cluster-aware Default Site templates. The `develop` branch remains the active integration branch.
 
 ## What is NPM Improved?
 
