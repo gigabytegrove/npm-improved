@@ -37,6 +37,15 @@ export interface InstanceSyncStatus {
 	version: string;
 	buildCommit: string | null;
 	buildDate: string | null;
+	npmx?: {
+		protocol: string;
+		protocolVersion?: number;
+		protocol_version?: number;
+		snapshotFormat?: string;
+		snapshot_format?: string;
+		capabilities: string[];
+		paired: boolean;
+	};
 }
 
 export interface InstanceSyncSettings {
@@ -56,6 +65,22 @@ export interface InstanceSyncResult {
 	summary: Record<string, any>;
 }
 
+export interface NpmxPairingCode {
+	protocol: "npmx";
+	protocolVersion: number;
+	primaryUrl: string;
+	expiresAt: string;
+	pairingCode: string;
+}
+
+export interface NpmxJoinResult {
+	ok: boolean;
+	protocol: "npmx";
+	protocolVersion: number;
+	primary: Record<string, any>;
+	status: InstanceSyncStatus;
+}
+
 export async function getInstanceSyncStatus(): Promise<InstanceSyncStatus> {
 	return await api.get({ url: "/cluster/status" });
 }
@@ -72,4 +97,18 @@ export async function runInstanceSync(): Promise<InstanceSyncResult> {
 
 export async function promoteInstanceSync(): Promise<InstanceSyncStatus> {
 	return await api.post({ url: "/cluster/promote" });
+}
+
+export async function createNpmxPairingCode(primaryUrl?: string): Promise<NpmxPairingCode> {
+	return await api.post({
+		url: "/cluster/npmx/pairing-code",
+		data: primaryUrl ? { primaryUrl } : {},
+	});
+}
+
+export async function joinNpmxPairing(pairingCode: string): Promise<NpmxJoinResult> {
+	return await api.post({
+		url: "/cluster/npmx/join",
+		data: { pairingCode },
+	});
 }
