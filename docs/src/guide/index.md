@@ -10,7 +10,7 @@ You can still create a hostname, point it at an app, turn on HTTPS, and move on.
 
 ## Project status
 
-NPM Improved **v1.2.0** adds NPMX secure node pairing/synchronization and cluster-aware Default Site templates.
+NPM Improved **v1.2.1** improves the built-in Update manager, surfaces actionable image-pull failures, and validates anonymous access to every stable release image.
 
 The active integration branch is:
 
