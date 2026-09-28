@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.2.1] - 2026-09-28
+
+NPM Improved v1.2.1 fixes the first-release updater experience and substantially redesigns **Settings → Update**.
+
+### Update experience
+
+- Moved the primary **Update to vX.Y.Z** action to the top of the Update workspace.
+- Removed the permanent administrator-password field from the bottom of the page.
+- Update, Restart, and Rollback now request the current administrator password only after the administrator chooses the action.
+- Added a focused confirmation modal for authenticated lifecycle actions.
+- Added clearer update progress, state, version transition, and immediate failure visibility.
+- Failed update state is acknowledged and cleared when the Update page is reloaded, while the completed failure remains preserved in the audit log.
+- Separated normal software updating from secondary Maintenance & Recovery controls.
+
+### Registry reliability
+
+- Docker pull failures now preserve the actual registry error instead of returning only a generic failure.
+- Authorization/visibility failures, missing manifests, and architecture mismatches are reported with actionable detail.
+- Stable release publishing now proves the exact GHCR release image can be pulled anonymously before a GitHub release is published.
+- A release can no longer be marked stable when the in-app updater cannot actually retrieve its image.
+
 ## [1.2.0] - 2026-09-28
 
 NPM Improved v1.2.0 introduces **NPMX (NPM Improved Exchange)** for easier, safer multi-node synchronization and adds cluster-aware Default Site templates.

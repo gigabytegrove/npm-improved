@@ -41,10 +41,17 @@ export interface UpdateManagerResponse {
 	status: UpdateStatus;
 }
 
-export async function getUpdateManager(refresh = false): Promise<UpdateManagerResponse> {
+export async function getUpdateManager(
+	refresh = false,
+	clearFailed = false,
+): Promise<UpdateManagerResponse> {
+	const params: Record<string, string> = {};
+	if (refresh) params.refresh = "1";
+	if (clearFailed) params.clearFailed = "1";
+
 	return await api.get({
 		url: "/version/update",
-		params: refresh ? { refresh: "1" } : undefined,
+		params: Object.keys(params).length > 0 ? params : undefined,
 	});
 }
 
