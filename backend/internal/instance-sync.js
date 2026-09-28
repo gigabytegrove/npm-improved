@@ -700,7 +700,7 @@ const internalInstanceSync = {
 					nodeId,
 					timestamp,
 					nonce,
-					body: req.body ?? null,
+					body: ["GET", "HEAD"].includes(req.method) ? null : req.body ?? null,
 				},
 				signature,
 			);
