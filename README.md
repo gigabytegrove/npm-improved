@@ -25,7 +25,7 @@
 
 > **Current release**
 >
-> NPM Improved **v1.2.2** refines the Control Center with deep-linkable Settings sections, responsive navigation, clearer Default Site controls, copyable template variables, and formatted Update release notes. The `develop` branch remains the active integration branch.
+> NPM Improved **v1.2.3** permanently fixes stale updater handoff logic by bundling the lifecycle updater with the running application image. The `develop` branch remains the active integration branch.
 
 ## What is NPM Improved?
 
