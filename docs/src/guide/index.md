@@ -10,7 +10,7 @@ You can still create a hostname, point it at an app, turn on HTTPS, and move on.
 
 ## Project status
 
-NPM Improved **v1.2.1** improves the built-in Update manager, surfaces actionable image-pull failures, and validates anonymous access to every stable release image.
+NPM Improved **v1.2.2** refines the Control Center with persistent Settings deep links, responsive Settings navigation, clearer Default Site controls, and improved updater release-note presentation.
 
 The active integration branch is:
 
