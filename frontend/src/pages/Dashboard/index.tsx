@@ -10,7 +10,7 @@ import {
 } from "@tabler/icons-react";
 import { useNavigate } from "react-router-dom";
 import { HasPermission } from "src/components";
-import { useHostReport, useUser } from "src/hooks";
+import { useHostReport } from "src/hooks";
 import { T } from "src/locale";
 import { DEAD_HOSTS, PROXY_HOSTS, REDIRECTION_HOSTS, STREAMS, VIEW } from "src/modules/Permissions";
 import styles from "./Dashboard.module.css";
@@ -35,21 +35,18 @@ function MetricCard({ title, value, icon, to, accent }: MetricCardProps) {
 				navigate(to);
 			}}
 		>
-			<div className={styles.metricTop}>
-				<span className={styles.metricIcon}>{icon}</span>
-				<span className={styles.metricLink}>
-					<IconArrowUpRight size={16} />
-				</span>
-			</div>
-			<div className={styles.metricValue}>{typeof value === "number" ? value : "—"}</div>
-			<div className={styles.metricLabel}>{title}</div>
+			<span className={styles.metricIcon}>{icon}</span>
+			<span className={styles.metricCopy}>
+				<strong>{typeof value === "number" ? value : "—"}</strong>
+				<span>{title}</span>
+			</span>
+			<IconArrowUpRight size={15} className={styles.metricLink} />
 		</a>
 	);
 }
 
 const Dashboard = () => {
 	const { data: hostReport } = useHostReport();
-	const { data: currentUser } = useUser("me");
 	const navigate = useNavigate();
 
 	const totalRoutes =
@@ -60,48 +57,28 @@ const Dashboard = () => {
 
 	return (
 		<div className={styles.dashboard}>
-			<section className={styles.hero}>
-				<div className={styles.heroGlow} />
-				<div className={styles.heroContent}>
-					<div className={styles.eyebrow}>
-						<span className={styles.liveDot} />
-						NPM Improved Control Center
-					</div>
-					<h1>
-						Good to see you{currentUser?.nickname ? `, ${currentUser.nickname}` : ""}.
-					</h1>
-					<p>
-						Manage the routing fabric, TLS, access policy, and high-availability paths from one
-						control plane.
-					</p>
-					<div className={styles.heroActions}>
-						<button
-							type="button"
-							className="btn btn-primary"
-							onClick={() => navigate("/nginx/proxy")}
-						>
-							<IconRoute size={18} />
-							Open Proxy Hosts
-						</button>
-						<button
-							type="button"
-							className="btn btn-outline-secondary"
-							onClick={() => navigate("/system-health")}
-						>
-							<IconShieldCheck size={18} />
-							System Health
-						</button>
-					</div>
+			<section className={styles.toolbar}>
+				<div>
+					<h1>Overview</h1>
+					<p>Current routing configuration and quick links.</p>
 				</div>
-				<div className={styles.heroGraphic} aria-hidden="true">
-					<div className={styles.orbitOuter} />
-					<div className={styles.orbitInner} />
-					<div className={styles.nodeCenter}>
-						<IconNetwork size={34} stroke={1.5} />
-					</div>
-					<span className={`${styles.node} ${styles.nodeOne}`} />
-					<span className={`${styles.node} ${styles.nodeTwo}`} />
-					<span className={`${styles.node} ${styles.nodeThree}`} />
+				<div className={styles.toolbarActions}>
+					<button
+						type="button"
+						className="btn btn-primary btn-sm"
+						onClick={() => navigate("/nginx/proxy")}
+					>
+						<IconRoute size={16} />
+						Proxy Hosts
+					</button>
+					<button
+						type="button"
+						className="btn btn-outline-secondary btn-sm"
+						onClick={() => navigate("/system-health")}
+					>
+						<IconShieldCheck size={16} />
+						System Health
+					</button>
 				</div>
 			</section>
 
@@ -110,7 +87,7 @@ const Dashboard = () => {
 					<MetricCard
 						title={<T id="proxy-hosts" />}
 						value={hostReport?.proxy}
-						icon={<IconBolt size={21} />}
+						icon={<IconBolt size={18} />}
 						to="/nginx/proxy"
 						accent="blue"
 					/>
@@ -119,7 +96,7 @@ const Dashboard = () => {
 					<MetricCard
 						title={<T id="redirection-hosts" />}
 						value={hostReport?.redirection}
-						icon={<IconArrowsCross size={21} />}
+						icon={<IconArrowsCross size={18} />}
 						to="/nginx/redirection"
 						accent="cyan"
 					/>
@@ -128,7 +105,7 @@ const Dashboard = () => {
 					<MetricCard
 						title={<T id="streams" />}
 						value={hostReport?.stream}
-						icon={<IconDisc size={21} />}
+						icon={<IconDisc size={18} />}
 						to="/nginx/stream"
 						accent="violet"
 					/>
@@ -137,7 +114,7 @@ const Dashboard = () => {
 					<MetricCard
 						title={<T id="dead-hosts" />}
 						value={hostReport?.dead}
-						icon={<IconBoltOff size={21} />}
+						icon={<IconBoltOff size={18} />}
 						to="/nginx/404"
 						accent="red"
 					/>
@@ -147,11 +124,8 @@ const Dashboard = () => {
 			<section className={styles.lowerGrid}>
 				<div className={styles.summaryCard}>
 					<div className={styles.sectionHeader}>
-						<div>
-							<div className={styles.sectionEyebrow}>Routing fabric</div>
-							<h2>Control plane summary</h2>
-						</div>
-						<span className={styles.totalBadge}>{totalRoutes} configured routes</span>
+						<h2>Routing summary</h2>
+						<span className={styles.totalBadge}>{totalRoutes} total</span>
 					</div>
 					<div className={styles.summaryRows}>
 						<div className={styles.summaryRow}>
@@ -167,24 +141,21 @@ const Dashboard = () => {
 							<strong>{hostReport?.stream || 0}</strong>
 						</div>
 						<div className={styles.summaryRow}>
-							<span>Controlled 404 hosts</span>
+							<span>404 hosts</span>
 							<strong>{hostReport?.dead || 0}</strong>
 						</div>
 					</div>
 				</div>
 
 				<div className={styles.haCard}>
-					<div className={styles.haIcon}>
-						<IconNetwork size={26} />
+					<div className={styles.haHeading}>
+						<IconNetwork size={20} />
+						<h2>High availability</h2>
 					</div>
-					<div>
-						<div className={styles.sectionEyebrow}>High availability</div>
-						<h2>Build for failure, not hope.</h2>
-						<p>
-							Use upstream pools for backend redundancy and Instance Synchronization for redundant
-							NPMi control-plane nodes.
-						</p>
-					</div>
+					<p>
+						Use upstream pools for backend redundancy and Instance Synchronization for redundant
+						NPM Improved nodes.
+					</p>
 					<div className={styles.haActions}>
 						<button
 							type="button"

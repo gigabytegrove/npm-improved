@@ -16,29 +16,29 @@ import { showChangePasswordModal, showTwoFactorModal, showUserModal } from "src/
 import styles from "./SiteHeader.module.css";
 
 const routeTitles: Array<[RegExp, string, string]> = [
-	[/^\/$/, "Dashboard", "Traffic, health, and proxy control at a glance"],
-	[/^\/nginx\/proxy/, "Proxy Hosts", "HTTP and HTTPS routing, pools, and failover"],
-	[/^\/nginx\/redirection/, "Redirection Hosts", "Redirect traffic with explicit destination rules"],
-	[/^\/nginx\/stream/, "Streams", "Layer 4 TCP and UDP forwarding"],
-	[/^\/nginx\/404/, "404 Hosts", "Controlled responses for retired or blocked hostnames"],
-	[/^\/access/, "Access Lists", "Authentication and network access policy"],
-	[/^\/certificates/, "Certificates", "TLS lifecycle and certificate inventory"],
-	[/^\/users/, "Users", "Operators, roles, and authentication"],
-	[/^\/audit-log/, "Audit Log", "Administrative activity and change visibility"],
-	[/^\/config-history/, "Configuration History", "Revision history and rollback evidence"],
-	[/^\/logs/, "Logs", "Traffic, error, and security observability"],
-	[/^\/system-health/, "System Health", "Runtime dependencies and control-plane status"],
-	[/^\/settings/, "Settings", "Platform policy, recovery, and synchronization"],
+	[/^\/$/, "Dashboard", "Overview"],
+	[/^\/nginx\/proxy/, "Proxy Hosts", "HTTP and HTTPS routing"],
+	[/^\/nginx\/redirection/, "Redirection Hosts", "Redirect rules"],
+	[/^\/nginx\/stream/, "Streams", "TCP and UDP forwarding"],
+	[/^\/nginx\/404/, "404 Hosts", "Unmatched host responses"],
+	[/^\/access/, "Access Lists", "Authentication and access rules"],
+	[/^\/certificates/, "Certificates", "TLS certificates"],
+	[/^\/users/, "Users", "Accounts and permissions"],
+	[/^\/audit-log/, "Audit Log", "Administrative activity"],
+	[/^\/config-history/, "Configuration History", "Saved configuration revisions"],
+	[/^\/logs/, "Logs", "Traffic and error logs"],
+	[/^\/system-health/, "System Health", "Runtime status"],
+	[/^\/settings/, "Settings", "Application settings"],
 ];
 
 const settingsSectionSubtitles: Record<string, string> = {
-	"default-site": "Fallback behavior, custom pages, and node-aware templates",
-	"certificate-lifecycle": "Certificate retention, quarantine, and cleanup",
-	protection: "Managed HTTP request and connection protection",
-	database: "SQLite, MySQL, shared storage, and migration",
-	"instance-sync": "NPMX pairing, synchronization, peers, and failover",
-	"disaster-recovery": "Encrypted backups, inspection, and restore",
-	update: "Software updates, rollback, and application restart",
+	"default-site": "Fallback page and templates",
+	"certificate-lifecycle": "Retention and cleanup",
+	protection: "HTTP and connection limits",
+	database: "Database and storage",
+	"instance-sync": "NPMX synchronization",
+	"disaster-recovery": "Backup and restore",
+	update: "Updates and restart",
 };
 
 const resolveTitle = (pathname: string, search = "") => {
@@ -47,10 +47,10 @@ const resolveTitle = (pathname: string, search = "") => {
 		return [
 			"",
 			"Settings",
-			settingsSectionSubtitles[section] || "Platform policy, recovery, and synchronization",
+			settingsSectionSubtitles[section] || "Application settings",
 		];
 	}
-	return routeTitles.find(([pattern]) => pattern.test(pathname)) || ["", "Control Center", "NPM Improved"];
+	return routeTitles.find(([pattern]) => pattern.test(pathname)) || ["", "NPM Improved", "Administration"];
 };
 
 export function SiteHeader() {

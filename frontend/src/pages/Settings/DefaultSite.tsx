@@ -1,4 +1,4 @@
-import { IconCheck, IconCopy, IconHome } from "@tabler/icons-react";
+import { IconCheck, IconCopy } from "@tabler/icons-react";
 import CodeEditor from "@uiw/react-textarea-code-editor";
 import { Field, Form, Formik } from "formik";
 import { type ReactNode, useState } from "react";
@@ -123,15 +123,12 @@ export default function DefaultSite() {
 							{errorMsg}
 						</Alert>
 
-						<div className="d-flex align-items-start gap-2 mb-4">
-							<IconHome size={24} className="mt-1 flex-shrink-0" />
-							<div>
-								<h3 className="mb-1">Default Site</h3>
-								<p className="text-secondary mb-0">
-									Choose what NPM Improved serves when a request reaches this proxy but does not
-									match a configured host.
-								</p>
-							</div>
+						<div className="mb-4">
+							<h3 className="mb-1">Default Site</h3>
+							<p className="text-secondary mb-0">
+								Choose what NPM Improved serves when a request reaches this proxy but does not
+								match a configured host.
+							</p>
 						</div>
 						<Field name="value">
 							{({ field, form }: any) => (
@@ -149,7 +146,7 @@ export default function DefaultSite() {
 												checked={field.value === "congratulations"}
 												onChange={(e) => form.setFieldValue(field.name, e.target.value)}
 											/>
-											<div className="form-selectgroup-label d-flex align-items-center p-3">
+											<div className="form-selectgroup-label d-flex align-items-center p-2">
 												<div className="me-3">
 													<span className="form-selectgroup-check" />
 												</div>
@@ -172,7 +169,7 @@ export default function DefaultSite() {
 												checked={field.value === "404"}
 												onChange={(e) => form.setFieldValue(field.name, e.target.value)}
 											/>
-											<div className="form-selectgroup-label d-flex align-items-center p-3">
+											<div className="form-selectgroup-label d-flex align-items-center p-2">
 												<div className="me-3">
 													<span className="form-selectgroup-check" />
 												</div>
@@ -195,7 +192,7 @@ export default function DefaultSite() {
 												checked={field.value === "444"}
 												onChange={(e) => form.setFieldValue(field.name, e.target.value)}
 											/>
-											<div className="form-selectgroup-label d-flex align-items-center p-3">
+											<div className="form-selectgroup-label d-flex align-items-center p-2">
 												<div className="me-3">
 													<span className="form-selectgroup-check" />
 												</div>
@@ -218,7 +215,7 @@ export default function DefaultSite() {
 												checked={field.value === "redirect"}
 												onChange={(e) => form.setFieldValue(field.name, e.target.value)}
 											/>
-											<div className="form-selectgroup-label d-flex align-items-center p-3">
+											<div className="form-selectgroup-label d-flex align-items-center p-2">
 												<div className="me-3">
 													<span className="form-selectgroup-check" />
 												</div>
@@ -241,7 +238,7 @@ export default function DefaultSite() {
 												checked={field.value === "html"}
 												onChange={(e) => form.setFieldValue(field.name, e.target.value)}
 											/>
-											<div className="form-selectgroup-label d-flex align-items-center p-3">
+											<div className="form-selectgroup-label d-flex align-items-center p-2">
 												<div className="me-3">
 													<span className="form-selectgroup-check" />
 												</div>
@@ -259,64 +256,59 @@ export default function DefaultSite() {
 								</div>
 							)}
 						</Field>
-						<div className="card mb-4">
-							<div className="card-header">
+						<div className="mb-4">
+							<div className="d-flex align-items-end justify-content-between gap-3 mb-2">
 								<div>
-									<h3 className="card-title mb-0">Template variables</h3>
+									<h4 className="mb-1">Template variables</h4>
 									<div className="text-secondary small">
-										Build one Default Site template for the whole cluster. NPMX synchronizes the
-										template, while every node renders its own identity and runtime values locally.
+										Available in Custom HTML and redirect URLs. Click the copy button to insert one
+										into your template.
 									</div>
 								</div>
 							</div>
-							<div className="card-body">
-								<div className="row g-2">
-									{templateVariables.map(([name, description]) => {
-										const copied = copiedVariable === name;
-										return (
-											<div className="col-12 col-lg-6" key={name}>
-												<button
-													type="button"
-													className="btn btn-outline-secondary w-100 text-start justify-content-start p-3 h-100"
-													onClick={() => void copyVariable(name)}
-													title={`Copy ${name}`}
-												>
-													<span
-														className="d-flex align-items-start justify-content-between gap-3 w-100"
-													>
-														<span className="min-w-0">
-															<code className="d-block mb-1">{name}</code>
-															<span className="text-secondary small d-block">
-																{description}
-															</span>
-														</span>
-														<span className="text-secondary flex-shrink-0">
-															{copied ? (
-																<IconCheck size={17} className="text-success" />
-															) : (
-																<IconCopy size={17} />
-															)}
-														</span>
-													</span>
-												</button>
-											</div>
-										);
-									})}
+							<div className="border rounded overflow-hidden">
+								<div className="table-responsive">
+									<table className="table table-sm table-vcenter mb-0">
+										<tbody>
+											{templateVariables.map(([name, description]) => {
+												const copied = copiedVariable === name;
+												return (
+													<tr key={name}>
+														<td style={{ width: "15rem" }}>
+															<code>{name}</code>
+														</td>
+														<td className="text-secondary small">{description}</td>
+														<td className="text-end" style={{ width: "3rem" }}>
+															<button
+																type="button"
+																className="btn btn-ghost-secondary btn-sm"
+																onClick={() => void copyVariable(name)}
+																title={`Copy ${name}`}
+																aria-label={`Copy ${name}`}
+															>
+																{copied ? (
+																	<IconCheck size={16} className="text-success" />
+																) : (
+																	<IconCopy size={16} />
+																)}
+															</button>
+														</td>
+													</tr>
+												);
+											})}
+										</tbody>
+									</table>
 								</div>
 							</div>
-							<div className="card-footer d-flex flex-wrap align-items-center justify-content-between gap-2 text-secondary small">
-								<span>Click any variable to copy it.</span>
-								<span>
-									The built-in page uses node variables automatically. 404 and 444 modes have no
-									page body to template.
-								</span>
+							<div className="text-secondary small mt-2">
+								NPMX synchronizes the template; each node renders its own local values.
 							</div>
 						</div>
 
 						{values.value === "redirect" && (
 							<Field name="redirect" validate={validateString(1, 255)}>
 								{({ field, form }: any) => (
-									<div className="mt-5 mb-3">
+									<div className="mt-4 mb-3">
 										<label className="form-label" htmlFor="setting-host-unknown">
 											<T id="settings.default-site.redirect" />
 										</label>
@@ -345,7 +337,7 @@ export default function DefaultSite() {
 						{values.value === "html" && (
 							<Field name="html" validate={validateString(1)}>
 								{({ field, form }: any) => (
-									<div className="mt-5 mb-3">
+									<div className="mt-4 mb-3">
 										<label className="form-label" htmlFor="setting-host-unknown">
 											<T id="settings.default-site.html" />
 										</label>
