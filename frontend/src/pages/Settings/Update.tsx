@@ -285,7 +285,7 @@ export default function Update() {
 			) : null}
 
 			<div className="card mb-4">
-				<div className="card-header d-flex align-items-center justify-content-between">
+				<div className="card-header d-flex align-items-center justify-content-between" aria-live="polite">
 					<div>
 						<h3 className="card-title mb-0">Update status</h3>
 						<div className="text-secondary small">
