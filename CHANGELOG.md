@@ -1,5 +1,40 @@
 # Changelog
 
+## [1.2.0] - 2026-09-28
+
+NPM Improved v1.2.0 introduces **NPMX (NPM Improved Exchange)** for easier, safer multi-node synchronization and adds cluster-aware Default Site templates.
+
+### NPMX secure pairing and synchronization
+
+- Added NPMX v1 as the native Primary/Secondary node-to-node exchange protocol.
+- Replaced normal administrator-entered shared-secret setup with short-lived, single-use NPMX pairing codes.
+- Persistent cluster credentials are generated automatically and are not displayed in the normal UI.
+- Pairing uses ephemeral X25519 key exchange, HKDF-SHA256 key derivation, AES-256-GCM credential transport, and HMAC-SHA256 proofs.
+- Normal NPMX requests use HMAC signatures covering the request method, path, node identity, timestamp, nonce, and canonical body digest.
+- Added timestamp and nonce replay protection.
+- Added NPMX protocol/version and capability negotiation before a secondary accepts a full synchronization snapshot.
+- Preserved the existing one-primary/read-only-secondary safety model and controlled failover promotion.
+
+### Full cluster state exchange
+
+- NPMX synchronization carries proxy configuration, users/authentication state, certificates and certificate records, Let's Encrypt material, custom SSL files, custom Nginx assets, and other required cluster filesystem state.
+- Added signed NPMX heartbeats and node status reporting.
+- Added two-node Docker integration coverage that performs real pairing, credential exchange, snapshot synchronization, and local page verification.
+
+### Cluster-aware Default Site templates
+
+- Added reusable variables for built-in and custom Default Site pages.
+- Custom HTML and redirect destinations can use node, cluster, build, and system variables.
+- Available values include node hostname, friendly node name, node ID, role, public URL, application version, build commit/date, NPMX protocol/version, platform, architecture, and render timestamp.
+- NPMX synchronizes the source template rather than copying already-rendered HTML.
+- Every node renders its own local values so an unmatched-host page can identify the exact proxy node that served it.
+- Rebranded the static startup fallback page for NPM Improved.
+
+### Restore reliability
+
+- Fixed cluster/disaster-recovery filesystem restore handling for Docker bind-mounted directories such as `/etc/letsencrypt`.
+- Restore now replaces directory contents without attempting to delete the bind-mount root itself.
+
 All notable NPM Improved changes are documented here.
 
 ## [1.1.0] - 2026-09-27
