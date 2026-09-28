@@ -136,12 +136,19 @@ const importNpmxPublicKey = (encoded) =>
 		type: "spki",
 	});
 
-export const deriveNpmxPairingKey = ({ privateKey, peerPublicKey, tokenSecret }) => {
+export const deriveNpmxPairingKey = ({
+	privateKey,
+	peerPublicKey,
+	tokenSecret,
+	tokenSecretHash,
+}) => {
 	const shared = crypto.diffieHellman({
 		privateKey,
 		publicKey: importNpmxPublicKey(peerPublicKey),
 	});
-	const salt = crypto.createHash("sha256").update(String(tokenSecret || ""), "utf8").digest();
+	const salt = tokenSecretHash
+		? Buffer.from(String(tokenSecretHash), "base64url")
+		: crypto.createHash("sha256").update(String(tokenSecret || ""), "utf8").digest();
 	return Buffer.from(
 		crypto.hkdfSync(
 			"sha256",
