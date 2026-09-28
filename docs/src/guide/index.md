@@ -71,9 +71,11 @@ This lets one hostname survive an application-server failure without changing th
 
 There are two supported ways to run more than one NPM Improved node.
 
-**Instance Synchronization** uses one Primary and one or more Secondary servers. Each server keeps its own database, and the Primary securely replicates configuration to the Secondary nodes.
+**Instance Synchronization** uses one Primary and one or more Secondary servers. Each server keeps its own database, and **NPMX (NPM Improved Exchange)** handles one-time secure pairing, capability negotiation, encrypted snapshots, certificate/filesystem synchronization, and node heartbeats. Administrators do not manually create or copy cluster secrets.
 
-[Read about Instance Synchronization](/guide/instance-sync).
+Default Site custom HTML can also use node/cluster template variables such as `{{node.hostname}}`, `{{node.name}}`, `{{node.role}}`, and `{{node.version}}`. NPMX synchronizes the template while each node renders its own local values.
+
+[Read about Instance Synchronization and NPMX](/guide/instance-sync).
 
 **Shared MySQL mode** lets several NPM Improved servers use one MySQL/MariaDB database. Each node watches the common state and keeps its own Nginx configuration refreshed.
 
