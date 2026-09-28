@@ -18,8 +18,9 @@ NPM Improved v1.2.1 fixes the first-release updater experience and substantially
 
 - Docker pull failures now preserve the actual registry error instead of returning only a generic failure.
 - Authorization/visibility failures, missing manifests, and architecture mismatches are reported with actionable detail.
-- Stable release publishing now proves the exact GHCR release image can be pulled anonymously before a GitHub release is published.
-- A release can no longer be marked stable when the in-app updater cannot actually retrieve its image.
+- Stable releases now publish architecture-specific, SHA-256-verified Docker image bundles as public GitHub Release assets in addition to GHCR.
+- The updater tries GHCR first and automatically falls back to the matching public release bundle when anonymous registry access is unavailable.
+- Release publishing validates the public bundle channel and reports anonymous GHCR availability separately instead of making the registry a single point of failure.
 
 ## [1.2.0] - 2026-09-28
 
