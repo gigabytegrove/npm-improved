@@ -10,7 +10,7 @@ You can still create a hostname, point it at an app, turn on HTTPS, and move on.
 
 ## Project status
 
-NPM Improved **v1.2.2** refines the Control Center with persistent Settings deep links, responsive Settings navigation, clearer Default Site controls, and improved updater release-note presentation.
+NPM Improved **v1.2.3** makes updater behavior self-contained in the running image so in-app upgrades can no longer remain pinned to stale host-side handoff code.
 
 The active integration branch is:
 
