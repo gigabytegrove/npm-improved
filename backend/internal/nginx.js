@@ -311,6 +311,29 @@ const internalNginx = {
 
 		const renderEngine = utils.getRenderEngine();
 
+		if (nice_host_type === "default") {
+			const context = await getDefaultSiteTemplateContext();
+			host.meta = host.meta && typeof host.meta === "object" ? { ...host.meta } : {};
+
+			if (host.value === "congratulations" || host.value === "html") {
+				const sourceTemplate =
+					host.value === "html" ? String(host.meta.html || "") : builtinDefaultSiteTemplate();
+				const renderedHtml = renderDefaultSiteTemplate(sourceTemplate, context, { html: true });
+				const defaultRoot = "/data/nginx/default_www";
+				fs.mkdirSync(defaultRoot, { recursive: true, mode: 0o750 });
+				fs.writeFileSync(`${defaultRoot}/index.html`, renderedHtml, {
+					encoding: "utf8",
+					mode: 0o640,
+				});
+			}
+
+			if (host.value === "redirect") {
+				host.meta.redirect = renderDefaultSiteTemplate(host.meta.redirect || "", context, {
+					html: false,
+				});
+			}
+		}
+
 		return new Promise((resolve, reject) => {
 			let template = null;
 			const filename = filename_override || internalNginx.getConfigName(nice_host_type, host.id);
@@ -380,29 +403,6 @@ const internalNginx = {
 				});
 			} else {
 				locationsPromise = Promise.resolve();
-			}
-
-			if (nice_host_type === "default") {
-				const context = await getDefaultSiteTemplateContext();
-				host.meta = host.meta && typeof host.meta === "object" ? { ...host.meta } : {};
-
-				if (host.value === "congratulations" || host.value === "html") {
-					const sourceTemplate =
-						host.value === "html" ? String(host.meta.html || "") : builtinDefaultSiteTemplate();
-					const renderedHtml = renderDefaultSiteTemplate(sourceTemplate, context, { html: true });
-					const defaultRoot = "/data/nginx/default_www";
-					fs.mkdirSync(defaultRoot, { recursive: true, mode: 0o750 });
-					fs.writeFileSync(`${defaultRoot}/index.html`, renderedHtml, {
-						encoding: "utf8",
-						mode: 0o640,
-					});
-				}
-
-				if (host.value === "redirect") {
-					host.meta.redirect = renderDefaultSiteTemplate(host.meta.redirect || "", context, {
-						html: false,
-					});
-				}
 			}
 
 			// Set managed runtime settings for the host.
