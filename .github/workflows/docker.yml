@@ -176,6 +176,72 @@ jobs:
           trap - EXIT
           cleanup_update_test
 
+      - name: Verify NPMX pairing and node-local default-site sync
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cleanup_npmx() {
+            docker rm -f npmi-npmx-primary npmi-npmx-secondary >/dev/null 2>&1 || true
+            docker network rm npmi-npmx >/dev/null 2>&1 || true
+            sudo rm -rf /tmp/npmi-npmx
+          }
+          trap cleanup_npmx EXIT
+          cleanup_npmx
+
+          docker network create npmi-npmx
+          mkdir -p /tmp/npmi-npmx/primary/data /tmp/npmi-npmx/primary/letsencrypt /tmp/npmi-npmx/secondary/data /tmp/npmi-npmx/secondary/letsencrypt
+          chmod -R 0777 /tmp/npmi-npmx
+
+          docker run -d --name npmi-npmx-primary --hostname npmi-primary --network npmi-npmx             -p 19280:80 -p 19281:81             -e DB_SQLITE_FILE=/data/database.sqlite             -e INITIAL_ADMIN_EMAIL=primary@example.com             -e INITIAL_ADMIN_PASSWORD=primary-password-12345             -e NPM_BUILD_VERSION=1.1.0-ci             -v /tmp/npmi-npmx/primary/data:/data             -v /tmp/npmi-npmx/primary/letsencrypt:/etc/letsencrypt             npm-improved:ci
+
+          docker run -d --name npmi-npmx-secondary --hostname npmi-secondary --network npmi-npmx             -p 19380:80 -p 19381:81             -e DB_SQLITE_FILE=/data/database.sqlite             -e INITIAL_ADMIN_EMAIL=secondary@example.com             -e INITIAL_ADMIN_PASSWORD=secondary-password-12345             -e NPM_BUILD_VERSION=1.1.0-ci             -v /tmp/npmi-npmx/secondary/data:/data             -v /tmp/npmi-npmx/secondary/letsencrypt:/etc/letsencrypt             npm-improved:ci
+
+          for port in 19281 19381; do
+            for attempt in $(seq 1 90); do
+              if curl -fsS "http://127.0.0.1:$port/api/" >/dev/null 2>&1; then break; fi
+              if [ "$attempt" -eq 90 ]; then
+                docker logs npmi-npmx-primary || true
+                docker logs npmi-npmx-secondary || true
+                exit 1
+              fi
+              sleep 1
+            done
+          done
+
+          PRIMARY_TOKEN="$(curl -fsS -H 'Content-Type: application/json'             -d '{"identity":"primary@example.com","secret":"primary-password-12345"}'             http://127.0.0.1:19281/api/tokens | jq -r '.token')"
+          SECONDARY_TOKEN="$(curl -fsS -H 'Content-Type: application/json'             -d '{"identity":"secondary@example.com","secret":"secondary-password-12345"}'             http://127.0.0.1:19381/api/tokens | jq -r '.token')"
+
+          curl -fsS -H "Authorization: Bearer $PRIMARY_TOKEN" -H 'Content-Type: application/json' -X PUT             -d '{"enabled":true,"node_name":"Primary A","role":"primary","public_url":"http://npmi-npmx-primary:81","interval_seconds":15}'             http://127.0.0.1:19281/api/cluster/settings             | jq -e '.enabled == true and .role == "primary" and .secretConfigured == true'
+
+          curl -fsS -H "Authorization: Bearer $SECONDARY_TOKEN" -H 'Content-Type: application/json' -X PUT             -d '{"enabled":false,"node_name":"Secondary B","role":"secondary","public_url":"http://npmi-npmx-secondary:81","interval_seconds":15}'             http://127.0.0.1:19381/api/cluster/settings             | jq -e '.role == "secondary" and .secretConfigured == false'
+
+          PAIR_CODE="$(curl -fsS -H "Authorization: Bearer $PRIMARY_TOKEN" -H 'Content-Type: application/json'             -d '{"primary_url":"http://npmi-npmx-primary:81"}'             http://127.0.0.1:19281/api/cluster/npmx/pairing-code | jq -r '.pairingCode')"
+          grep -Eq '^npmx1\.' <<<"$PAIR_CODE"
+
+          curl -fsS -H "Authorization: Bearer $SECONDARY_TOKEN" -H 'Content-Type: application/json'             -d "$(jq -nc --arg code "$PAIR_CODE" '{pairing_code:$code}')"             http://127.0.0.1:19381/api/cluster/npmx/join             | jq -e '.ok == true and .protocol == "npmx" and .status.role == "secondary" and .status.secretConfigured == true'
+
+          test "$(sha256sum /tmp/npmi-npmx/primary/data/cluster-secret | awk '{print $1}')" =                "$(sha256sum /tmp/npmi-npmx/secondary/data/cluster-secret | awk '{print $1}')"
+
+          curl -fsS -H "Authorization: Bearer $PRIMARY_TOKEN" -H 'Content-Type: application/json' -X PUT             -d '{"value":"html","meta":{"html":"<!doctype html><html><body><h1>{{node.name}}</h1><p>{{node.hostname}}</p><p>{{node.role}} / {{node.version}} / {{cluster.protocol}}/{{cluster.protocol_version}}</p></body></html>"}}'             http://127.0.0.1:19281/api/settings/default-site             | jq -e '.value == "html"'
+
+          curl -fsS -H "Authorization: Bearer $SECONDARY_TOKEN" -X POST             http://127.0.0.1:19381/api/cluster/sync-now             | jq -e '.ok == true and .primary.protocol == "npmx"'
+
+          PRIMARY_PAGE="$(curl -fsS http://127.0.0.1:19280/)"
+          SECONDARY_PAGE="$(curl -fsS http://127.0.0.1:19380/)"
+          grep -Fq 'Primary A' <<<"$PRIMARY_PAGE"
+          grep -Fq 'npmi-primary' <<<"$PRIMARY_PAGE"
+          grep -Fq 'primary / 1.1.0-ci / NPMX/1' <<<"$PRIMARY_PAGE"
+          grep -Fq 'Secondary B' <<<"$SECONDARY_PAGE"
+          grep -Fq 'npmi-secondary' <<<"$SECONDARY_PAGE"
+          grep -Fq 'secondary / 1.1.0-ci / NPMX/1' <<<"$SECONDARY_PAGE"
+          ! grep -Fq 'Primary A' <<<"$SECONDARY_PAGE"
+
+          jq -e '.used == true and (.paired_node_id | length > 0)' /tmp/npmi-npmx/primary/data/npmx-pairing.json
+
+          trap - EXIT
+          cleanup_npmx
+
       - name: Verify UI database migration SQLite → MySQL → SQLite
         shell: bash
         run: |
