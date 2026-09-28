@@ -62,10 +62,15 @@ router
 			await internalUpdateManager.reconcileAudit().catch((err) => {
 				debug(logger, `Update audit reconciliation failed: ${err}`);
 			});
+			const clearFailed =
+				req.query.clear_failed === "1" || req.query.clear_failed === "true";
+			const status = clearFailed
+				? internalUpdateManager.clearFailedStatus()
+				: internalUpdateManager.getStatus();
 			res.status(200).send({
 				release,
 				capabilities: internalUpdateManager.capabilities(),
-				status: internalUpdateManager.getStatus(),
+				status,
 			});
 		} catch (err) {
 			next(err);
