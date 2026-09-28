@@ -427,7 +427,6 @@ export default function Update() {
 						type="password"
 						className="form-control"
 						autoComplete="current-password"
-						autoFocus
 						value={password}
 						onChange={(event) => setPassword(event.target.value)}
 						onKeyDown={(event) => {
