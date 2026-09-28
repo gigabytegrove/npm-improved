@@ -79,6 +79,16 @@ It preserves the existing deployment configuration, including:
 - runtime database selection stored under `/data`;
 - backups and certificates.
 
+## Update image sources
+
+NPM Improved uses two stable image-delivery channels.
+
+The updater first tries the official GHCR image for the target version. If Docker cannot retrieve that image anonymously, the updater automatically falls back to the architecture-specific Docker image bundle attached to the public GitHub Release.
+
+Release bundles are published for Linux amd64 and arm64. Before a bundle is loaded into Docker, NPM Improved downloads the release checksum file and verifies the bundle with SHA-256.
+
+This fallback keeps normal one-click updates working even when the container registry is temporarily unavailable or denies anonymous access.
+
 ## Health verification and automatic rollback
 
 After the target image starts, NPM Improved waits for the Docker healthcheck and verifies:

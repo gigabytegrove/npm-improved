@@ -94,6 +94,75 @@ compose() {
 	docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"
 }
 
+detect_release_arch() {
+	case "$(uname -m 2>/dev/null || true)" in
+		x86_64|amd64) printf '%s' "amd64" ;;
+		aarch64|arm64) printf '%s' "arm64" ;;
+		*) return 1 ;;
+	esac
+}
+
+load_release_bundle() {
+	version="$1"
+	image="$2"
+	arch="$(detect_release_arch || true)"
+	if [ -z "$arch" ]; then
+		RELEASE_BUNDLE_ERROR="Unsupported host architecture: $(uname -m 2>/dev/null || printf unknown)"
+		return 1
+	fi
+
+	asset="npm-improved-${version}-linux-${arch}.tar.gz"
+	sums="npm-improved-${version}-SHA256SUMS.txt"
+	base_url="https://github.com/gigabytegrove/npm-improved/releases/download/${version}"
+	stage_dir="$ROOT/data/update-stage"
+	bundle="$stage_dir/$asset"
+	sum_file="$stage_dir/$sums"
+	download_log="$stage_dir/download.log"
+
+	rm -rf "$stage_dir"
+	mkdir -p "$stage_dir"
+
+	if ! command -v wget >/dev/null 2>&1; then
+		RELEASE_BUNDLE_ERROR="The temporary updater does not include wget, so the GitHub Release fallback cannot be used."
+		return 1
+	fi
+
+	if ! wget -q -O "$sum_file" "$base_url/$sums" 2>"$download_log"; then
+		RELEASE_BUNDLE_ERROR="Could not download the release checksum file from GitHub. $(tail -n 5 "$download_log" 2>/dev/null || true)"
+		return 1
+	fi
+
+	if ! wget -q -O "$bundle" "$base_url/$asset" 2>"$download_log"; then
+		RELEASE_BUNDLE_ERROR="Could not download the ${arch} release image bundle from GitHub. $(tail -n 5 "$download_log" 2>/dev/null || true)"
+		return 1
+	fi
+
+	expected_line="$(grep "  $asset\$" "$sum_file" 2>/dev/null || true)"
+	if [ -z "$expected_line" ]; then
+		RELEASE_BUNDLE_ERROR="The GitHub Release checksum file does not contain $asset."
+		return 1
+	fi
+
+	if ! (cd "$stage_dir" && printf '%s\n' "$expected_line" | sha256sum -c - >/dev/null 2>&1); then
+		RELEASE_BUNDLE_ERROR="The downloaded GitHub Release image bundle failed SHA-256 verification."
+		return 1
+	fi
+
+	if ! gzip -dc "$bundle" | docker load >/dev/null 2>"$download_log"; then
+		RELEASE_BUNDLE_ERROR="Docker could not load the verified GitHub Release image bundle. $(tail -n 10 "$download_log" 2>/dev/null || true)"
+		return 1
+	fi
+
+	rm -rf "$stage_dir"
+
+	if ! docker image inspect "$image" >/dev/null 2>&1; then
+		RELEASE_BUNDLE_ERROR="The GitHub Release bundle loaded successfully but did not provide the expected image tag $image."
+		return 1
+	fi
+
+	return 0
+}
+
 wait_healthy() {
 	attempt=0
 	while [ "$attempt" -lt 75 ]; do
@@ -190,29 +259,38 @@ case "$ACTION" in
 			exit 1
 		fi
 
-		write_status "pulling" "Downloading $TARGET_VERSION from the official NPM Improved registry."
+		write_status "pulling" "Downloading $TARGET_VERSION."
 		PULL_LOG="$ROOT/data/update-pull.log"
 		rm -f "$PULL_LOG"
-		if ! docker pull "$TARGET_IMAGE" >"$PULL_LOG" 2>&1; then
+		PULL_DETAIL=""
+		if docker pull "$TARGET_IMAGE" >"$PULL_LOG" 2>&1; then
+			UPDATE_SOURCE="GitHub Container Registry"
+		else
 			PULL_DETAIL="$(tail -n 20 "$PULL_LOG" 2>/dev/null || true)"
-			if grep -Eqi 'denied|unauthorized|authentication required|requested access to the resource is denied' "$PULL_LOG" 2>/dev/null; then
-				PULL_ERROR="GitHub Container Registry denied access to $TARGET_IMAGE. The NPM Improved release package must be public for unattended UI updates. Docker reported: $PULL_DETAIL"
-			elif grep -Eqi 'manifest unknown|not found|no matching manifest' "$PULL_LOG" 2>/dev/null; then
-				PULL_ERROR="The published release image is missing or does not support this Docker host architecture. Docker reported: $PULL_DETAIL"
+			write_status "pulling" "Registry download was unavailable. Trying the verified GitHub Release bundle."
+			RELEASE_BUNDLE_ERROR=""
+			if load_release_bundle "$TARGET_VERSION" "$TARGET_IMAGE"; then
+				UPDATE_SOURCE="GitHub Release bundle"
 			else
-				PULL_ERROR="Docker could not pull $TARGET_IMAGE. Docker reported: $PULL_DETAIL"
+				if grep -Eqi 'denied|unauthorized|authentication required|requested access to the resource is denied' "$PULL_LOG" 2>/dev/null; then
+					PULL_ERROR="GitHub Container Registry denied the anonymous image pull. The updater also tried the public GitHub Release bundle, but that fallback failed: $RELEASE_BUNDLE_ERROR Registry response: $PULL_DETAIL"
+				elif grep -Eqi 'manifest unknown|not found|no matching manifest' "$PULL_LOG" 2>/dev/null; then
+					PULL_ERROR="The registry image was unavailable for this release or architecture. The updater also tried the public GitHub Release bundle, but that fallback failed: $RELEASE_BUNDLE_ERROR Registry response: $PULL_DETAIL"
+				else
+					PULL_ERROR="The registry download failed and the public GitHub Release fallback also failed: $RELEASE_BUNDLE_ERROR Registry response: $PULL_DETAIL"
+				fi
+				write_status "failed" "The update image could not be downloaded." "$PULL_ERROR" "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+				exit 1
 			fi
-			write_status "failed" "The update image could not be downloaded." "$PULL_ERROR" "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-			exit 1
 		fi
 		rm -f "$PULL_LOG"
 
-		TARGET_DIGEST="$(docker image inspect --format '{{index .RepoDigests 0}}' "$TARGET_IMAGE" 2>/dev/null || true)"
+		TARGET_DIGEST="$(docker image inspect --format '{{if .RepoDigests}}{{index .RepoDigests 0}}{{else}}{{.Id}}{{end}}' "$TARGET_IMAGE" 2>/dev/null || true)"
 		cp "$ENV_FILE" "$PREVIOUS_ENV"
 		chmod 600 "$PREVIOUS_ENV" 2>/dev/null || true
 		set_env NPM_IMAGE "$TARGET_IMAGE"
 
-		write_status "staging" "The update image is ready. Preparing the replacement container."
+		write_status "staging" "The update image is ready from ${UPDATE_SOURCE:-the official release channel}. Preparing the replacement container."
 		if ! compose config --quiet; then
 			cp "$PREVIOUS_ENV" "$ENV_FILE"
 			write_status "failed" "The target deployment configuration is invalid." "Docker Compose rejected the updated image configuration." "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "$TARGET_DIGEST" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
@@ -283,8 +361,11 @@ case "$ACTION" in
 			rm -f "$ROLLBACK_PULL_LOG"
 			if ! docker pull "$TARGET_IMAGE" >"$ROLLBACK_PULL_LOG" 2>&1; then
 				ROLLBACK_PULL_DETAIL="$(tail -n 20 "$ROLLBACK_PULL_LOG" 2>/dev/null || true)"
-				write_status "failed" "Rollback image is unavailable." "Docker could not make $TARGET_IMAGE available. Docker reported: $ROLLBACK_PULL_DETAIL" "$CURRENT_IMAGE" "$SOURCE_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-				exit 1
+				RELEASE_BUNDLE_ERROR=""
+				if ! load_release_bundle "$TARGET_VERSION" "$TARGET_IMAGE"; then
+					write_status "failed" "Rollback image is unavailable." "Docker could not make $TARGET_IMAGE available from either the registry or the GitHub Release fallback. Release fallback: $RELEASE_BUNDLE_ERROR Registry response: $ROLLBACK_PULL_DETAIL" "$CURRENT_IMAGE" "$SOURCE_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+					exit 1
+				fi
 			fi
 			rm -f "$ROLLBACK_PULL_LOG"
 		fi
