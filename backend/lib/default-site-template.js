@@ -1,5 +1,4 @@
 import os from "node:os";
-import settingModel from "../models/setting.js";
 import pjson from "../package.json" with { type: "json" };
 
 export const DEFAULT_SITE_TEMPLATE_VARIABLES = [
@@ -75,6 +74,9 @@ const lookup = (context, name) =>
 		.reduce((value, part) => (value && typeof value === "object" ? value[part] : undefined), context);
 
 export const getDefaultSiteTemplateContext = async () => {
+	// Keep template rendering helpers side-effect free for tests and tooling.
+	// The database model is loaded only when a live node context is requested.
+	const { default: settingModel } = await import("../models/setting.js");
 	const sync = await settingModel.query().findById("instance-sync").catch(() => null);
 	const meta = sync?.meta && typeof sync.meta === "object" ? sync.meta : {};
 	const enabled = sync?.value === "enabled";
