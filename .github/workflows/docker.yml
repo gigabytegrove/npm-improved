@@ -232,11 +232,13 @@ jobs:
 
           curl -fsS -H "Authorization: Bearer $SECONDARY_TOKEN" -H 'Content-Type: application/json'             -d "$(jq -nc --arg code "$PAIR_CODE" '{pairing_code:$code}')"             http://127.0.0.1:19381/api/cluster/npmx/join             | jq -e '.ok == true and .protocol == "npmx" and .status.role == "secondary" and .status.secretConfigured == true'
 
-          test "$(sha256sum /tmp/npmi-npmx/primary/data/cluster-secret | awk '{print $1}')" =                "$(sha256sum /tmp/npmi-npmx/secondary/data/cluster-secret | awk '{print $1}')"
+          test "$(sudo sha256sum /tmp/npmi-npmx/primary/data/cluster-secret | awk '{print $1}')" =                "$(sudo sha256sum /tmp/npmi-npmx/secondary/data/cluster-secret | awk '{print $1}')"
 
           curl -fsS -H "Authorization: Bearer $PRIMARY_TOKEN" -H 'Content-Type: application/json' -X PUT             -d '{"value":"html","meta":{"html":"<!doctype html><html><body><h1>{{node.name}}</h1><p>{{node.hostname}}</p><p>{{node.role}} / {{node.version}} / {{cluster.protocol}}/{{cluster.protocol_version}}</p></body></html>"}}'             http://127.0.0.1:19281/api/settings/default-site             | jq -e '.value == "html"'
 
-          curl -fsS -H "Authorization: Bearer $SECONDARY_TOKEN" -X POST             http://127.0.0.1:19381/api/cluster/sync-now             | jq -e '.ok == true and .primary.protocol == "npmx"'
+          SYNC_RESULT="$(curl --fail-with-body -sS -H "Authorization: Bearer $SECONDARY_TOKEN" -X POST             http://127.0.0.1:19381/api/cluster/sync-now)"
+          echo "$SYNC_RESULT"
+          jq -e '.ok == true and .primary.protocol == "npmx"' <<<"$SYNC_RESULT"
 
           PRIMARY_PAGE="$(curl -fsS http://127.0.0.1:19280/)"
           SECONDARY_PAGE="$(curl -fsS http://127.0.0.1:19380/)"
