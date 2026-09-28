@@ -210,11 +210,6 @@ export function SiteMenu() {
 					/>
 				</a>
 
-				<div className={styles.productMeta}>
-					<span className={styles.productDot} />
-					<span>Control Center</span>
-				</div>
-
 				<nav className={styles.navigation} aria-label="Primary navigation">
 					<div className={styles.group}>
 						<div className={styles.groupItems}>
@@ -226,12 +221,11 @@ export function SiteMenu() {
 					</div>
 					<MenuGroup title="Routing" items={routingItems} onNavigate={closeMenu} />
 					<MenuGroup title="Control" items={controlItems} onNavigate={closeMenu} />
-					<MenuGroup title="Observe & manage" items={observabilityItems} onNavigate={closeMenu} />
+					<MenuGroup title="System" items={observabilityItems} onNavigate={closeMenu} />
 				</nav>
 
 				<div className={styles.footer}>
 					<div className={styles.footerLabel}>NPM Improved</div>
-					<div className={styles.footerText}>Resilient reverse proxy control plane</div>
 				</div>
 			</div>
 		</aside>
