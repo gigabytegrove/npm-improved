@@ -244,11 +244,6 @@ const sanitizedStatus = async () => {
 	};
 };
 
-const peerHeaders = (secret) => ({
-	"X-NPMi-Cluster-Secret": secret,
-	"User-Agent": `NPMi/${currentVersion()}`,
-});
-
 const npmxRequest = async (baseUrl, secret, nodeId, endpoint, options = {}) => {
 	const method = options.method || "GET";
 	const body = options.body ?? null;
@@ -282,32 +277,6 @@ const fetchWithTimeout = async (url, options = {}, timeout = REQUEST_TIMEOUT_MS)
 		return await fetch(url, { ...options, signal: controller.signal });
 	} finally {
 		clearTimeout(timer);
-	}
-};
-
-const postHeartbeat = async (baseUrl, secret, status) => {
-	try {
-		const response = await fetchWithTimeout(`${baseUrl}/api/cluster/peer/heartbeat`, {
-			method: "POST",
-			headers: {
-				...peerHeaders(secret),
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({
-				node_id: status.nodeId,
-				node_name: status.nodeName,
-				public_url: status.publicUrl,
-				role: status.role,
-				version: status.version,
-				build_commit: status.buildCommit,
-				last_sync: status.lastSync,
-			}),
-		});
-		if (!response.ok) {
-			logger.warn(`Instance sync heartbeat returned HTTP ${response.status}`);
-		}
-	} catch (err) {
-		logger.warn(`Instance sync heartbeat failed: ${err instanceof Error ? err.message : String(err)}`);
 	}
 };
 
