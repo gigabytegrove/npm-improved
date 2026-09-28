@@ -197,7 +197,7 @@ h6 {
 
 h1,
 h2 {
-	font-weight: 820;
+	font-weight: 700;
 }
 
 h2 {
@@ -205,7 +205,7 @@ h2 {
 }
 
 h3 {
-	font-weight: 780;
+	font-weight: 650;
 }
 
 .text-secondary,
@@ -242,7 +242,7 @@ h3 {
 
 .card-header h2,
 .card-header h3 {
-	font-weight: 820;
+	font-weight: 700;
 }
 
 .card-body {
@@ -276,9 +276,9 @@ h3 {
 	border-bottom: 1px solid var(--npi-border-strong);
 	background: color-mix(in srgb, var(--npi-surface-soft) 84%, transparent);
 	color: var(--npi-muted);
-	font-size: 0.62rem;
-	font-weight: 850;
-	letter-spacing: 0.085em;
+	font-size: 0.64rem;
+	font-weight: 700;
+	letter-spacing: 0.04em;
 	text-transform: uppercase;
 	white-space: nowrap;
 }
@@ -480,9 +480,9 @@ h3 {
 }
 
 .badge {
-	border-radius: 999px;
-	font-weight: 750;
-	letter-spacing: -0.005em;
+	border-radius: 0.35rem;
+	font-weight: 650;
+	letter-spacing: 0;
 }
 
 /* React Select */
