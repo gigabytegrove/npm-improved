@@ -3,6 +3,28 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { getDatabaseRuntime, isMysql } from "../lib/config.js";
+import {
+	NPMX_AUTH_WINDOW_SECONDS,
+	NPMX_PAIRING_TTL_SECONDS,
+	NPMX_PROTOCOL,
+	NPMX_VERSION,
+	createNpmxHeaders,
+	createNpmxPairingCode,
+	createNpmxPairingProof,
+	createNpmxPairingResponseProof,
+	decryptNpmxPairingSecret,
+	deriveNpmxPairingKey,
+	encryptNpmxPairingSecret,
+	generateNpmxEphemeralKeyPair,
+	generateNpmxNonce,
+	generateNpmxSecret,
+	generateNpmxTokenId,
+	hashNpmxSecret,
+	parseNpmxPairingCode,
+	verifyNpmxPairingProof,
+	verifyNpmxPairingResponseProof,
+	verifyNpmxRequestSignature,
+} from "../lib/npmx.js";
 import errs from "../lib/error.js";
 import settingModel from "../models/setting.js";
 import pjson from "../package.json" with { type: "json" };
@@ -10,6 +32,7 @@ import { global as logger } from "../logger.js";
 import internalDisasterRecovery from "./disaster-recovery.js";
 
 const SECRET_FILE = "/data/cluster-secret";
+const PAIRING_FILE = "/data/npmx-pairing.json";
 const SETTING_ID = "instance-sync";
 const MIN_SECRET_LENGTH = 24;
 const MIN_INTERVAL_SECONDS = 15;
@@ -19,6 +42,7 @@ const SNAPSHOT_TIMEOUT_MS = 180_000;
 
 let schedulerTimer = null;
 let syncRunning = false;
+const seenNpmxNonces = new Map();
 
 const currentVersion = () => (process.env.NPM_BUILD_VERSION || pjson.version || "0.0.0").trim();
 
@@ -67,6 +91,59 @@ const writeSecret = (value) => {
 	fs.chmodSync(temp, 0o600);
 	fs.renameSync(temp, SECRET_FILE);
 };
+
+const ensureSecret = () => {
+	const existing = readSecret();
+	if (existing) return existing;
+	const secret = generateNpmxSecret();
+	writeSecret(secret);
+	return secret;
+};
+
+const readPairingState = () => {
+	try {
+		const parsed = JSON.parse(fs.readFileSync(PAIRING_FILE, "utf8"));
+		return parsed && typeof parsed === "object" ? parsed : {};
+	} catch {
+		return {};
+	}
+};
+
+const writePairingState = (value) => {
+	const temp = `${PAIRING_FILE}.${process.pid}.tmp`;
+	fs.mkdirSync(path.dirname(PAIRING_FILE), { recursive: true, mode: 0o750 });
+	fs.writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
+	fs.chmodSync(temp, 0o600);
+	fs.renameSync(temp, PAIRING_FILE);
+};
+
+const timestampIsCurrent = (value, windowSeconds = NPMX_AUTH_WINDOW_SECONDS) => {
+	const parsed = Date.parse(String(value || ""));
+	return Number.isFinite(parsed) && Math.abs(Date.now() - parsed) <= windowSeconds * 1000;
+};
+
+const pruneNpmxNonces = () => {
+	const cutoff = Date.now() - NPMX_AUTH_WINDOW_SECONDS * 1000;
+	for (const [nonce, seenAt] of seenNpmxNonces.entries()) {
+		if (seenAt < cutoff) seenNpmxNonces.delete(nonce);
+	}
+};
+
+const npmxCapabilities = () => ({
+	protocol: NPMX_PROTOCOL,
+	protocol_version: NPMX_VERSION,
+	snapshot_format: "cluster-envelope-v1",
+	capabilities: [
+		"capability-negotiation",
+		"configuration",
+		"certificates",
+		"custom-nginx",
+		"default-site-templates",
+		"filesystem-assets",
+		"heartbeat",
+		"node-local-template-rendering",
+	],
+});
 
 const safeEqual = (left, right) => {
 	if (!left || !right) return false;
@@ -160,13 +237,38 @@ const sanitizedStatus = async () => {
 		version: currentVersion(),
 		buildCommit: process.env.NPM_BUILD_COMMIT || null,
 		buildDate: process.env.NPM_BUILD_DATE || null,
+		npmx: {
+			...npmxCapabilities(),
+			paired: Boolean(readSecret()),
+		},
 	};
 };
 
-const peerHeaders = (secret) => ({
-	"X-NPMi-Cluster-Secret": secret,
-	"User-Agent": `NPMi/${currentVersion()}`,
-});
+const npmxRequest = async (baseUrl, secret, nodeId, endpoint, options = {}) => {
+	const method = options.method || "GET";
+	const body = options.body ?? null;
+	const signaturePath = `/cluster/npmx${endpoint}`;
+	const headers = {
+		...createNpmxHeaders({
+			secret,
+			nodeId,
+			method,
+			path: signaturePath,
+			body,
+		}),
+		"User-Agent": `NPMX/${NPMX_VERSION} NPM-Improved/${currentVersion()}`,
+		...(body !== null ? { "Content-Type": "application/json" } : {}),
+	};
+	return fetchWithTimeout(
+		`${baseUrl}/api/cluster/npmx${endpoint}`,
+		{
+			method,
+			headers,
+			...(body !== null ? { body: JSON.stringify(body) } : {}),
+		},
+		options.timeout || REQUEST_TIMEOUT_MS,
+	);
+};
 
 const fetchWithTimeout = async (url, options = {}, timeout = REQUEST_TIMEOUT_MS) => {
 	const controller = new AbortController();
@@ -175,32 +277,6 @@ const fetchWithTimeout = async (url, options = {}, timeout = REQUEST_TIMEOUT_MS)
 		return await fetch(url, { ...options, signal: controller.signal });
 	} finally {
 		clearTimeout(timer);
-	}
-};
-
-const postHeartbeat = async (baseUrl, secret, status) => {
-	try {
-		const response = await fetchWithTimeout(`${baseUrl}/api/cluster/peer/heartbeat`, {
-			method: "POST",
-			headers: {
-				...peerHeaders(secret),
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({
-				node_id: status.nodeId,
-				node_name: status.nodeName,
-				public_url: status.publicUrl,
-				role: status.role,
-				version: status.version,
-				build_commit: status.buildCommit,
-				last_sync: status.lastSync,
-			}),
-		});
-		if (!response.ok) {
-			logger.warn(`Instance sync heartbeat returned HTTP ${response.status}`);
-		}
-	} catch (err) {
-		logger.warn(`Instance sync heartbeat failed: ${err instanceof Error ? err.message : String(err)}`);
 	}
 };
 
@@ -243,10 +319,17 @@ const internalInstanceSync = {
 			: "";
 
 		if (typeof data.sharedSecret === "string" && data.sharedSecret.trim()) {
+			// Legacy/manual configuration remains accepted for backwards compatibility,
+			// but the UI uses NPMX one-time pairing and never asks users to create a secret.
 			writeSecret(data.sharedSecret);
 		}
-		if (enabled && !readSecret()) {
-			throw new errs.ValidationError("Configure a cluster secret before enabling instance synchronization");
+		if (enabled && role === "primary") {
+			ensureSecret();
+		}
+		if (enabled && role === "secondary" && !readSecret()) {
+			throw new errs.ValidationError(
+				"Pair this secondary with the primary using an NPMX pairing code before enabling synchronization",
+			);
 		}
 
 		const meta = {
@@ -304,7 +387,7 @@ const internalInstanceSync = {
 	getPeerStatus: async () => {
 		const status = await sanitizedStatus();
 		return {
-			product: "NPMi",
+			product: "NPM Improved",
 			enabled: status.enabled,
 			node_id: status.nodeId,
 			node_name: status.nodeName,
@@ -314,7 +397,320 @@ const internalInstanceSync = {
 			build_commit: status.buildCommit,
 			build_date: status.buildDate,
 			last_sync: status.lastSync,
+			npmx: npmxCapabilities(),
 		};
+	},
+
+	getNpmxStatus: async () => {
+		const status = await sanitizedStatus();
+		return {
+			product: "NPM Improved",
+			...npmxCapabilities(),
+			enabled: status.enabled,
+			node_id: status.nodeId,
+			node_name: status.nodeName,
+			role: status.role,
+			public_url: status.publicUrl,
+			version: status.version,
+			build_commit: status.buildCommit,
+			build_date: status.buildDate,
+			last_sync: status.lastSync,
+			sync_policy: {
+				require_same_app_version: true,
+				secondary_read_only: true,
+			},
+		};
+	},
+
+	createPairingCode: async (data = {}) => {
+		if (sharedDatabaseMode()) {
+			throw new errs.ValidationError("Shared MySQL nodes do not use NPMX Primary/Secondary pairing");
+		}
+		const row = await getRow();
+		const meta = row.meta || {};
+		if ((meta.role || "primary") !== "primary") {
+			throw new errs.ValidationError("Only a primary node can create an NPMX pairing code");
+		}
+
+		const primaryUrl = normalizeUrl(
+			data.primaryUrl || meta.public_url,
+			"Primary node URL",
+			true,
+		);
+		const tokenId = generateNpmxTokenId();
+		const tokenSecret = generateNpmxSecret();
+		const expiresAt = new Date(Date.now() + NPMX_PAIRING_TTL_SECONDS * 1000).toISOString();
+
+		ensureSecret();
+		writePairingState({
+			token_id: tokenId,
+			token_secret_hash: hashNpmxSecret(tokenSecret),
+			expires_at: expiresAt,
+			used: false,
+			created_at: new Date().toISOString(),
+		});
+
+		if (primaryUrl !== meta.public_url) {
+			await updateMeta({ public_url: primaryUrl });
+		}
+
+		return {
+			protocol: NPMX_PROTOCOL,
+			protocolVersion: NPMX_VERSION,
+			primaryUrl,
+			expiresAt,
+			pairingCode: createNpmxPairingCode({
+				primaryUrl,
+				tokenId,
+				tokenSecret,
+				expiresAt,
+			}),
+		};
+	},
+
+	acceptNpmxPairing: async (data, remoteAddress = null) => {
+		if (sharedDatabaseMode()) {
+			throw new errs.ValidationError("Shared MySQL nodes do not use NPMX Primary/Secondary pairing");
+		}
+		const state = readPairingState();
+		if (
+			!state.token_id ||
+			state.token_id !== data.token_id ||
+			state.used ||
+			!state.expires_at ||
+			Date.parse(state.expires_at) <= Date.now()
+		) {
+			throw new errs.TokenRevokedError("NPMX pairing code is invalid, expired, or already used");
+		}
+		if (!timestampIsCurrent(data.timestamp)) {
+			throw new errs.TokenRevokedError("NPMX pairing request timestamp is outside the allowed window");
+		}
+
+		const proofDetails = {
+			tokenId: data.token_id,
+			nodeId: data.node_id,
+			nodePublicKey: data.client_public_key,
+			timestamp: data.timestamp,
+			nonce: data.nonce,
+		};
+		if (!verifyNpmxPairingProof(state.token_secret_hash, proofDetails, data.proof)) {
+			throw new errs.TokenRevokedError("NPMX pairing proof is invalid");
+		}
+
+		const row = await getRow();
+		const meta = row.meta || {};
+		if (row.value !== "enabled" || meta.role !== "primary") {
+			await settingModel.query().findById(SETTING_ID).patch({
+				value: "enabled",
+				meta: { ...meta, role: "primary", last_error: null },
+			});
+		}
+
+		const clusterSecret = ensureSecret();
+		const ephemeral = generateNpmxEphemeralKeyPair();
+		const key = deriveNpmxPairingKey({
+			privateKey: ephemeral.privateKey,
+			peerPublicKey: data.client_public_key,
+			tokenSecretHash: state.token_secret_hash,
+		});
+		const aad = `${data.token_id}:${data.node_id}`;
+		const encrypted = encryptNpmxPairingSecret(clusterSecret, key, aad);
+		const timestamp = new Date().toISOString();
+		const nonce = generateNpmxNonce();
+		const responseDetails = {
+			tokenId: data.token_id,
+			nodeId: data.node_id,
+			serverPublicKey: ephemeral.publicKey,
+			...encrypted,
+			timestamp,
+			nonce,
+		};
+
+		writePairingState({
+			...state,
+			used: true,
+			used_at: timestamp,
+			paired_node_id: data.node_id,
+			paired_remote_address: remoteAddress,
+		});
+
+		await internalInstanceSync.recordHeartbeat(
+			{
+				node_id: data.node_id,
+				node_name: data.node_name,
+				public_url: data.public_url || "",
+				role: "secondary",
+				version: data.version,
+				build_commit: data.build_commit || null,
+				last_sync: null,
+				protocol: NPMX_PROTOCOL,
+				protocol_version: NPMX_VERSION,
+			},
+			remoteAddress,
+		);
+
+		return {
+			protocol: NPMX_PROTOCOL,
+			protocol_version: NPMX_VERSION,
+			token_id: data.token_id,
+			node_id: data.node_id,
+			server_public_key: ephemeral.publicKey,
+			...encrypted,
+			timestamp,
+			nonce,
+			proof: createNpmxPairingResponseProof(state.token_secret_hash, responseDetails),
+			primary: await internalInstanceSync.getNpmxStatus(),
+		};
+	},
+
+	joinNpmxPairing: async (pairingCode) => {
+		if (sharedDatabaseMode()) {
+			throw new errs.ValidationError("Shared MySQL nodes do not use NPMX Primary/Secondary pairing");
+		}
+		let parsed;
+		try {
+			parsed = parseNpmxPairingCode(pairingCode);
+		} catch (err) {
+			throw new errs.ValidationError(err instanceof Error ? err.message : String(err));
+		}
+
+		const row = await getRow();
+		const meta = row.meta || {};
+		const primaryUrl = normalizeUrl(parsed.url, "Primary node URL", true);
+		const ephemeral = generateNpmxEphemeralKeyPair();
+		const timestamp = new Date().toISOString();
+		const nonce = generateNpmxNonce();
+		const proofDetails = {
+			tokenId: parsed.id,
+			nodeId: meta.node_id,
+			nodePublicKey: ephemeral.publicKey,
+			timestamp,
+			nonce,
+		};
+		const requestBody = {
+			token_id: parsed.id,
+			node_id: meta.node_id,
+			node_name: meta.node_name || os.hostname(),
+			public_url: meta.public_url || "",
+			version: currentVersion(),
+			build_commit: process.env.NPM_BUILD_COMMIT || null,
+			client_public_key: ephemeral.publicKey,
+			timestamp,
+			nonce,
+			proof: createNpmxPairingProof(parsed.token, proofDetails),
+		};
+
+		const response = await fetchWithTimeout(
+			`${primaryUrl}/api/cluster/npmx/pair`,
+			{
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"User-Agent": `NPMX/${NPMX_VERSION} NPM-Improved/${currentVersion()}`,
+				},
+				body: JSON.stringify(requestBody),
+			},
+			REQUEST_TIMEOUT_MS,
+		);
+		if (!response.ok) {
+			throw new errs.ValidationError(`Primary rejected NPMX pairing with HTTP ${response.status}`);
+		}
+		const payload = await response.json();
+		if (payload.protocol !== NPMX_PROTOCOL || payload.protocol_version !== NPMX_VERSION) {
+			throw new errs.ValidationError("Primary uses an incompatible NPMX protocol version");
+		}
+
+		const responseDetails = {
+			tokenId: payload.token_id,
+			nodeId: payload.node_id,
+			serverPublicKey: payload.server_public_key,
+			iv: payload.iv,
+			tag: payload.tag,
+			ciphertext: payload.ciphertext,
+			timestamp: payload.timestamp,
+			nonce: payload.nonce,
+		};
+		if (!verifyNpmxPairingResponseProof(parsed.token, responseDetails, payload.proof)) {
+			throw new errs.ValidationError("Primary NPMX pairing response could not be authenticated");
+		}
+
+		const key = deriveNpmxPairingKey({
+			privateKey: ephemeral.privateKey,
+			peerPublicKey: payload.server_public_key,
+			tokenSecret: parsed.token,
+		});
+		const secret = decryptNpmxPairingSecret(
+			payload,
+			key,
+			`${parsed.id}:${meta.node_id}`,
+		);
+		writeSecret(secret);
+
+		await settingModel.query().findById(SETTING_ID).patch({
+			value: "enabled",
+			meta: {
+				...meta,
+				role: "secondary",
+				primary_url: primaryUrl,
+				last_error: null,
+				primary_status: payload.primary || null,
+			},
+		});
+		internalInstanceSync.reschedule(1000);
+
+		return {
+			ok: true,
+			protocol: NPMX_PROTOCOL,
+			protocolVersion: NPMX_VERSION,
+			primary: payload.primary,
+			status: await sanitizedStatus(),
+		};
+	},
+
+	requireNpmxAuth: async (req, _res, next) => {
+		try {
+			const secret = readSecret();
+			if (!secret) throw new errs.TokenRevokedError("NPMX cluster credentials are not configured");
+			if (
+				String(req.get("X-NPMX-Protocol") || "").toLowerCase() !== NPMX_PROTOCOL ||
+				Number.parseInt(req.get("X-NPMX-Version") || "0", 10) !== NPMX_VERSION
+			) {
+				throw new errs.TokenRevokedError("Unsupported NPMX protocol");
+			}
+
+			const nodeId = String(req.get("X-NPMX-Node") || "");
+			const timestamp = String(req.get("X-NPMX-Timestamp") || "");
+			const nonce = String(req.get("X-NPMX-Nonce") || "");
+			const signature = String(req.get("X-NPMX-Signature") || "");
+			if (!nodeId || !nonce || !timestampIsCurrent(timestamp)) {
+				throw new errs.TokenRevokedError("Invalid NPMX request identity or timestamp");
+			}
+
+			pruneNpmxNonces();
+			if (seenNpmxNonces.has(nonce)) {
+				throw new errs.TokenRevokedError("NPMX request nonce has already been used");
+			}
+
+			const pathValue = `${req.baseUrl}${req.path}`;
+			const valid = verifyNpmxRequestSignature(
+				secret,
+				{
+					method: req.method,
+					path: pathValue,
+					nodeId,
+					timestamp,
+					nonce,
+					body: ["GET", "HEAD"].includes(req.method) ? null : req.body ?? null,
+				},
+				signature,
+			);
+			if (!valid) throw new errs.TokenRevokedError("Invalid NPMX request signature");
+			seenNpmxNonces.set(nonce, Date.now());
+			req.npmxNodeId = nodeId;
+			next();
+		} catch (err) {
+			next(err);
+		}
 	},
 
 	createPeerSnapshot: async () => {
@@ -349,6 +745,8 @@ const internalInstanceSync = {
 			version: String(data.version || "unknown"),
 			build_commit: data.build_commit || null,
 			last_sync: data.last_sync || null,
+			protocol: data.protocol || null,
+			protocol_version: data.protocol_version || null,
 			last_seen: new Date().toISOString(),
 			remote_address: remoteAddress || null,
 		};
@@ -381,26 +779,41 @@ const internalInstanceSync = {
 			const attempt = new Date().toISOString();
 			await updateMeta({ last_attempt: attempt, last_error: null });
 
-			const peerResponse = await fetchWithTimeout(`${primaryUrl}/api/cluster/peer/status`, {
-				headers: peerHeaders(secret),
-			});
+			const peerResponse = await npmxRequest(
+				primaryUrl,
+				secret,
+				status.nodeId,
+				"/status",
+			);
 			if (!peerResponse.ok) {
-				throw new Error(`Primary status request failed with HTTP ${peerResponse.status}`);
+				throw new Error(`Primary NPMX status request failed with HTTP ${peerResponse.status}`);
 			}
 			const peer = await peerResponse.json();
+			if (
+				peer.protocol !== NPMX_PROTOCOL ||
+				peer.protocol_version !== NPMX_VERSION ||
+				!Array.isArray(peer.capabilities)
+			) {
+				throw new Error("Primary does not support a compatible NPMX protocol");
+			}
 			if (!peer.enabled || peer.role !== "primary") {
-				throw new Error("Configured primary is not currently an enabled primary node");
+				throw new Error("Configured NPMX peer is not currently an enabled primary node");
+			}
+			if (!peer.capabilities.includes("configuration") || !peer.capabilities.includes("filesystem-assets")) {
+				throw new Error("Primary NPMX capabilities cannot satisfy full instance synchronization");
 			}
 			if (String(peer.version) !== currentVersion()) {
 				throw new Error(
-					`Cluster version mismatch: local ${currentVersion()}, primary ${peer.version || "unknown"}`,
+					`NPMX negotiation refused snapshot sync because application versions differ: local ${currentVersion()}, primary ${peer.version || "unknown"}`,
 				);
 			}
 
-			const snapshotResponse = await fetchWithTimeout(
-				`${primaryUrl}/api/cluster/peer/snapshot`,
-				{ headers: peerHeaders(secret) },
-				SNAPSHOT_TIMEOUT_MS,
+			const snapshotResponse = await npmxRequest(
+				primaryUrl,
+				secret,
+				status.nodeId,
+				"/snapshot",
+				{ timeout: SNAPSHOT_TIMEOUT_MS },
 			);
 			if (!snapshotResponse.ok) {
 				throw new Error(`Primary snapshot request failed with HTTP ${snapshotResponse.status}`);
@@ -428,7 +841,26 @@ const internalInstanceSync = {
 			});
 
 			const refreshed = await sanitizedStatus();
-			await postHeartbeat(primaryUrl, secret, refreshed);
+			const heartbeatBody = {
+				node_id: refreshed.nodeId,
+				node_name: refreshed.nodeName,
+				public_url: refreshed.publicUrl,
+				role: refreshed.role,
+				version: refreshed.version,
+				build_commit: refreshed.buildCommit,
+				last_sync: refreshed.lastSync,
+				protocol: NPMX_PROTOCOL,
+				protocol_version: NPMX_VERSION,
+			};
+			await npmxRequest(
+				primaryUrl,
+				secret,
+				refreshed.nodeId,
+				"/heartbeat",
+				{ method: "POST", body: heartbeatBody },
+			).catch((err) => {
+				logger.warn(`NPMX heartbeat failed: ${err instanceof Error ? err.message : String(err)}`);
+			});
 
 			return {
 				ok: true,
@@ -437,11 +869,15 @@ const internalInstanceSync = {
 				summary: result.summary,
 			};
 		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
 			await updateMeta({
 				last_attempt: new Date().toISOString(),
-				last_error: err instanceof Error ? err.message : String(err),
+				last_error: message,
 			}).catch(() => undefined);
-			throw err;
+			logger.warn(`NPMX synchronization failed: ${message}`);
+			throw err instanceof errs.ValidationError
+				? err
+				: new errs.ValidationError(`NPMX synchronization failed: ${message}`);
 		} finally {
 			syncRunning = false;
 		}

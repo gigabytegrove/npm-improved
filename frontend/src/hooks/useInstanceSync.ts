@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+	createNpmxPairingCode,
 	getInstanceSyncStatus,
+	joinNpmxPairing,
 	promoteInstanceSync,
 	runInstanceSync,
 	type InstanceSyncSettings,
@@ -40,6 +42,26 @@ const useRunInstanceSync = () => {
 	});
 };
 
+const useCreateNpmxPairingCode = () => {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: (primaryUrl?: string) => createNpmxPairingCode(primaryUrl),
+		onSuccess: async () => {
+			await queryClient.invalidateQueries({ queryKey: ["instance-sync"] });
+		},
+	});
+};
+
+const useJoinNpmxPairing = () => {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: (pairingCode: string) => joinNpmxPairing(pairingCode),
+		onSuccess: async () => {
+			await queryClient.invalidateQueries({ queryKey: ["instance-sync"] });
+		},
+	});
+};
+
 const usePromoteInstanceSync = () => {
 	const queryClient = useQueryClient();
 	return useMutation({
@@ -54,5 +76,7 @@ export {
 	useInstanceSync,
 	useSetInstanceSync,
 	useRunInstanceSync,
+	useCreateNpmxPairingCode,
+	useJoinNpmxPairing,
 	usePromoteInstanceSync,
 };
