@@ -25,13 +25,13 @@
 	--npi-surface-soft: #f7f9fc;
 	--npi-surface-raised: #ffffff;
 	--npi-surface-inset: #eef3f8;
-	--npi-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.035), 0 4px 14px rgba(15, 23, 42, 0.045);
-	--npi-shadow-md: 0 12px 34px rgba(15, 23, 42, 0.085);
-	--npi-shadow-lg: 0 24px 64px rgba(15, 23, 42, 0.14);
-	--npi-ring: 0 0 0 3px rgba(20, 115, 230, 0.12);
-	--npi-radius-sm: 0.65rem;
-	--npi-radius: 0.95rem;
-	--npi-radius-lg: 1.2rem;
+	--npi-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+	--npi-shadow-md: 0 2px 8px rgba(15, 23, 42, 0.07);
+	--npi-shadow-lg: 0 8px 24px rgba(15, 23, 42, 0.12);
+	--npi-ring: 0 0 0 3px rgba(20, 115, 230, 0.1);
+	--npi-radius-sm: 0.4rem;
+	--npi-radius: 0.55rem;
+	--npi-radius-lg: 0.65rem;
 	--npi-sidebar-width: 272px;
 
 	--tblr-primary: var(--npi-primary);
@@ -62,9 +62,9 @@
 	--npi-surface-soft: #101d2d;
 	--npi-surface-raised: #122033;
 	--npi-surface-inset: #0a1421;
-	--npi-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.24), 0 5px 18px rgba(0, 0, 0, 0.16);
-	--npi-shadow-md: 0 18px 42px rgba(0, 0, 0, 0.24);
-	--npi-shadow-lg: 0 28px 80px rgba(0, 0, 0, 0.38);
+	--npi-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+	--npi-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.22);
+	--npi-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.32);
 	--npi-ring: 0 0 0 3px rgba(56, 189, 248, 0.14);
 
 	--tblr-body-bg: var(--npi-app-bg);
@@ -84,10 +84,7 @@ html {
 
 body {
 	margin: 0;
-	background:
-		radial-gradient(circle at 88% 4%, rgba(20, 115, 230, 0.055), transparent 26rem),
-		radial-gradient(circle at 58% 88%, rgba(34, 211, 238, 0.035), transparent 30rem),
-		var(--npi-app-bg);
+	background: var(--npi-app-bg);
 	font-family:
 		Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
 		sans-serif;
@@ -153,7 +150,7 @@ a:hover {
 	z-index: 1060;
 	padding: 0.45rem;
 	border: 1px solid var(--npi-border);
-	border-radius: 0.9rem;
+	border-radius: var(--npi-radius);
 	background: color-mix(in srgb, var(--npi-surface-raised) 96%, transparent);
 	box-shadow: var(--npi-shadow-lg);
 	backdrop-filter: blur(18px);
@@ -221,20 +218,15 @@ h3 {
 	position: relative;
 	border: 1px solid var(--npi-border);
 	border-radius: var(--npi-radius-lg);
-	background:
-		linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--npi-surface-raised) 98%, #ffffff 2%),
-			var(--npi-surface)
-		);
-	box-shadow: var(--npi-shadow-sm);
+	background: var(--npi-surface);
+	box-shadow: none;
 	overflow: visible;
 }
 
 .card:hover.card-link,
 .card-link:hover {
-	border-color: color-mix(in srgb, var(--npi-primary) 22%, var(--npi-border));
-	box-shadow: var(--npi-shadow-md);
+	border-color: var(--npi-border-strong);
+	box-shadow: var(--npi-shadow-sm);
 }
 
 .card-status-top {
@@ -320,18 +312,8 @@ h3 {
 	letter-spacing: -0.012em;
 	box-shadow: none;
 	transition:
-		transform 120ms ease,
-		box-shadow 120ms ease,
 		background-color 120ms ease,
 		border-color 120ms ease;
-}
-
-.btn:hover {
-	transform: translateY(-1px);
-}
-
-.btn:active {
-	transform: translateY(0);
 }
 
 .btn-primary,
@@ -341,10 +323,10 @@ h3 {
 .btn-cyan,
 .btn-pink,
 .btn-orange {
-	border-color: transparent !important;
-	background: linear-gradient(135deg, #1473e6, #0284c7) !important;
+	border-color: var(--npi-primary) !important;
+	background: var(--npi-primary) !important;
 	color: #fff !important;
-	box-shadow: 0 8px 20px rgba(20, 115, 230, 0.18);
+	box-shadow: none;
 }
 
 .btn-primary:hover,
@@ -354,8 +336,9 @@ h3 {
 .btn-cyan:hover,
 .btn-pink:hover,
 .btn-orange:hover {
-	background: linear-gradient(135deg, #0d5fc5, #036b9b) !important;
-	box-shadow: 0 10px 24px rgba(20, 115, 230, 0.24);
+	border-color: var(--npi-primary-hover) !important;
+	background: var(--npi-primary-hover) !important;
+	box-shadow: none;
 }
 
 .btn-outline-secondary {
@@ -478,9 +461,9 @@ h3 {
 
 .modal-content {
 	border: 1px solid var(--npi-border);
-	border-radius: 1.25rem;
+	border-radius: var(--npi-radius-lg);
 	background: var(--npi-surface-raised);
-	box-shadow: 0 34px 100px rgba(2, 8, 23, 0.36);
+	box-shadow: var(--npi-shadow-lg);
 	overflow: hidden;
 }
 
@@ -492,7 +475,7 @@ h3 {
 
 /* Alerts and badges */
 .alert {
-	border-radius: 0.85rem;
+	border-radius: var(--npi-radius);
 	border-width: 1px;
 	box-shadow: none;
 }
@@ -587,7 +570,7 @@ label.row {
 	margin-top: auto;
 	padding: 1rem clamp(1rem, 2.4vw, 2.35rem) 1.2rem;
 	border-top: 1px solid color-mix(in srgb, var(--npi-border) 70%, transparent);
-	background: color-mix(in srgb, var(--npi-surface) 54%, transparent);
+	background: var(--npi-surface);
 	color: var(--npi-muted);
 	font-size: 0.68rem;
 }
