@@ -12,6 +12,7 @@ const DOCKER_SOCKET = "/var/run/docker.sock";
 const STATUS_FILE = "/data/update-status.json";
 const AUDIT_MARKER_FILE = "/data/update-audit-marker.json";
 const HELPER_IMAGE = "docker:27-cli";
+const EMBEDDED_HANDOFF_SCRIPT = "/usr/local/libexec/npm-improved/update-handoff.sh";
 const OFFICIAL_IMAGE_PREFIX = "ghcr.io/gigabytegrove/npm-improved:";
 const ACTIVE_STATES = new Set(["preflight", "pulling", "staging", "restarting", "verifying", "rolling_back"]);
 const VALID_MODES = new Set(["sqlite", "mysql", "postgres"]);
@@ -95,20 +96,25 @@ const configuredMode = () => {
 const capabilities = () => {
 	const projectDir = (process.env.NPM_HOST_PROJECT_DIR || "").trim();
 	const socketAvailable = fs.existsSync(DOCKER_SOCKET);
+	const embeddedHandoffAvailable = fs.existsSync(EMBEDDED_HANDOFF_SCRIPT);
 
 	return {
-		enabled: socketAvailable && projectDir !== "",
+		enabled: socketAvailable && projectDir !== "" && embeddedHandoffAvailable,
 		docker_socket_available: socketAvailable,
 		host_project_configured: projectDir !== "",
 		host_project_dir: projectDir || null,
 		deployment_mode: configuredMode(),
 		helper_image: HELPER_IMAGE,
+		handoff_source: "embedded",
+		embedded_handoff_available: embeddedHandoffAvailable,
 		reason:
 			!socketAvailable
 				? "Docker socket is not available to this NPM Improved container."
 				: projectDir === ""
 					? "The host project directory is not configured. Run the current NPM Improved Docker installer once to enable UI updates."
-					: null,
+					: !embeddedHandoffAvailable
+						? "This NPM Improved image is missing its embedded update handoff."
+						: null,
 	};
 };
 
@@ -227,7 +233,7 @@ const launchHandoff = async ({ action, targetImage, sourceVersion, targetVersion
 
 	const projectDir = caps.host_project_dir;
 	const helperName = `npm-improved-update-${Date.now()}`;
-	const scriptPath = path.posix.join(projectDir, "scripts/update-handoff.sh");
+	const handoffScript = fs.readFileSync(EMBEDDED_HANDOFF_SCRIPT, "utf8");
 
 	await ensureHelperImage();
 
@@ -236,7 +242,22 @@ const launchHandoff = async ({ action, targetImage, sourceVersion, targetVersion
 		`/containers/create?name=${encodeURIComponent(helperName)}`,
 		{
 			Image: HELPER_IMAGE,
-			Cmd: ["sh", scriptPath, action, targetImage || "", caps.deployment_mode, sourceVersion || "", targetVersion || ""],
+			// Run the handoff bundled inside the currently running NPM Improved
+			// image. Never execute the host checkout's scripts/update-handoff.sh:
+			// UI updates replace the application image without updating that Git
+			// checkout, so using the host copy can permanently pin update logic
+			// to an older release.
+			Cmd: [
+				"sh",
+				"-c",
+				handoffScript,
+				"npm-improved-update-handoff",
+				action,
+				targetImage || "",
+				caps.deployment_mode,
+				sourceVersion || "",
+				targetVersion || "",
+			],
 			WorkingDir: projectDir,
 			Env: [
 				`NPM_UPDATE_STATUS_FILE=${path.posix.join(projectDir, "data/update-status.json")}`,
