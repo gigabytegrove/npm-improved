@@ -14,6 +14,7 @@ on:
       - ".env.example"
       - "DOCKER.md"
       - "scripts/install-docker"
+      - "scripts/update-handoff.sh"
       - ".github/workflows/docker.yml"
   push:
     branches:
@@ -29,6 +30,7 @@ on:
       - ".env.example"
       - "DOCKER.md"
       - "scripts/install-docker"
+      - "scripts/update-handoff.sh"
       - ".github/workflows/docker.yml"
 
 permissions:
@@ -97,6 +99,9 @@ jobs:
             docker compose -f compose.yaml --env-file .env down --remove-orphans >/dev/null 2>&1 || true
             docker ps -aq --filter label=com.gigabytegrove.npm-improved.role=update-handoff | xargs -r docker rm -f >/dev/null 2>&1 || true
             sudo rm -rf ./data ./letsencrypt
+            if [ -f /tmp/npmi-host-update-handoff.sh ]; then
+              mv /tmp/npmi-host-update-handoff.sh scripts/update-handoff.sh
+            fi
             if [ -f /tmp/npmi-update-test.env ]; then
               cp /tmp/npmi-update-test.env .env
               rm -f /tmp/npmi-update-test.env
@@ -147,7 +152,19 @@ jobs:
               -H "Authorization: Bearer $TOKEN" \
               http://127.0.0.1:19181/api/version/update
           )"
-          jq -e '.capabilities.enabled == true and .capabilities.deployment_mode == "sqlite"' <<<"$MANAGER"
+          jq -e '
+            .capabilities.enabled == true and
+            .capabilities.deployment_mode == "sqlite" and
+            .capabilities.handoff_source == "embedded" and
+            .capabilities.embedded_handoff_available == true
+          ' <<<"$MANAGER"
+
+          # Prove that lifecycle actions do not execute the Git checkout's
+          # scripts/update-handoff.sh. UI image updates do not update that
+          # checkout, so relying on it would pin updater behavior to an old
+          # release forever.
+          mv scripts/update-handoff.sh /tmp/npmi-host-update-handoff.sh
+          test ! -f scripts/update-handoff.sh
 
           curl -fsS \
             -H "Authorization: Bearer $TOKEN" \
