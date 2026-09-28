@@ -190,11 +190,22 @@ case "$ACTION" in
 			exit 1
 		fi
 
-		write_status "pulling" "Pulling $TARGET_VERSION from the official NPM Improved registry."
-		if ! docker pull "$TARGET_IMAGE"; then
-			write_status "failed" "Unable to pull the requested update." "Docker could not pull $TARGET_IMAGE." "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+		write_status "pulling" "Downloading $TARGET_VERSION from the official NPM Improved registry."
+		PULL_LOG="$ROOT/data/update-pull.log"
+		rm -f "$PULL_LOG"
+		if ! docker pull "$TARGET_IMAGE" >"$PULL_LOG" 2>&1; then
+			PULL_DETAIL="$(tail -n 20 "$PULL_LOG" 2>/dev/null || true)"
+			if grep -Eqi 'denied|unauthorized|authentication required|requested access to the resource is denied' "$PULL_LOG" 2>/dev/null; then
+				PULL_ERROR="GitHub Container Registry denied access to $TARGET_IMAGE. The NPM Improved release package must be public for unattended UI updates. Docker reported: $PULL_DETAIL"
+			elif grep -Eqi 'manifest unknown|not found|no matching manifest' "$PULL_LOG" 2>/dev/null; then
+				PULL_ERROR="The published release image is missing or does not support this Docker host architecture. Docker reported: $PULL_DETAIL"
+			else
+				PULL_ERROR="Docker could not pull $TARGET_IMAGE. Docker reported: $PULL_DETAIL"
+			fi
+			write_status "failed" "The update image could not be downloaded." "$PULL_ERROR" "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 			exit 1
 		fi
+		rm -f "$PULL_LOG"
 
 		TARGET_DIGEST="$(docker image inspect --format '{{index .RepoDigests 0}}' "$TARGET_IMAGE" 2>/dev/null || true)"
 		cp "$ENV_FILE" "$PREVIOUS_ENV"
@@ -268,10 +279,14 @@ case "$ACTION" in
 
 		write_status "rolling_back" "Restoring $TARGET_VERSION." "" "$CURRENT_IMAGE" "$SOURCE_VERSION"
 		if ! docker image inspect "$TARGET_IMAGE" >/dev/null 2>&1; then
-			if ! docker pull "$TARGET_IMAGE"; then
-				write_status "failed" "Rollback image is unavailable." "Docker could not make $TARGET_IMAGE available." "$CURRENT_IMAGE" "$SOURCE_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+			ROLLBACK_PULL_LOG="$ROOT/data/update-rollback-pull.log"
+			rm -f "$ROLLBACK_PULL_LOG"
+			if ! docker pull "$TARGET_IMAGE" >"$ROLLBACK_PULL_LOG" 2>&1; then
+				ROLLBACK_PULL_DETAIL="$(tail -n 20 "$ROLLBACK_PULL_LOG" 2>/dev/null || true)"
+				write_status "failed" "Rollback image is unavailable." "Docker could not make $TARGET_IMAGE available. Docker reported: $ROLLBACK_PULL_DETAIL" "$CURRENT_IMAGE" "$SOURCE_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 				exit 1
 			fi
+			rm -f "$ROLLBACK_PULL_LOG"
 		fi
 
 		set_env NPM_IMAGE "$TARGET_IMAGE"
