@@ -1,4 +1,4 @@
-import { IconCheck, IconCopy } from "@tabler/icons-react";
+import { IconCheck, IconCopy, IconHome } from "@tabler/icons-react";
 import CodeEditor from "@uiw/react-textarea-code-editor";
 import { Field, Form, Formik } from "formik";
 import { type ReactNode, useState } from "react";
@@ -122,6 +122,17 @@ export default function DefaultSite() {
 						<Alert variant="danger" show={!!errorMsg} onClose={() => setErrorMsg(null)} dismissible>
 							{errorMsg}
 						</Alert>
+
+						<div className="d-flex align-items-start gap-2 mb-4">
+							<IconHome size={24} className="mt-1 flex-shrink-0" />
+							<div>
+								<h3 className="mb-1">Default Site</h3>
+								<p className="text-secondary mb-0">
+									Choose what NPM Improved serves when a request reaches this proxy but does not
+									match a configured host.
+								</p>
+							</div>
+						</div>
 						<Field name="value">
 							{({ field, form }: any) => (
 								<div className="mb-3">
@@ -143,7 +154,12 @@ export default function DefaultSite() {
 													<span className="form-selectgroup-check" />
 												</div>
 												<div>
-													<T id="settings.default-site.congratulations" />
+													<div className="fw-bold">
+														<T id="settings.default-site.congratulations" />
+													</div>
+													<div className="text-secondary small mt-1">
+														Show the NPM Improved default page with useful node identity details.
+													</div>
 												</div>
 											</div>
 										</label>
@@ -161,7 +177,12 @@ export default function DefaultSite() {
 													<span className="form-selectgroup-check" />
 												</div>
 												<div>
-													<T id="settings.default-site.404" />
+													<div className="fw-bold">
+														<T id="settings.default-site.404" />
+													</div>
+													<div className="text-secondary small mt-1">
+														Return a normal HTTP 404 response for unmatched hostnames.
+													</div>
 												</div>
 											</div>
 										</label>
@@ -179,7 +200,12 @@ export default function DefaultSite() {
 													<span className="form-selectgroup-check" />
 												</div>
 												<div>
-													<T id="settings.default-site.444" />
+													<div className="fw-bold">
+														<T id="settings.default-site.444" />
+													</div>
+													<div className="text-secondary small mt-1">
+														Close the connection without a response using Nginx status 444.
+													</div>
 												</div>
 											</div>
 										</label>
@@ -197,7 +223,12 @@ export default function DefaultSite() {
 													<span className="form-selectgroup-check" />
 												</div>
 												<div>
-													<T id="settings.default-site.redirect" />
+													<div className="fw-bold">
+														<T id="settings.default-site.redirect" />
+													</div>
+													<div className="text-secondary small mt-1">
+														Send unmatched requests to another URL. Template variables are supported.
+													</div>
 												</div>
 											</div>
 										</label>
@@ -215,7 +246,12 @@ export default function DefaultSite() {
 													<span className="form-selectgroup-check" />
 												</div>
 												<div>
-													<T id="settings.default-site.html" />
+													<div className="fw-bold">
+														<T id="settings.default-site.html" />
+													</div>
+													<div className="text-secondary small mt-1">
+														Serve your own HTML template with node, cluster, build, and system variables.
+													</div>
 												</div>
 											</div>
 										</label>
