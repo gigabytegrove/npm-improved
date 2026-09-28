@@ -196,7 +196,7 @@ const Dashboard = () => {
 						<button
 							type="button"
 							className="btn btn-outline-secondary btn-sm"
-							onClick={() => navigate("/settings")}
+							onClick={() => navigate("/settings?section=instance-sync")}
 						>
 							Instance sync
 						</button>
