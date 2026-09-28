@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import errs from "../lib/error.js";
 import { applyConfigTransaction } from "../lib/nginx-transaction.js";
 import { normalizeProtectionSetting, renderProtectionPolicy } from "../lib/protection.js";
@@ -65,20 +64,7 @@ const validateSetting = (data) => {
 };
 
 const configureDefaultSite = async (row, previousRow) => {
-	const htmlPath = "/data/nginx/default_www/index.html";
-	let previousHtml = null;
-	let previousHtmlExists = false;
-
 	try {
-		if (fs.existsSync(htmlPath)) {
-			previousHtmlExists = true;
-			previousHtml = fs.readFileSync(htmlPath, { encoding: "utf8" });
-		}
-
-		if (row.value === "html") {
-			fs.writeFileSync(htmlPath, row.meta.html, { encoding: "utf8" });
-		}
-
 		await applyConfigTransaction({
 			livePath: internalNginx.getConfigName("default", 0),
 			renderCandidate: (candidatePath) => internalNginx.generateConfig("default", row, candidatePath),
@@ -87,11 +73,6 @@ const configureDefaultSite = async (row, previousRow) => {
 		});
 	} catch (err) {
 		await restoreSetting(previousRow);
-		if (previousHtmlExists) {
-			fs.writeFileSync(htmlPath, previousHtml, { encoding: "utf8" });
-		} else if (fs.existsSync(htmlPath)) {
-			fs.unlinkSync(htmlPath);
-		}
 		throw err;
 	}
 };
