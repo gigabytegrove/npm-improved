@@ -1,3 +1,4 @@
+import { IconCertificate } from "@tabler/icons-react";
 import { Field, Form, Formik } from "formik";
 import { type ReactNode, useState } from "react";
 import { Alert } from "react-bootstrap";
@@ -74,6 +75,17 @@ export default function CertificateLifecycle() {
 						<Alert variant="danger" show={!!errorMsg} onClose={() => setErrorMsg(null)} dismissible>
 							{errorMsg}
 						</Alert>
+
+						<div className="d-flex align-items-start gap-2 mb-4">
+							<IconCertificate size={24} className="mt-1 flex-shrink-0" />
+							<div>
+								<h3 className="mb-1">Certificate Lifecycle</h3>
+								<p className="text-secondary mb-0">
+									Keep certificate storage tidy without deleting certificates that are still referenced
+									by active or disabled hosts.
+								</p>
+							</div>
+						</div>
 
 						<div className="mb-4">
 							<label className="form-check form-switch" htmlFor="certificate-lifecycle-enabled">
