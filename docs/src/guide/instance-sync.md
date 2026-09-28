@@ -141,7 +141,7 @@ The following stay local to each node:
 - its audit log;
 - rendered Default Site output.
 
-That last item is intentional: NPMX synchronizes the Default Site template, then every node renders the template locally so variables such as `{{node.hostname}}` and `{{node.name}}` identify the node that actually answered the request.
+That last item is intentional: NPMX synchronizes the Default Site template, then every node renders the template locally so variables such as `node.hostname` and `node.name` identify the node that actually answered the request. In the Default Site editor, variable names are wrapped in double braces.
 
 ## Default Site cluster variables
 
@@ -149,30 +149,24 @@ Custom Default Site HTML and redirect destinations may use NPM Improved template
 
 Examples include:
 
-```text
-{{node.hostname}}
-{{node.name}}
-{{node.id}}
-{{node.role}}
-{{node.public_url}}
-{{node.version}}
-{{node.build_commit}}
-{{node.build_date}}
-{{cluster.enabled}}
-{{cluster.protocol}}
-{{cluster.protocol_version}}
-{{system.platform}}
-{{system.arch}}
-{{system.generated_at}}
-```
+Available variable names include:
 
-For example:
+- `node.hostname`
+- `node.name`
+- `node.id`
+- `node.role`
+- `node.public_url`
+- `node.version`
+- `node.build_commit`
+- `node.build_date`
+- `cluster.enabled`
+- `cluster.protocol`
+- `cluster.protocol_version`
+- `system.platform`
+- `system.arch`
+- `system.generated_at`
 
-```html
-<h1>Default Site</h1>
-<p>Answered by {{node.name}} ({{node.hostname}})</p>
-<p>{{node.role}} · NPM Improved {{node.version}} · {{cluster.protocol}}/{{cluster.protocol_version}}</p>
-```
+In the Default Site editor, wrap any variable name in double braces. For example, use the node-name variable in a heading and the hostname/role/version variables in a troubleshooting footer. The editor shows the exact copyable syntax for every supported variable.
 
 NPMX copies that template unchanged. Primary and secondary nodes render different local values from the same source template.
 
@@ -240,7 +234,7 @@ A practical redundant deployment can use:
 - NPMi-1 as NPMX primary;
 - NPMi-2 as synchronized NPMX secondary;
 - DNS/load balancing that sends clients to both proxy nodes;
-- a Default Site template that prints `{{node.hostname}}` for troubleshooting;
+- a Default Site template that prints the `node.hostname` variable for troubleshooting;
 - each Proxy Host configured with App-1, App-2, and App-3 in an upstream pool.
 
 That protects against both a proxy-node failure and an application-backend failure while making it easy to identify which proxy node served an unmatched hostname.
