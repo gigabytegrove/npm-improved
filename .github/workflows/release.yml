@@ -92,6 +92,29 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Verify public anonymous image pull
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          VERSION="${{ steps.version.outputs.version }}"
+          IMAGE="ghcr.io/gigabytegrove/npm-improved:v${VERSION}"
+
+          # UI updates run on customer Docker hosts without GitHub credentials.
+          # A stable release is therefore not usable until GHCR allows an
+          # anonymous pull of the exact release image.
+          docker logout ghcr.io >/dev/null 2>&1 || true
+          docker image rm "$IMAGE" >/dev/null 2>&1 || true
+
+          if ! PULL_OUTPUT="$(docker pull "$IMAGE" 2>&1)"; then
+            echo "$PULL_OUTPUT"
+            echo "::error::The stable NPM Improved image cannot be pulled anonymously. GitHub Container Registry packages are private by default on first publish. Set the npm-improved package visibility to Public before publishing this release."
+            exit 1
+          fi
+
+          echo "$PULL_OUTPUT"
+          docker image inspect "$IMAGE" >/dev/null
+
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
