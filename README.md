@@ -25,7 +25,7 @@
 
 > **Current release**
 >
-> NPM Improved **v1.2.1** substantially improves **Settings → Update**, adds actionable Docker pull diagnostics, and prevents stable releases whose GHCR image cannot be pulled anonymously. The `develop` branch remains the active integration branch.
+> NPM Improved **v1.2.2** refines the Control Center with deep-linkable Settings sections, responsive navigation, clearer Default Site controls, copyable template variables, and formatted Update release notes. The `develop` branch remains the active integration branch.
 
 ## What is NPM Improved?
 
