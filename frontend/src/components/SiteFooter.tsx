@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useCheckVersion, useHealth } from "src/hooks";
 import { T } from "src/locale";
 
@@ -32,15 +33,13 @@ export function SiteFooter() {
 						Release history
 					</a>
 					{versionData?.updateAvailable && versionData?.latest ? (
-						<a
-							href={`${repositoryUrl}/releases/tag/${versionData.latest}`}
+						<Link
+							to="/settings?section=update"
 							className="npmi-footer-update"
-							target="_blank"
-							rel="noopener noreferrer"
-							title={`NPM Improved ${versionData.latest} is available`}
+							title={`Install NPM Improved ${versionData.latest}`}
 						>
 							<T id="update-available" data={{ latestVersion: versionData.latest }} />
-						</a>
+						</Link>
 					) : null}
 				</div>
 			</div>
