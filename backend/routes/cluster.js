@@ -10,6 +10,101 @@ const router = express.Router({
 	mergeParams: true,
 });
 
+// NPMX pairing is authenticated by a short-lived one-time pairing token and
+// an ephemeral X25519 key exchange. The persistent cluster secret is never
+// returned in plaintext.
+router.post("/npmx/pair", async (req, res, next) => {
+	try {
+		const data = await validator(
+			{
+				required: [
+					"token_id",
+					"node_id",
+					"node_name",
+					"version",
+					"client_public_key",
+					"timestamp",
+					"nonce",
+					"proof",
+				],
+				additionalProperties: false,
+				properties: {
+					token_id: { type: "string", minLength: 8, maxLength: 128 },
+					node_id: { type: "string", minLength: 1, maxLength: 100 },
+					node_name: { type: "string", minLength: 1, maxLength: 100 },
+					public_url: { type: "string", maxLength: 2048 },
+					version: { type: "string", minLength: 1, maxLength: 64 },
+					build_commit: { type: ["string", "null"], maxLength: 128 },
+					client_public_key: { type: "string", minLength: 32, maxLength: 512 },
+					timestamp: { type: "string", minLength: 20, maxLength: 64 },
+					nonce: { type: "string", minLength: 12, maxLength: 128 },
+					proof: { type: "string", minLength: 32, maxLength: 256 },
+				},
+			},
+			req.body,
+		);
+		res.status(200).send(await internalInstanceSync.acceptNpmxPairing(data, req.ip));
+	} catch (err) {
+		debug(logger, `POST /cluster/npmx/pair: ${err}`);
+		next(err);
+	}
+});
+
+// Normal NPMX node-to-node traffic is HMAC-signed with timestamp + nonce
+// replay protection. The cluster secret itself is never sent as a header.
+router.get("/npmx/status", internalInstanceSync.requireNpmxAuth, async (_req, res, next) => {
+	try {
+		res.status(200).send(await internalInstanceSync.getNpmxStatus());
+	} catch (err) {
+		debug(logger, `GET /cluster/npmx/status: ${err}`);
+		next(err);
+	}
+});
+
+router.get("/npmx/snapshot", internalInstanceSync.requireNpmxAuth, async (_req, res, next) => {
+	try {
+		const result = await internalInstanceSync.createPeerSnapshot();
+		res.set({
+			"Content-Type": "application/vnd.npmx.snapshot+octet-stream",
+			"Content-Length": String(result.data.length),
+			"Cache-Control": "no-store",
+			"X-NPMX-Protocol": "npmx",
+			"X-NPMX-Version": "1",
+		});
+		res.status(200).send(result.data);
+	} catch (err) {
+		debug(logger, `GET /cluster/npmx/snapshot: ${err}`);
+		next(err);
+	}
+});
+
+router.post("/npmx/heartbeat", internalInstanceSync.requireNpmxAuth, async (req, res, next) => {
+	try {
+		const data = await validator(
+			{
+				required: ["node_id", "node_name", "role", "version", "protocol", "protocol_version"],
+				additionalProperties: false,
+				properties: {
+					node_id: { type: "string", minLength: 1, maxLength: 100 },
+					node_name: { type: "string", minLength: 1, maxLength: 100 },
+					public_url: { type: "string", maxLength: 2048 },
+					role: { type: "string", enum: ["primary", "secondary"] },
+					version: { type: "string", minLength: 1, maxLength: 64 },
+					build_commit: { type: ["string", "null"], maxLength: 128 },
+					last_sync: { type: ["string", "null"], maxLength: 64 },
+					protocol: { type: "string", enum: ["npmx"] },
+					protocol_version: { type: "integer", enum: [1] },
+				},
+			},
+			req.body,
+		);
+		res.status(200).send(await internalInstanceSync.recordHeartbeat(data, req.ip));
+	} catch (err) {
+		debug(logger, `POST /cluster/npmx/heartbeat: ${err}`);
+		next(err);
+	}
+});
+
 // Node-to-node endpoints use the dedicated cluster secret rather than a user JWT.
 router.get("/peer/status", internalInstanceSync.requirePeerAuth, async (_req, res, next) => {
 	try {
@@ -67,6 +162,49 @@ router.use(jwtdecode());
 const requireAdmin = async (res) => {
 	await res.locals.access.can("settings:update", "instance-sync");
 };
+
+router.post("/npmx/pairing-code", async (req, res, next) => {
+	try {
+		await requireAdmin(res);
+		const data = await validator(
+			{
+				additionalProperties: false,
+				properties: {
+					primary_url: { type: "string", maxLength: 2048 },
+				},
+			},
+			req.body || {},
+		);
+		res.status(200).send(
+			await internalInstanceSync.createPairingCode({
+				primaryUrl: data.primary_url,
+			}),
+		);
+	} catch (err) {
+		debug(logger, `POST /cluster/npmx/pairing-code: ${err}`);
+		next(err);
+	}
+});
+
+router.post("/npmx/join", async (req, res, next) => {
+	try {
+		await requireAdmin(res);
+		const data = await validator(
+			{
+				required: ["pairing_code"],
+				additionalProperties: false,
+				properties: {
+					pairing_code: { type: "string", minLength: 32, maxLength: 8192 },
+				},
+			},
+			req.body,
+		);
+		res.status(200).send(await internalInstanceSync.joinNpmxPairing(data.pairing_code));
+	} catch (err) {
+		debug(logger, `POST /cluster/npmx/join: ${err}`);
+		next(err);
+	}
+});
 
 router.get("/status", async (_req, res, next) => {
 	try {

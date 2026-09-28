@@ -14,6 +14,11 @@ import {
 } from "../lib/config-revision-store.js";
 import errs from "../lib/error.js";
 import { applyConfigTransaction, removeConfigTransaction } from "../lib/nginx-transaction.js";
+import {
+	builtinDefaultSiteTemplate,
+	getDefaultSiteTemplateContext,
+	renderDefaultSiteTemplate,
+} from "../lib/default-site-template.js";
 import { normalizeHostProtectionProfile } from "../lib/protection.js";
 import utils from "../lib/utils.js";
 import { debug, nginx as logger } from "../logger.js";
@@ -297,7 +302,7 @@ const internalNginx = {
 	 * @param   {Object}  host
 	 * @returns {Promise}
 	 */
-	generateConfig: (host_type, host_row, filename_override = null) => {
+	generateConfig: async (host_type, host_row, filename_override = null) => {
 		// Prevent modifying the original object:
 		const host = JSON.parse(JSON.stringify(host_row));
 		const nice_host_type = internalNginx.getFileFriendlyHostType(host_type);
@@ -305,6 +310,29 @@ const internalNginx = {
 		debug(logger, `Generating ${nice_host_type} Config:`, JSON.stringify(host, null, 2));
 
 		const renderEngine = utils.getRenderEngine();
+
+		if (nice_host_type === "default") {
+			const context = await getDefaultSiteTemplateContext();
+			host.meta = host.meta && typeof host.meta === "object" ? { ...host.meta } : {};
+
+			if (host.value === "congratulations" || host.value === "html") {
+				const sourceTemplate =
+					host.value === "html" ? String(host.meta.html || "") : builtinDefaultSiteTemplate();
+				const renderedHtml = renderDefaultSiteTemplate(sourceTemplate, context, { html: true });
+				const defaultRoot = "/data/nginx/default_www";
+				fs.mkdirSync(defaultRoot, { recursive: true, mode: 0o750 });
+				fs.writeFileSync(`${defaultRoot}/index.html`, renderedHtml, {
+					encoding: "utf8",
+					mode: 0o640,
+				});
+			}
+
+			if (host.value === "redirect") {
+				host.meta.redirect = renderDefaultSiteTemplate(host.meta.redirect || "", context, {
+					html: false,
+				});
+			}
+		}
 
 		return new Promise((resolve, reject) => {
 			let template = null;

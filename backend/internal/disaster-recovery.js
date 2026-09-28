@@ -141,6 +141,13 @@ const captureFilesystem = (scope) => {
 	const state = { bytes: 0 };
 
 	for (const [name, root] of Object.entries(FILE_ROOTS)) {
+		// Cluster payloads synchronize the default-site template through the settings
+		// table, then render it locally on each node so node variables identify the
+		// server that actually answered. Never copy another node's rendered HTML.
+		if (scope === "cluster" && name === "default_www") {
+			roots[name] = [];
+			continue;
+		}
 		const entries = [];
 		captureEntry(root, root, entries, state);
 		roots[name] = entries;
@@ -290,9 +297,26 @@ const replaceDatabase = async (snapshot, scope, ownerUserId = null) => {
 
 const removePath = (target) => fs.rmSync(target, { recursive: true, force: true });
 
-const restoreEntries = (root, entries) => {
-	removePath(root);
+const clearDirectoryContents = (root) => {
+	if (fs.existsSync(root)) {
+		const stat = fs.lstatSync(root);
+		if (!stat.isDirectory() || stat.isSymbolicLink()) {
+			fs.rmSync(root, { recursive: true, force: true });
+			fs.mkdirSync(root, { recursive: true, mode: 0o750 });
+			return;
+		}
+		for (const name of fs.readdirSync(root)) {
+			fs.rmSync(path.join(root, name), { recursive: true, force: true });
+		}
+		return;
+	}
 	fs.mkdirSync(root, { recursive: true, mode: 0o750 });
+};
+
+const restoreEntries = (root, entries) => {
+	// Persistent roots such as /etc/letsencrypt are commonly Docker bind
+	// mounts. Never remove the mount point itself; replace only its contents.
+	clearDirectoryContents(root);
 
 	const directories = entries.filter((entry) => entry.type === "directory");
 	const files = entries.filter((entry) => entry.type !== "directory");
@@ -378,9 +402,25 @@ const restoreLiveFilesystemSnapshot = (rollbackRoot) => {
 		cluster_secret: "/data/cluster-secret",
 	};
 	for (const [name, target] of Object.entries(targets)) {
-		removePath(target);
 		const source = path.join(rollbackRoot, name);
-		if (fs.existsSync(source)) {
+		const sourceExists = fs.existsSync(source);
+		const sourceIsDirectory = sourceExists && fs.lstatSync(source).isDirectory();
+
+		if (sourceIsDirectory) {
+			clearDirectoryContents(target);
+			for (const entry of fs.readdirSync(source)) {
+				fs.cpSync(path.join(source, entry), path.join(target, entry), {
+					recursive: true,
+					preserveTimestamps: true,
+					dereference: false,
+				});
+			}
+			continue;
+		}
+
+		// File-backed state is not a mount root, so it can be replaced normally.
+		removePath(target);
+		if (sourceExists) {
 			fs.cpSync(source, target, {
 				recursive: true,
 				preserveTimestamps: true,

@@ -8,6 +8,23 @@ import { intl, T } from "src/locale";
 import { validateString } from "src/modules/Validations";
 import { showObjectSuccess } from "src/notifications";
 
+const templateVariables = [
+	["{{node.hostname}}", "OS hostname of the node that serves the page"],
+	["{{node.name}}", "Friendly NPMX / Instance Sync node name"],
+	["{{node.id}}", "Stable cluster node ID"],
+	["{{node.role}}", "primary, secondary, or standalone"],
+	["{{node.public_url}}", "Advertised URL for this node"],
+	["{{node.version}}", "Running NPM Improved version"],
+	["{{node.build_commit}}", "Running build commit"],
+	["{{node.build_date}}", "Running build date"],
+	["{{cluster.enabled}}", "Whether cluster synchronization is enabled"],
+	["{{cluster.protocol}}", "Exchange protocol name (NPMX)"],
+	["{{cluster.protocol_version}}", "NPMX protocol version"],
+	["{{system.platform}}", "Operating-system platform"],
+	["{{system.arch}}", "CPU architecture"],
+	["{{system.generated_at}}", "UTC time this node rendered the default page"],
+] as const;
+
 export default function DefaultSite() {
 	const { data, isLoading, error } = useSetting("default-site");
 	const { mutate: setSetting } = useSetSetting();
@@ -180,6 +197,37 @@ export default function DefaultSite() {
 								</div>
 							)}
 						</Field>
+						<div className="card mb-4">
+							<div className="card-header">
+								<div>
+									<h3 className="card-title mb-0">Template variables</h3>
+									<div className="text-secondary small">
+										Use these in Custom HTML or the redirect URL. NPMX synchronizes the template, then
+										each node renders its own values locally so a cluster default page identifies the
+										node that actually answered.
+									</div>
+								</div>
+							</div>
+							<div className="table-responsive">
+								<table className="table table-sm table-vcenter card-table">
+									<tbody>
+										{templateVariables.map(([name, description]) => (
+											<tr key={name}>
+												<td style={{ width: "15rem" }}>
+													<code>{name}</code>
+												</td>
+												<td className="text-secondary">{description}</td>
+											</tr>
+										))}
+									</tbody>
+								</table>
+							</div>
+							<div className="card-footer text-secondary small">
+								The built-in NPM Improved default page also uses node variables automatically. 404 and
+								444 modes have no page body to template.
+							</div>
+						</div>
+
 						{values.value === "redirect" && (
 							<Field name="redirect" validate={validateString(1, 255)}>
 								{({ field, form }: any) => (

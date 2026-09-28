@@ -66,19 +66,10 @@ const validateSetting = (data) => {
 
 const configureDefaultSite = async (row, previousRow) => {
 	const htmlPath = "/data/nginx/default_www/index.html";
-	let previousHtml = null;
-	let previousHtmlExists = false;
+	const previousHtmlExists = fs.existsSync(htmlPath);
+	const previousHtml = previousHtmlExists ? fs.readFileSync(htmlPath) : null;
 
 	try {
-		if (fs.existsSync(htmlPath)) {
-			previousHtmlExists = true;
-			previousHtml = fs.readFileSync(htmlPath, { encoding: "utf8" });
-		}
-
-		if (row.value === "html") {
-			fs.writeFileSync(htmlPath, row.meta.html, { encoding: "utf8" });
-		}
-
 		await applyConfigTransaction({
 			livePath: internalNginx.getConfigName("default", 0),
 			renderCandidate: (candidatePath) => internalNginx.generateConfig("default", row, candidatePath),
@@ -87,10 +78,11 @@ const configureDefaultSite = async (row, previousRow) => {
 		});
 	} catch (err) {
 		await restoreSetting(previousRow);
-		if (previousHtmlExists) {
-			fs.writeFileSync(htmlPath, previousHtml, { encoding: "utf8" });
+		if (previousHtmlExists && previousHtml) {
+			fs.mkdirSync("/data/nginx/default_www", { recursive: true, mode: 0o750 });
+			fs.writeFileSync(htmlPath, previousHtml, { mode: 0o640 });
 		} else if (fs.existsSync(htmlPath)) {
-			fs.unlinkSync(htmlPath);
+			fs.rmSync(htmlPath, { force: true });
 		}
 		throw err;
 	}

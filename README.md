@@ -154,9 +154,11 @@ Users / DNS / LB ──┤                      ├─ Your apps
                    └─ NPMi Secondary ─────┘
 ```
 
-NPM Improved can synchronize two or more installations using a **Primary / Secondary** model.
+NPM Improved can synchronize two or more installations using a **Primary / Secondary** model over **NPMX (NPM Improved Exchange)**.
 
-The Primary is the server where configuration changes are made. Secondary servers periodically pull an encrypted copy of that configuration and keep their own Nginx service ready to handle traffic.
+The Primary is the server where configuration changes are made. Adding a Secondary does not require inventing or manually copying a cluster secret: the Primary generates a short-lived one-time NPMX pairing code, the nodes negotiate capabilities, and persistent credentials are exchanged through an authenticated ephemeral key exchange.
+
+Secondary servers then pull encrypted configuration snapshots and keep their own Nginx service ready to handle traffic. Snapshots include settings, certificates, certificate files, custom Nginx assets, and Default Site templates. Node-specific Default Site values are rendered locally after synchronization so a page can identify the exact proxy node that answered it.
 
 If the Primary is lost, a Secondary can be promoted.
 
@@ -177,6 +179,29 @@ If you run several NPM Improved proxy servers, **Shared MySQL mode** lets them u
 Certificate files are still files, so multi-server deployments must also share or replicate `/etc/letsencrypt` and `/data/custom_ssl`.
 
 [Read the Database & Shared MySQL guide](docs/src/guide/database.md).
+
+## Cluster-aware Default Site templates
+
+The **Settings → Default Site** custom HTML and redirect fields support template variables. That makes unmatched-host pages useful for troubleshooting, especially when several NPM Improved nodes sit behind DNS or a load balancer.
+
+Examples include:
+
+```text
+{{node.hostname}}
+{{node.name}}
+{{node.id}}
+{{node.role}}
+{{node.public_url}}
+{{node.version}}
+{{node.build_commit}}
+{{cluster.protocol}}
+{{cluster.protocol_version}}
+{{system.platform}}
+{{system.arch}}
+{{system.generated_at}}
+```
+
+NPMX synchronizes the template itself and each node renders its own local values. A single template can therefore say exactly which cluster member served the request instead of copying the Primary's already-rendered page to every Secondary.
 
 ## Safer configuration changes
 
