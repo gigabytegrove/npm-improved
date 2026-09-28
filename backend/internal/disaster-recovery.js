@@ -141,6 +141,13 @@ const captureFilesystem = (scope) => {
 	const state = { bytes: 0 };
 
 	for (const [name, root] of Object.entries(FILE_ROOTS)) {
+		// Cluster payloads synchronize the default-site template through the settings
+		// table, then render it locally on each node so node variables identify the
+		// server that actually answered. Never copy another node's rendered HTML.
+		if (scope === "cluster" && name === "default_www") {
+			roots[name] = [];
+			continue;
+		}
 		const entries = [];
 		captureEntry(root, root, entries, state);
 		roots[name] = entries;
