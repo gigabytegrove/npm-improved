@@ -25,7 +25,7 @@
 
 > **Current release**
 >
-> NPM Improved **v1.2.3** permanently fixes stale updater handoff logic by bundling the lifecycle updater with the running application image. The `develop` branch remains the active integration branch.
+> NPM Improved **v1.2.4** gives the Control Center a quieter, denser administration layout while preserving the existing workflows and feature set. The `develop` branch remains the active integration branch.
 
 ## What is NPM Improved?
 

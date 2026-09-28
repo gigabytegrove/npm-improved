@@ -1,5 +1,43 @@
 # Changelog
 
+## [1.2.4] - 2026-09-28
+
+NPM Improved v1.2.4 is a visual restraint pass for the Control Center.
+
+### A quieter administration UI
+
+- Removed decorative page gradients, glass/blur effects, oversized shadows, hover lifts, and most pill-shaped controls.
+- Reduced global border radii and tightened card, table, form, and page spacing.
+- Simplified typography weights and reduced excessive uppercase/tracking treatments.
+- Replaced gradient primary buttons with conventional solid controls.
+- Simplified modal and dropdown presentation.
+
+### Navigation and shell
+
+- Reworked the application header into a flatter, smaller administration header.
+- Simplified online/version and account controls.
+- Replaced the glowing gradient sidebar with a plain dark navigation rail.
+- Removed marketing-style sidebar copy and visual effects.
+- Shortened route subtitles to practical labels.
+
+### Dashboard
+
+- Removed the oversized greeting/hero area and decorative network-orbit graphic.
+- Replaced it with a compact operational overview and direct actions.
+- Converted route counts into smaller, denser metric rows.
+- Simplified Routing Summary and High Availability into normal administration panels.
+- Removed promotional copy such as “Build for failure, not hope.”
+
+### Settings
+
+- Removed the redundant Settings hero/header because the application header already provides page context.
+- Reduced the Settings navigation to a conventional compact sidebar.
+- Preserved deep links, mobile section selection, update indicators, and all existing settings functionality.
+- Reduced visual weight in Default Site and Update.
+- Converted Default Site template variables from large cards into a compact copyable table.
+
+This release intentionally changes presentation rather than features. Existing configuration, workflows, permissions, and behavior are preserved.
+
 ## [1.2.3] - 2026-09-28
 
 NPM Improved v1.2.3 permanently fixes the updater using stale host-side handoff code across image-based upgrades.
