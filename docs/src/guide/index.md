@@ -73,7 +73,7 @@ There are two supported ways to run more than one NPM Improved node.
 
 **Instance Synchronization** uses one Primary and one or more Secondary servers. Each server keeps its own database, and **NPMX (NPM Improved Exchange)** handles one-time secure pairing, capability negotiation, encrypted snapshots, certificate/filesystem synchronization, and node heartbeats. Administrators do not manually create or copy cluster secrets.
 
-Default Site custom HTML can also use node/cluster template variables such as `{{node.hostname}}`, `{{node.name}}`, `{{node.role}}`, and `{{node.version}}`. NPMX synchronizes the template while each node renders its own local values.
+Default Site custom HTML can also use node/cluster template variables such as `node.hostname`, `node.name`, `node.role`, and `node.version` using the double-brace syntax shown on the Default Site screen. NPMX synchronizes the template while each node renders its own local values.
 
 [Read about Instance Synchronization and NPMX](/guide/instance-sync).
 
