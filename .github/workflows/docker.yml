@@ -240,8 +240,16 @@ jobs:
           echo "$SYNC_RESULT"
           jq -e '.ok == true and .primary.protocol == "npmx"' <<<"$SYNC_RESULT"
 
-          PRIMARY_PAGE="$(curl -fsS http://127.0.0.1:19280/)"
-          SECONDARY_PAGE="$(curl -fsS http://127.0.0.1:19380/)"
+          PRIMARY_PAGE=""
+          SECONDARY_PAGE=""
+          for attempt in $(seq 1 20); do
+            PRIMARY_PAGE="$(curl -fsS http://127.0.0.1:19280/)"
+            SECONDARY_PAGE="$(curl -fsS http://127.0.0.1:19380/)"
+            if grep -Fq 'Primary A' <<<"$PRIMARY_PAGE" && grep -Fq 'Secondary B' <<<"$SECONDARY_PAGE"; then
+              break
+            fi
+            sleep 0.5
+          done
           echo "===== PRIMARY DEFAULT SITE ====="
           echo "$PRIMARY_PAGE"
           echo "===== SECONDARY DEFAULT SITE ====="
@@ -254,7 +262,7 @@ jobs:
           grep -Fq 'secondary / 1.1.0-ci / NPMX/1' <<<"$SECONDARY_PAGE"
           ! grep -Fq 'Primary A' <<<"$SECONDARY_PAGE"
 
-          jq -e '.used == true and (.paired_node_id | length > 0)' /tmp/npmi-npmx/primary/data/npmx-pairing.json
+          sudo cat /tmp/npmi-npmx/primary/data/npmx-pairing.json | jq -e '.used == true and (.paired_node_id | length > 0)'
 
           trap - EXIT
           cleanup_npmx
