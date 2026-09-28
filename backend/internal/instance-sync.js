@@ -869,11 +869,15 @@ const internalInstanceSync = {
 				summary: result.summary,
 			};
 		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
 			await updateMeta({
 				last_attempt: new Date().toISOString(),
-				last_error: err instanceof Error ? err.message : String(err),
+				last_error: message,
 			}).catch(() => undefined);
-			throw err;
+			logger.warn(`NPMX synchronization failed: ${message}`);
+			throw err instanceof errs.ValidationError
+				? err
+				: new errs.ValidationError(`NPMX synchronization failed: ${message}`);
 		} finally {
 			syncRunning = false;
 		}
