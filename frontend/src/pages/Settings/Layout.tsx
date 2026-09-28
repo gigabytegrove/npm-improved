@@ -116,21 +116,7 @@ export default function Layout() {
 	};
 
 	return (
-		<section className={`card ${styles.shell}`}>
-			<header className={styles.header}>
-				<div>
-					<div className={styles.eyebrow}>Control Center</div>
-					<h2 className={styles.title}>Settings</h2>
-					<p className={styles.subtitle}>
-						Configure traffic behavior, security, storage, clustering, recovery, and software updates.
-					</p>
-				</div>
-				<div className={styles.activeContext}>
-					<activeSection.icon size={18} stroke={1.8} />
-					<span>{activeSection.label}</span>
-				</div>
-			</header>
-
+		<section className={styles.shell}>
 			<div className={styles.mobilePicker}>
 				<label className="form-label" htmlFor="settings-section">
 					Settings section
@@ -174,7 +160,6 @@ export default function Layout() {
 											<span className={styles.navLabel}>{section.label}</span>
 											{hasUpdate ? <span className={styles.updateBadge}>New</span> : null}
 										</span>
-										<span className={styles.navDescription}>{section.description}</span>
 									</span>
 								</button>
 							);
