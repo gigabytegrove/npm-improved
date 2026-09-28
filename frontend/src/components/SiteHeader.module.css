@@ -6,12 +6,10 @@
 	align-items: center;
 	justify-content: space-between;
 	gap: 1rem;
-	min-height: 72px;
-	padding: 0.85rem clamp(1rem, 2vw, 1.8rem);
-	background: color-mix(in srgb, var(--npi-surface) 82%, transparent);
-	border-bottom: 1px solid color-mix(in srgb, var(--npi-border) 78%, transparent);
-	backdrop-filter: blur(20px) saturate(1.2);
-	box-shadow: 0 10px 32px rgba(15, 23, 42, 0.04);
+	min-height: 64px;
+	padding: 0.7rem clamp(1rem, 2vw, 1.6rem);
+	background: var(--npi-surface);
+	border-bottom: 1px solid var(--npi-border);
 	overflow: visible;
 }
 
@@ -23,24 +21,23 @@
 }
 
 .left {
-	gap: 0.85rem;
+	gap: 0.75rem;
 }
 
 .actions {
-	gap: 0.65rem;
+	gap: 0.5rem;
 }
 
 .menuButton {
 	display: none;
 	place-items: center;
-	width: 42px;
-	height: 42px;
+	width: 38px;
+	height: 38px;
 	padding: 0;
 	border: 1px solid var(--npi-border);
-	border-radius: 0.85rem;
+	border-radius: var(--npi-radius);
 	background: var(--npi-surface);
 	color: var(--npi-label);
-	box-shadow: var(--npi-shadow-sm);
 }
 
 .pageIdentity {
@@ -49,15 +46,15 @@
 
 .pageTitle {
 	color: var(--npi-heading);
-	font-size: 1rem;
-	font-weight: 800;
-	letter-spacing: -0.025em;
+	font-size: 0.98rem;
+	font-weight: 700;
+	letter-spacing: -0.015em;
 }
 
 .pageSubtitle {
-	margin-top: 0.12rem;
+	margin-top: 0.08rem;
 	color: var(--npi-muted);
-	font-size: 0.72rem;
+	font-size: 0.7rem;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -67,69 +64,69 @@
 .statusPill {
 	display: inline-flex;
 	align-items: center;
-	gap: 0.42rem;
-	min-height: 36px;
-	padding: 0.4rem 0.68rem;
-	border: 1px solid color-mix(in srgb, #22c55e 26%, var(--npi-border));
-	border-radius: 999px;
-	background: color-mix(in srgb, #22c55e 8%, var(--npi-surface));
+	gap: 0.38rem;
+	min-height: 32px;
+	padding: 0.3rem 0.55rem;
+	border: 1px solid var(--npi-border);
+	border-radius: var(--npi-radius);
+	background: var(--npi-surface-soft);
 	color: var(--npi-label);
-	font-size: 0.72rem;
-	font-weight: 750;
+	font-size: 0.68rem;
+	font-weight: 650;
 }
 
 .statusIcon {
 	display: grid;
 	place-items: center;
-	color: #22c55e;
+	color: var(--npi-green);
 }
 
 .statusText {
-	color: var(--npi-heading);
+	color: var(--npi-label);
 }
 
 .version {
-	padding-left: 0.4rem;
-	border-left: 1px solid color-mix(in srgb, var(--npi-border) 78%, transparent);
+	padding-left: 0.38rem;
+	border-left: 1px solid var(--npi-border);
 	color: var(--npi-muted);
 	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-	font-size: 0.67rem;
-	font-weight: 700;
+	font-size: 0.64rem;
+	font-weight: 600;
 }
 
 .desktopTools {
 	display: flex;
 	align-items: center;
-	gap: 0.15rem;
+	gap: 0.1rem;
 }
 
 .userButton {
 	display: flex;
 	align-items: center;
-	gap: 0.62rem;
-	min-height: 46px;
-	padding: 0.28rem 0.45rem 0.28rem 0.28rem;
+	gap: 0.55rem;
+	min-height: 40px;
+	padding: 0.2rem 0.35rem 0.2rem 0.2rem;
 	border: 1px solid transparent;
-	border-radius: 0.95rem;
+	border-radius: var(--npi-radius);
 	background: transparent;
 	color: var(--npi-label);
 	text-align: left;
 	transition:
-		background-color 140ms ease,
-		border-color 140ms ease;
+		background-color 120ms ease,
+		border-color 120ms ease;
 }
 
 .userButton:hover,
 .userButton[aria-expanded="true"] {
-	background: color-mix(in srgb, var(--npi-primary) 7%, var(--npi-surface));
-	border-color: color-mix(in srgb, var(--npi-primary) 16%, var(--npi-border));
+	background: var(--npi-surface-soft);
+	border-color: var(--npi-border);
 }
 
 .avatar {
-	width: 36px;
-	height: 36px;
-	border: 2px solid color-mix(in srgb, var(--npi-primary) 30%, transparent);
-	box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+	width: 32px;
+	height: 32px;
+	border: 1px solid var(--npi-border-strong);
+	box-shadow: none;
 }
 
 .userText {
@@ -141,8 +138,8 @@
 
 .userText strong {
 	color: var(--npi-heading);
-	font-size: 0.76rem;
-	font-weight: 800;
+	font-size: 0.74rem;
+	font-weight: 700;
 	max-width: 130px;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -150,10 +147,10 @@
 }
 
 .userText small {
-	margin-top: 0.18rem;
+	margin-top: 0.14rem;
 	color: var(--npi-muted);
-	font-size: 0.64rem;
-	font-weight: 600;
+	font-size: 0.62rem;
+	font-weight: 500;
 }
 
 .chevron {
@@ -162,7 +159,7 @@
 
 .userMenu {
 	min-width: 220px;
-	margin-top: 0.45rem !important;
+	margin-top: 0.35rem !important;
 }
 
 .mobileTools {
@@ -186,7 +183,7 @@
 	}
 
 	.statusPill {
-		width: 36px;
+		width: 32px;
 		padding: 0;
 		justify-content: center;
 	}
@@ -194,8 +191,8 @@
 
 @media (max-width: 767.98px) {
 	.header {
-		min-height: 64px;
-		padding: 0.65rem 0.85rem;
+		min-height: 60px;
+		padding: 0.6rem 0.8rem;
 	}
 
 	.menuButton {
@@ -214,8 +211,8 @@
 	}
 
 	.userButton {
-		padding: 0.2rem;
-		min-height: 42px;
+		padding: 0.15rem;
+		min-height: 38px;
 	}
 
 	.mobileTools {
