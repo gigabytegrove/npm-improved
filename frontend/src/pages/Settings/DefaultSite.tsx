@@ -1,3 +1,4 @@
+import { IconCheck, IconCopy } from "@tabler/icons-react";
 import CodeEditor from "@uiw/react-textarea-code-editor";
 import { Field, Form, Formik } from "formik";
 import { type ReactNode, useState } from "react";
@@ -30,6 +31,31 @@ export default function DefaultSite() {
 	const { mutate: setSetting } = useSetSetting();
 	const [errorMsg, setErrorMsg] = useState<ReactNode | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
+	const [copiedVariable, setCopiedVariable] = useState("");
+
+	const copyVariable = async (value: string) => {
+		try {
+			if (navigator.clipboard?.writeText) {
+				await navigator.clipboard.writeText(value);
+			} else {
+				const input = document.createElement("textarea");
+				input.value = value;
+				input.setAttribute("readonly", "");
+				input.style.position = "fixed";
+				input.style.opacity = "0";
+				document.body.appendChild(input);
+				input.select();
+				document.execCommand("copy");
+				input.remove();
+			}
+			setCopiedVariable(value);
+			window.setTimeout(() => {
+				setCopiedVariable((current) => (current === value ? "" : current));
+			}, 1600);
+		} catch {
+			setCopiedVariable("");
+		}
+	};
 
 	const onSubmit = async (values: any, { setSubmitting }: any) => {
 		if (isSubmitting) return;
@@ -202,29 +228,52 @@ export default function DefaultSite() {
 								<div>
 									<h3 className="card-title mb-0">Template variables</h3>
 									<div className="text-secondary small">
-										Use these in Custom HTML or the redirect URL. NPMX synchronizes the template, then
-										each node renders its own values locally so a cluster default page identifies the
-										node that actually answered.
+										Build one Default Site template for the whole cluster. NPMX synchronizes the
+										template, while every node renders its own identity and runtime values locally.
 									</div>
 								</div>
 							</div>
-							<div className="table-responsive">
-								<table className="table table-sm table-vcenter card-table">
-									<tbody>
-										{templateVariables.map(([name, description]) => (
-											<tr key={name}>
-												<td style={{ width: "15rem" }}>
-													<code>{name}</code>
-												</td>
-												<td className="text-secondary">{description}</td>
-											</tr>
-										))}
-									</tbody>
-								</table>
+							<div className="card-body">
+								<div className="row g-2">
+									{templateVariables.map(([name, description]) => {
+										const copied = copiedVariable === name;
+										return (
+											<div className="col-12 col-lg-6" key={name}>
+												<button
+													type="button"
+													className="btn btn-outline-secondary w-100 text-start justify-content-start p-3 h-100"
+													onClick={() => void copyVariable(name)}
+													title={`Copy ${name}`}
+												>
+													<span
+														className="d-flex align-items-start justify-content-between gap-3 w-100"
+													>
+														<span className="min-w-0">
+															<code className="d-block mb-1">{name}</code>
+															<span className="text-secondary small d-block">
+																{description}
+															</span>
+														</span>
+														<span className="text-secondary flex-shrink-0">
+															{copied ? (
+																<IconCheck size={17} className="text-success" />
+															) : (
+																<IconCopy size={17} />
+															)}
+														</span>
+													</span>
+												</button>
+											</div>
+										);
+									})}
+								</div>
 							</div>
-							<div className="card-footer text-secondary small">
-								The built-in NPM Improved default page also uses node variables automatically. 404 and
-								444 modes have no page body to template.
+							<div className="card-footer d-flex flex-wrap align-items-center justify-content-between gap-2 text-secondary small">
+								<span>Click any variable to copy it.</span>
+								<span>
+									The built-in page uses node variables automatically. 404 and 444 modes have no
+									page body to template.
+								</span>
 							</div>
 						</div>
 
