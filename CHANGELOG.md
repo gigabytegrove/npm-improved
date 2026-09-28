@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.2.3] - 2026-09-28
+
+NPM Improved v1.2.3 permanently fixes the updater using stale host-side handoff code across image-based upgrades.
+
+### Embedded updater handoff
+
+- The update handoff script is now bundled inside every NPM Improved runtime image.
+- The running application executes the handoff implementation from its own image version instead of `scripts/update-handoff.sh` from the host Git checkout.
+- UI image upgrades no longer depend on the host checkout being updated in parallel.
+- Updater capabilities now report `handoff_source: embedded` and verify the embedded handoff is present before enabling lifecycle controls.
+- Docker CI removes the host checkout's handoff script before exercising the lifecycle manager and proves Restart still completes successfully.
+- Changes to the handoff script now trigger Docker validation directly.
+
+### Why this mattered
+
+Previous releases updated the application container but left the original host Git checkout untouched. Because the lifecycle manager launched the host checkout's updater script, an installation could keep executing an older updater implementation forever. That is why newer UI releases could still show the old generic `Docker could not pull ...` failure instead of using the newer GitHub Release fallback.
+
+v1.2.3 makes updater behavior part of the running release image itself, so future updater improvements move forward with each application update.
+
 ## [1.2.2] - 2026-09-28
 
 NPM Improved v1.2.2 focuses on Control Center usability and Settings navigation.
