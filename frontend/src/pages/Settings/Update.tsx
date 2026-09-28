@@ -1,6 +1,15 @@
+import {
+	IconAlertTriangle,
+	IconCheck,
+	IconDownload,
+	IconHistory,
+	IconRefresh,
+	IconRotateClockwise2,
+	IconShieldLock,
+} from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { Alert } from "react-bootstrap";
+import { Alert, Modal, ProgressBar } from "react-bootstrap";
 import {
 	getUpdateManager,
 	restartManagedInstance,
@@ -18,6 +27,19 @@ const ACTIVE_STATES = new Set([
 	"rolling_back",
 ]);
 
+const UPDATE_PROGRESS: Record<string, number> = {
+	idle: 0,
+	preflight: 12,
+	pulling: 35,
+	staging: 55,
+	restarting: 72,
+	verifying: 90,
+	completed: 100,
+	rolling_back: 78,
+	rolled_back: 100,
+	failed: 100,
+};
+
 const statusLabel = (state?: string) => {
 	switch (state) {
 		case "completed":
@@ -29,9 +51,9 @@ const statusLabel = (state?: string) => {
 		case "preflight":
 			return "Preflight";
 		case "pulling":
-			return "Pulling image";
+			return "Downloading image";
 		case "staging":
-			return "Staging";
+			return "Preparing replacement";
 		case "restarting":
 			return "Restarting";
 		case "verifying":
@@ -51,6 +73,8 @@ const badgeClass = (state?: string) => {
 	return "bg-secondary-lt text-secondary";
 };
 
+type AuthAction = "update" | "rollback" | "restart";
+
 export default function Update() {
 	const {
 		data,
@@ -67,22 +91,14 @@ export default function Update() {
 	const [password, setPassword] = useState("");
 	const [actionError, setActionError] = useState("");
 	const [checking, setChecking] = useState(false);
-	const [runningAction, setRunningAction] = useState<"update" | "rollback" | "restart" | null>(null);
+	const [runningAction, setRunningAction] = useState<AuthAction | null>(null);
+	const [authAction, setAuthAction] = useState<AuthAction | null>(null);
 
 	const active = ACTIVE_STATES.has(data?.status?.state || "");
-	const canUpdate = Boolean(
-		data?.capabilities?.enabled &&
-			data?.release?.updateAvailable &&
-			!active &&
-			password.length > 0,
-	);
-	const canRollback = Boolean(
-		data?.capabilities?.enabled &&
-			data?.status?.previousImage &&
-			!active &&
-			password.length > 0,
-	);
-	const canRestart = Boolean(data?.capabilities?.enabled && !active && password.length > 0);
+	const updateAvailable = Boolean(data?.release?.updateAvailable);
+	const updaterReady = Boolean(data?.capabilities?.enabled);
+	const canRollback = Boolean(data?.status?.previousImage);
+	const progress = UPDATE_PROGRESS[data?.status?.state || "idle"] ?? 0;
 
 	const published = useMemo(() => {
 		if (!data?.release?.publishedAt) return null;
@@ -111,16 +127,49 @@ export default function Update() {
 		}
 	};
 
-	const run = async (
-		action: "update" | "rollback" | "restart",
-		fn: (password: string) => Promise<unknown>,
-	) => {
-		if (!password) return;
+	const openAuth = (action: AuthAction) => {
+		setPassword("");
+		setActionError("");
+		setAuthAction(action);
+	};
+
+	const closeAuth = () => {
+		if (runningAction) return;
+		setPassword("");
+		setAuthAction(null);
+	};
+
+	const actionTitle =
+		authAction === "update"
+			? `Update to ${data?.release?.latest || "latest"}`
+			: authAction === "rollback"
+				? `Roll back to ${data?.status?.previousVersion || "previous version"}`
+				: "Restart NPM Improved";
+
+	const actionDescription =
+		authAction === "update"
+			? "NPM Improved will download the new image, replace only the application container, verify health, and automatically roll back if verification fails."
+			: authAction === "rollback"
+				? "NPM Improved will restore the previously recorded application image and verify that it becomes healthy."
+				: "NPM Improved will restart the application container and verify that it returns healthy.";
+
+	const runAuthenticatedAction = async () => {
+		if (!authAction || !password) return;
+
+		const action = authAction;
+		const fn =
+			action === "update"
+				? startManagedUpdate
+				: action === "rollback"
+					? rollbackManagedUpdate
+					: restartManagedInstance;
+
 		setRunningAction(action);
 		setActionError("");
 		try {
 			await fn(password);
 			setPassword("");
+			setAuthAction(null);
 			await refetch();
 		} catch (err) {
 			setActionError(err instanceof Error ? err.message : String(err));
@@ -135,18 +184,75 @@ export default function Update() {
 				<div>
 					<h3 className="mb-1">Update</h3>
 					<p className="text-secondary mb-0">
-						Check, install, restart, and roll back NPM Improved without leaving the Control Center.
+						Install stable NPM Improved releases without leaving the Control Center.
 					</p>
 				</div>
 				<Button onClick={checkNow} isLoading={checking} disabled={checking || active}>
-					Check for updates
+					<IconRefresh size={16} />
+					Check again
 				</Button>
 			</div>
 
 			{error ? <Alert variant="danger">{error.message}</Alert> : null}
 			{actionError ? <Alert variant="danger">{actionError}</Alert> : null}
 
-			{!data?.capabilities?.enabled ? (
+			<div
+				className={`card mb-4 ${updateAvailable ? "border-primary" : ""}`}
+				style={updateAvailable ? { boxShadow: "0 0 0 1px var(--tblr-primary)" } : undefined}
+			>
+				<div className="card-body">
+					<div className="d-flex flex-column flex-lg-row gap-4 align-items-lg-center justify-content-between">
+						<div className="flex-fill">
+							<div className="d-flex flex-wrap gap-2 align-items-center mb-2">
+								<span className="text-secondary text-uppercase small fw-bold">Software update</span>
+								{active ? (
+									<span className="badge bg-azure-lt text-azure">{statusLabel(data?.status?.state)}</span>
+								) : updateAvailable ? (
+									<span className="badge bg-warning-lt text-warning">Update available</span>
+								) : (
+									<span className="badge bg-success-lt text-success">
+										<IconCheck size={14} className="me-1" />
+										Up to date
+									</span>
+								)}
+							</div>
+
+							<div className="d-flex flex-wrap align-items-baseline gap-2 mb-2">
+								<span className="h2 mb-0">{data?.release?.current || "Unknown"}</span>
+								<span className="text-secondary">→</span>
+								<span className="h2 mb-0">{data?.release?.latest || "Unavailable"}</span>
+							</div>
+
+							<div className="text-secondary">
+								{updateAvailable
+									? `${data?.release?.releaseName || data?.release?.latest} is ready to install.`
+									: "This installation matches the latest stable NPM Improved release."}
+							</div>
+
+							{published ? (
+								<div className="text-secondary small mt-1">Latest release published {published}</div>
+							) : null}
+						</div>
+
+						<div className="d-grid gap-2" style={{ minWidth: "15rem" }}>
+							<Button
+								actionType="primary"
+								size="lg"
+								onClick={() => openAuth("update")}
+								disabled={!updaterReady || !updateAvailable || active || runningAction !== null}
+							>
+								<IconDownload size={18} />
+								Update to {data?.release?.latest || "latest"}
+							</Button>
+							<div className="text-secondary small text-center">
+								Authentication is requested only after you choose Update.
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			{!updaterReady ? (
 				<Alert variant="warning">
 					<strong>Automatic updates are not ready on this deployment.</strong>
 					<div className="mt-1">
@@ -154,98 +260,82 @@ export default function Update() {
 							"Run the current NPM Improved Docker installer once to enable the built-in update handoff."}
 					</div>
 				</Alert>
-			) : (
-				<Alert variant="success">
-					Built-in updates are enabled. No permanent update-worker container is used; a temporary
-					self-cleaning handoff exists only while an update, rollback, or restart is running.
-				</Alert>
-			)}
+			) : null}
 
-			<div className="row row-cards mb-4">
-				<div className="col-md-6">
-					<div className="card h-100">
-						<div className="card-body">
-							<div className="text-secondary text-uppercase small fw-bold mb-2">Installed</div>
-							<div className="h2 mb-1">{data?.release?.current || "Unknown"}</div>
-							<div className="text-secondary">
-								Deployment mode: {data?.capabilities?.deploymentMode || "unknown"}
+			{data?.status?.error ? (
+				<Alert variant="danger">
+					<div className="d-flex gap-2 align-items-start">
+						<IconAlertTriangle size={20} className="mt-1 flex-shrink-0" />
+						<div>
+							<strong>Last update attempt failed.</strong>
+							<div className="mt-1" style={{ whiteSpace: "pre-wrap" }}>
+								{data.status.error}
 							</div>
 						</div>
 					</div>
-				</div>
-				<div className="col-md-6">
-					<div className="card h-100">
-						<div className="card-body">
-							<div className="text-secondary text-uppercase small fw-bold mb-2">Latest stable</div>
-							<div className="h2 mb-1">{data?.release?.latest || "Unavailable"}</div>
-							<div className={data?.release?.updateAvailable ? "text-warning" : "text-success"}>
-								{data?.release?.updateAvailable ? "Update available" : "Up to date"}
-							</div>
-						</div>
-					</div>
-				</div>
-			</div>
+				</Alert>
+			) : null}
 
 			<div className="card mb-4">
 				<div className="card-header d-flex align-items-center justify-content-between">
-					<h3 className="card-title">Update status</h3>
+					<div>
+						<h3 className="card-title mb-0">Update status</h3>
+						<div className="text-secondary small">
+							{data?.status?.message || "No update operation has been run yet."}
+						</div>
+					</div>
 					<span className={`badge ${badgeClass(data?.status?.state)}`}>
 						{statusLabel(data?.status?.state)}
 					</span>
 				</div>
 				<div className="card-body">
-					<p className="mb-3">{data?.status?.message || "No update operation has been run yet."}</p>
-					<div className="table-responsive">
-						<table className="table table-sm table-vcenter mb-0">
-							<tbody>
-								<tr>
-									<th>Action</th>
-									<td>{data?.status?.action || "None"}</td>
-								</tr>
-								<tr>
-									<th>From</th>
-									<td>{data?.status?.sourceVersion || data?.release?.current || "Unknown"}</td>
-								</tr>
-								<tr>
-									<th>Target</th>
-									<td>{data?.status?.targetVersion || "—"}</td>
-								</tr>
-								<tr>
-									<th>Started</th>
-									<td>
-										{data?.status?.startedAt
-											? new Date(data.status.startedAt).toLocaleString()
-											: "—"}
-									</td>
-								</tr>
-								<tr>
-									<th>Completed</th>
-									<td>
-										{data?.status?.completedAt
-											? new Date(data.status.completedAt).toLocaleString()
-											: "—"}
-									</td>
-								</tr>
-								{data?.status?.targetDigest ? (
-									<tr>
-										<th>Image digest</th>
-										<td>
-											<code className="text-break">{data.status.targetDigest}</code>
-										</td>
-									</tr>
-								) : null}
-							</tbody>
-						</table>
+					<ProgressBar
+						now={progress}
+						variant={data?.status?.state === "failed" ? "danger" : "primary"}
+						animated={active}
+						style={{ height: "0.65rem" }}
+					/>
+
+					<div className="row g-3 mt-2">
+						<div className="col-sm-6 col-lg-3">
+							<div className="text-secondary small">From</div>
+							<div className="fw-bold">
+								{data?.status?.sourceVersion || data?.release?.current || "Unknown"}
+							</div>
+						</div>
+						<div className="col-sm-6 col-lg-3">
+							<div className="text-secondary small">Target</div>
+							<div className="fw-bold">{data?.status?.targetVersion || "—"}</div>
+						</div>
+						<div className="col-sm-6 col-lg-3">
+							<div className="text-secondary small">Started</div>
+							<div>
+								{data?.status?.startedAt
+									? new Date(data.status.startedAt).toLocaleString()
+									: "—"}
+							</div>
+						</div>
+						<div className="col-sm-6 col-lg-3">
+							<div className="text-secondary small">Completed</div>
+							<div>
+								{data?.status?.completedAt
+									? new Date(data.status.completedAt).toLocaleString()
+									: "—"}
+							</div>
+						</div>
 					</div>
+
+					{data?.status?.targetDigest ? (
+						<div className="mt-3">
+							<div className="text-secondary small">Image digest</div>
+							<code className="text-break">{data.status.targetDigest}</code>
+						</div>
+					) : null}
+
 					{active ? (
 						<Alert variant="info" className="mt-3 mb-0">
 							The Control Center may disconnect briefly while the application container is replaced.
-							This page will keep trying to reconnect automatically.
-						</Alert>
-					) : null}
-					{data?.status?.error ? (
-						<Alert variant="danger" className="mt-3 mb-0">
-							{data.status.error}
+							This page will reconnect automatically when NPM Improved returns.
 						</Alert>
 					) : null}
 				</div>
@@ -253,7 +343,7 @@ export default function Update() {
 
 			<div className="card mb-4">
 				<div className="card-header">
-					<h3 className="card-title">Stable release</h3>
+					<h3 className="card-title">Release notes</h3>
 				</div>
 				<div className="card-body">
 					<h4 className="mb-1">
@@ -282,13 +372,52 @@ export default function Update() {
 
 			<div className="card">
 				<div className="card-header">
-					<h3 className="card-title">Update controls</h3>
+					<div>
+						<h3 className="card-title mb-0">Maintenance & recovery</h3>
+						<div className="text-secondary small">
+							These are secondary lifecycle controls, separate from the normal update path.
+						</div>
+					</div>
 				</div>
 				<div className="card-body">
-					<Alert variant="secondary">
-						Update, restart, and rollback require your current administrator password. The password is
-						verified for this action and is not stored in update state.
-					</Alert>
+					<div className="d-flex flex-wrap gap-2">
+						<Button
+							onClick={() => openAuth("restart")}
+							disabled={!updaterReady || active || runningAction !== null}
+						>
+							<IconRotateClockwise2 size={16} />
+							Restart NPM Improved
+						</Button>
+						<Button
+							actionType="danger"
+							onClick={() => openAuth("rollback")}
+							disabled={!updaterReady || !canRollback || active || runningAction !== null}
+						>
+							<IconHistory size={16} />
+							Roll back to {data?.status?.previousVersion || "previous version"}
+						</Button>
+					</div>
+					<div className="text-secondary small mt-3">
+						No permanent update-worker container is used. Lifecycle actions create only a temporary,
+						self-cleaning handoff while the application container is being replaced or restarted.
+					</div>
+				</div>
+			</div>
+
+			<Modal show={authAction !== null} onHide={closeAuth} centered>
+				<Modal.Header closeButton={!runningAction}>
+					<Modal.Title>{actionTitle}</Modal.Title>
+				</Modal.Header>
+				<Modal.Body>
+					<div className="d-flex gap-2 mb-3">
+						<IconShieldLock size={22} className="text-primary flex-shrink-0 mt-1" />
+						<div>
+							<div className="fw-bold">Confirm with your administrator password</div>
+							<div className="text-secondary small">{actionDescription}</div>
+						</div>
+					</div>
+
+					{actionError ? <Alert variant="danger">{actionError}</Alert> : null}
 
 					<label className="form-label" htmlFor="update-admin-password">
 						Current administrator password
@@ -298,46 +427,37 @@ export default function Update() {
 						type="password"
 						className="form-control"
 						autoComplete="current-password"
+						autoFocus
 						value={password}
 						onChange={(event) => setPassword(event.target.value)}
-						disabled={active}
+						onKeyDown={(event) => {
+							if (event.key === "Enter" && password && !runningAction) {
+								void runAuthenticatedAction();
+							}
+						}}
+						disabled={Boolean(runningAction)}
 					/>
-
-					<div className="btn-list mt-3">
-						<Button
-							actionType="primary"
-							className="bg-teal"
-							onClick={() => run("update", startManagedUpdate)}
-							isLoading={runningAction === "update"}
-							disabled={!canUpdate || runningAction !== null}
-						>
-							Update to {data?.release?.latest || "latest"}
-						</Button>
-						<Button
-							onClick={() => run("restart", restartManagedInstance)}
-							isLoading={runningAction === "restart"}
-							disabled={!canRestart || runningAction !== null}
-						>
-							Restart NPM Improved
-						</Button>
-						<Button
-							actionType="danger"
-							onClick={() => run("rollback", rollbackManagedUpdate)}
-							isLoading={runningAction === "rollback"}
-							disabled={!canRollback || runningAction !== null}
-						>
-							Roll back to {data?.status?.previousVersion || "previous version"}
-						</Button>
+					<div className="text-secondary small mt-2">
+						The password is verified for this action and is not stored in update state.
 					</div>
-
-					{!data?.release?.updateAvailable ? (
-						<div className="text-secondary mt-3">
-							The Update button stays disabled when this instance already matches the latest stable
-							release.
-						</div>
-					) : null}
-				</div>
-			</div>
+				</Modal.Body>
+				<Modal.Footer>
+					<Button onClick={closeAuth} disabled={Boolean(runningAction)}>
+						Cancel
+					</Button>
+					<Button
+						actionType={authAction === "rollback" ? "danger" : "primary"}
+						onClick={() => void runAuthenticatedAction()}
+						isLoading={runningAction === authAction}
+						disabled={!password || Boolean(runningAction)}
+					>
+						{authAction === "update" ? <IconDownload size={16} /> : null}
+						{authAction === "restart" ? <IconRotateClockwise2 size={16} /> : null}
+						{authAction === "rollback" ? <IconHistory size={16} /> : null}
+						{actionTitle}
+					</Button>
+				</Modal.Footer>
+			</Modal>
 		</div>
 	);
 }
