@@ -204,15 +204,12 @@ export default function Update() {
 			{error ? <Alert variant="danger">{error.message}</Alert> : null}
 			{actionError ? <Alert variant="danger">{actionError}</Alert> : null}
 
-			<div
-				className={`card mb-4 ${updateAvailable ? "border-primary" : ""}`}
-				style={updateAvailable ? { boxShadow: "0 0 0 1px var(--tblr-primary)" } : undefined}
-			>
+			<div className="card mb-4">
 				<div className="card-body">
 					<div className="d-flex flex-column flex-lg-row gap-4 align-items-lg-center justify-content-between">
 						<div className="flex-fill">
 							<div className="d-flex flex-wrap gap-2 align-items-center mb-2">
-								<span className="text-secondary text-uppercase small fw-bold">Software update</span>
+								<span className="fw-bold">Software update</span>
 								{active ? (
 									<span className="badge bg-azure-lt text-azure">{statusLabel(data?.status?.state)}</span>
 								) : updateAvailable ? (
@@ -225,10 +222,10 @@ export default function Update() {
 								)}
 							</div>
 
-							<div className="d-flex flex-wrap align-items-baseline gap-2 mb-2">
-								<span className="h2 mb-0">{data?.release?.current || "Unknown"}</span>
+							<div className="d-flex flex-wrap align-items-center gap-2 mb-2">
+								<code>{data?.release?.current || "Unknown"}</code>
 								<span className="text-secondary">→</span>
-								<span className="h2 mb-0">{data?.release?.latest || "Unavailable"}</span>
+								<code>{data?.release?.latest || "Unavailable"}</code>
 							</div>
 
 							<div className="text-secondary">
@@ -242,10 +239,9 @@ export default function Update() {
 							) : null}
 						</div>
 
-						<div className="d-grid gap-2" style={{ minWidth: "15rem" }}>
+						<div className="d-grid gap-2" style={{ minWidth: "13rem" }}>
 							<Button
 								actionType="primary"
-								size="lg"
 								onClick={() => openAuth("update")}
 								disabled={!updaterReady || !updateAvailable || active || runningAction !== null}
 							>
@@ -253,7 +249,7 @@ export default function Update() {
 								Update to {data?.release?.latest || "latest"}
 							</Button>
 							<div className="text-secondary small text-center">
-								Authentication is requested only after you choose Update.
+								Admin password required.
 							</div>
 						</div>
 					</div>
