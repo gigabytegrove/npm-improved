@@ -186,7 +186,18 @@ jobs:
             docker network rm npmi-npmx >/dev/null 2>&1 || true
             sudo rm -rf /tmp/npmi-npmx
           }
-          trap cleanup_npmx EXIT
+          dump_npmx_failure() {
+            status=$?
+            if [ "$status" -ne 0 ]; then
+              echo "===== NPMX PRIMARY LOGS ====="
+              docker logs npmi-npmx-primary 2>&1 || true
+              echo "===== NPMX SECONDARY LOGS ====="
+              docker logs npmi-npmx-secondary 2>&1 || true
+            fi
+            cleanup_npmx
+            exit "$status"
+          }
+          trap dump_npmx_failure EXIT
           cleanup_npmx
 
           docker network create npmi-npmx
