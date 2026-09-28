@@ -11,6 +11,7 @@ NPM Improved v1.2.1 fixes the first-release updater experience and substantially
 - Update, Restart, and Rollback now request the current administrator password only after the administrator chooses the action.
 - Added a focused confirmation modal for authenticated lifecycle actions.
 - Added clearer update progress, state, version transition, and immediate failure visibility.
+- Failed update state is acknowledged and cleared when the Update page is reloaded, while the completed failure remains preserved in the audit log.
 - Separated normal software updating from secondary Maintenance & Recovery controls.
 
 ### Registry reliability
