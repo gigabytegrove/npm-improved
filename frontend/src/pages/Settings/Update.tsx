@@ -10,6 +10,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
 import { Alert, Modal, ProgressBar } from "react-bootstrap";
+import ReactMarkdown from "react-markdown";
 import {
 	getUpdateManager,
 	restartManagedInstance,
@@ -17,6 +18,7 @@ import {
 	startManagedUpdate,
 } from "src/api/backend";
 import { Button, Loading } from "src/components";
+import styles from "./Update.module.css";
 
 const ACTIVE_STATES = new Set([
 	"preflight",
@@ -283,7 +285,7 @@ export default function Update() {
 			) : null}
 
 			<div className="card mb-4">
-				<div className="card-header d-flex align-items-center justify-content-between">
+				<div className="card-header d-flex align-items-center justify-content-between" aria-live="polite">
 					<div>
 						<h3 className="card-title mb-0">Update status</h3>
 						<div className="text-secondary small">
@@ -357,11 +359,8 @@ export default function Update() {
 					</h4>
 					{published ? <div className="text-secondary mb-3">Published {published}</div> : null}
 					{data?.release?.releaseNotes ? (
-						<div
-							className="border rounded p-3 bg-body-tertiary"
-							style={{ whiteSpace: "pre-wrap", maxHeight: "22rem", overflow: "auto" }}
-						>
-							{data.release.releaseNotes}
+						<div className={styles.releaseNotes}>
+							<ReactMarkdown>{data.release.releaseNotes}</ReactMarkdown>
 						</div>
 					) : (
 						<div className="text-secondary">No release notes are available.</div>

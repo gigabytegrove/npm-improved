@@ -31,8 +31,27 @@ const routeTitles: Array<[RegExp, string, string]> = [
 	[/^\/settings/, "Settings", "Platform policy, recovery, and synchronization"],
 ];
 
-const resolveTitle = (pathname: string) =>
-	routeTitles.find(([pattern]) => pattern.test(pathname)) || ["", "Control Center", "NPM Improved"];
+const settingsSectionSubtitles: Record<string, string> = {
+	"default-site": "Fallback behavior, custom pages, and node-aware templates",
+	"certificate-lifecycle": "Certificate retention, quarantine, and cleanup",
+	protection: "Managed HTTP request and connection protection",
+	database: "SQLite, MySQL, shared storage, and migration",
+	"instance-sync": "NPMX pairing, synchronization, peers, and failover",
+	"disaster-recovery": "Encrypted backups, inspection, and restore",
+	update: "Software updates, rollback, and application restart",
+};
+
+const resolveTitle = (pathname: string, search = "") => {
+	if (pathname.startsWith("/settings")) {
+		const section = new URLSearchParams(search).get("section") || "default-site";
+		return [
+			"",
+			"Settings",
+			settingsSectionSubtitles[section] || "Platform policy, recovery, and synchronization",
+		];
+	}
+	return routeTitles.find(([pattern]) => pattern.test(pathname)) || ["", "Control Center", "NPM Improved"];
+};
 
 export function SiteHeader() {
 	const { data: currentUser } = useUser("me");
@@ -40,7 +59,7 @@ export function SiteHeader() {
 	const location = useLocation();
 	const isAdmin = currentUser?.roles.includes("admin");
 	const { logout } = useAuthState();
-	const [, title, subtitle] = resolveTitle(location.pathname);
+	const [, title, subtitle] = resolveTitle(location.pathname, location.search);
 	const version = health.data?.version?.display || "";
 
 	return (
