@@ -130,6 +130,36 @@ const getStatus = () => {
 	);
 };
 
+const clearFailedStatus = () => {
+	const status = getStatus();
+	if (status.state !== "failed") {
+		return status;
+	}
+
+	try {
+		fs.rmSync(STATUS_FILE, { force: true });
+	} catch {
+		// If removal is unavailable for any reason, replace it with a clean idle
+		// state rather than making stale failure state permanent in the UI.
+		writeJsonFile(STATUS_FILE, {
+			state: "idle",
+			message: "No update operation is currently active.",
+			action: null,
+			started_at: null,
+			completed_at: null,
+			source_version: null,
+			target_version: null,
+			previous_version: null,
+			previous_image: null,
+			target_image: null,
+			target_digest: null,
+			error: null,
+		});
+	}
+
+	return getStatus();
+};
+
 const assertIdle = () => {
 	const status = getStatus();
 	if (ACTIVE_STATES.has(status.state)) {
@@ -428,6 +458,7 @@ const reconcileAudit = async () => {
 export default {
 	capabilities,
 	getStatus,
+	clearFailedStatus,
 	startUpdate,
 	rollback,
 	restart,
