@@ -1,6 +1,13 @@
 name: Repository Health
-on: [push, pull_request, workflow_dispatch]
-permissions: {contents: read}
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
 jobs:
   local-markdown-links:
     runs-on: ubuntu-latest
@@ -11,18 +18,31 @@ jobs:
         run: |
           from pathlib import Path
           from urllib.parse import unquote
-          import re, sys
-          pattern = re.compile(r"!?[[^]]*](([^)]+))")
+          import re
+          import sys
+
+          pattern = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
           failures = []
+
           for md in Path(".").rglob("*.md"):
-              if ".git" in md.parts: continue
-              for raw in pattern.findall(md.read_text(encoding="utf-8", errors="replace")):
+              if ".git" in md.parts:
+                  continue
+              text = md.read_text(encoding="utf-8", errors="replace")
+              for raw in pattern.findall(text):
                   target = raw.strip().strip("<>")
-                  if not target or target.startswith(("#","http://","https://","mailto:","tel:","data:")): continue
-                  target = unquote(target.split("#",1)[0].split("?",1)[0]).strip()
-                  if not target: continue
-                  candidate = Path(".") / target.lstrip("/") if target.startswith("/") else md.parent / target
-                  if not candidate.exists(): failures.append(f"{md}: {raw}")
+                  target = re.split(r"\s+[\"']", target, maxsplit=1)[0]
+                  if not target or target.startswith(("#", "http://", "https://", "mailto:", "tel:", "data:")):
+                      continue
+                  target = unquote(target.split("#", 1)[0].split("?", 1)[0]).strip()
+                  if not target:
+                      continue
+                  candidate = (Path(".") / target.lstrip("/")) if target.startswith("/") else (md.parent / target)
+                  if not candidate.exists():
+                      failures.append(f"{md}: {raw}")
+
           if failures:
-              print("Broken local Markdown references:\n" + "\n".join(failures)); sys.exit(1)
+              print("Broken local Markdown references:")
+              print("\n".join(failures))
+              sys.exit(1)
+
           print("Local Markdown references are valid.")
