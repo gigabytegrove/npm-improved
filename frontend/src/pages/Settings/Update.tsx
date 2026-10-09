@@ -272,7 +272,7 @@ export default function Update() {
 					<strong>Automatic updates are not ready on this deployment.</strong>
 					<div className="mt-1">
 						{data?.capabilities?.reason ||
-							"Run the current NPM Improved Docker installer once to enable the built-in update handoff."}
+							"Run the current NPM Improved Docker installer once to enable native host-based updates."}
 					</div>
 				</Alert>
 			) : null}

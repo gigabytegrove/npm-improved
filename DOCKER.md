@@ -136,68 +136,74 @@ NPM_BACKUP_RETENTION=7
 
 Backups are retained under `/data/backups`. Copy disaster-recovery backups off the Docker host as part of your normal backup process.
 
-## Updating
+## Updating (v1.4.1+)
 
-### Settings → Update
+NPM Improved uses **one application container**. It never launches a second
+container to update, restart or roll back that application.
 
-Beginning with v1.1.0, normal single-node Docker installations can update from **Settings → Update**.
+The trusted update runner is a **native Linux host-side systemd service**, installed
+once into the Docker host. It is not an extra Docker image or service container.
+The NPMi application writes an authenticated update request into its persistent
+`/data` mount. A systemd path watcher notices it and executes the host runner
+using the existing Docker Compose app service.
 
-The installer records the host project path and deployment mode in `.env` and mounts the Docker socket into the NPM Improved application container. Those settings allow the authenticated Update manager to launch a temporary Docker CLI handoff when the running application container must be replaced.
+The host worker downloads the target NPMi image directly from GHCR (or the
+checksum-verified release bundle), changes the app image in `.env`,
+recreates only the app service, checks its Docker and control-plane health
+and verifies the exact release version. Failures restore the previous
+application image. No helper images are pulled from Docker Hub.
 
-The handoff:
+### One-time native host updater installation
 
-1. validates the deployment;
-2. requires at least 512 MiB of free staging space;
-3. pulls the requested official stable image;
-4. preserves the current `.env`;
-5. recreates only the application container;
-6. waits for Docker health;
-7. verifies the independent control-plane health endpoint and live build version;
-8. restores the previous image configuration automatically when verification fails;
-9. removes itself after the operation.
+Requirements: Linux host with systemd, root access for installation, Python 3,
+Docker Engine and Docker Compose v2. **No Docker socket mount inside NPMi is
+required.**
 
-There is no permanently running updater/worker container.
+After installing NPM Improved from source as root on a systemd host, the
+installer provisions the host watcher automatically. For existing installations
+or an installer run without root access, run from a trusted repository checkout:
 
-Because Docker socket access is host-level privileged access, the browser is never given a Docker command interface. The authenticated backend exposes only the defined NPM Improved update/restart/rollback operations, and those operations require the current administrator password.
+```bash
+sudo ./scripts/install-host-updater /absolute/path/to/existing/npm-project
+```
 
-Shared MySQL and Primary/Secondary Instance Synchronization deployments are intentionally blocked from single-node automatic updates. Upgrade those nodes together during a coordinated maintenance window.
+This creates a per-installation systemd service and path watcher. It does not
+start any additional containers. Use `systemctl list-units 'npm-improved-update-*'`
+to inspect native watcher status.
+
+The older v1.4.0 updater still contains the `docker:27-cli` launcher. Before
+the first v1.4.1 upgrade, existing deployments require a **one-time Compose
+app-only upgrade on the host**, plus installation of this native updater. Keep
+the current Compose project name, .env, data and certificates. After v1.4.1,
+future updates work entirely through **Settings → Update**.
+
+### Operational guarantees
+
+- Current administrator password and Settings permissions are required.
+- NPMX Primary/Secondary nodes can be updated **sequentially**, validating
+  one node's health before updating the next; NPMX snapshot sync temporarily
+  pauses when app versions differ.
+- Shared MySQL database deployments retain the stricter coordinated upgrade
+  restriction.
+- Restarts and rollbacks use the same host-side worker.
+- Rollback returns to the recorded previous NPMi image if verification fails.
+- The worker runs the **root-owned installed script**, not arbitrary executable
+  code from an application-writable directory.
 
 ### CLI update/recovery path
 
-The installer remains the supported CLI update and recovery path. Use the same target that matches the underlying deployment.
-
-SQLite:
-
-```bash
-cd ~/npm-improved
-git checkout develop
-git pull --ff-only
-./scripts/install-docker sqlite
-```
-
-MariaDB / MySQL:
+The source installer remains supported for manual recovery and rebuilds.
+It preserves existing host-side data volumes:
 
 ```bash
-cd ~/npm-improved
-git checkout develop
+cd /path/to/npm-improved
 git pull --ff-only
-./scripts/install-docker mysql
+sudo ./scripts/install-docker sqlite
 ```
 
-PostgreSQL:
-
-```bash
-cd ~/npm-improved
-git checkout develop
-git pull --ff-only
-./scripts/install-docker postgres
-```
-
-Add `--clean-build` only when a cache-free rebuild is intentionally required.
-
-If the database was selected dynamically from **Settings → Database & Storage**, keep using the installer target for the underlying deployment. The saved runtime database selection under `/data` remains in place across the rebuild.
-
-Before upgrading, keep a current backup of `./data`, `./letsencrypt`, and the external database volume when one is used.
+Use `mysql` or `postgres` instead of `sqlite` when your actual Compose
+deployment uses that underlying database mode. Do not run the source installer
+against a custom production Compose layout without checking its configuration.
 
 ## Logs and status
 

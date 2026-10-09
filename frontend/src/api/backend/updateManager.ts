@@ -16,7 +16,9 @@ export interface UpdateCapabilities {
 	hostProjectConfigured: boolean;
 	hostProjectDir: string | null;
 	deploymentMode: "sqlite" | "mysql" | "postgres";
-	helperImage: string;
+	helperImage: string | null;
+	handoffSource: string;
+	hostServiceInstalled: boolean;
 	reason: string | null;
 }
 
