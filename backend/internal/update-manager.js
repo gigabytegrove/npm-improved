@@ -348,7 +348,7 @@ const restart = async (access, password) => {
 	await internalAuditLog.add(access, {
 		action: "restart_started",
 		object_type: "system",
-		meta: { version: sourceVersion, helper_id: helper.helper_id },
+		meta: { version: sourceVersion, handoff_source: hostService.handoff_source },
 	});
 	return { ...getStatus(), host_service: hostService };
 };
