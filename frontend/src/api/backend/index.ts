@@ -33,6 +33,7 @@ export * from "./getLogSources";
 export * from "./getLogTail";
 export * from "./getSecurityLogSummary";
 export * from "./getProxyHost";
+export * from "./getHostAnalytics";
 export * from "./getProxyHostLogs";
 export * from "./getProxyHosts";
 export * from "./getRedirectionHost";

@@ -1,6 +1,7 @@
-import { IconDotsVertical, IconEdit, IconFileText, IconPower, IconTrash } from "@tabler/icons-react";
+import { IconDotsVertical, IconEdit, IconFileText, IconPower, IconTrash, IconChartBar } from "@tabler/icons-react";
 import { createColumnHelper, type SortingState, useTable } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import type { ProxyHost } from "src/api/backend";
 import {
 	AccessListFormatter,
@@ -60,7 +61,8 @@ export default function Table({
 				},
 				cell: (info: any) => {
 					const value = info.getValue();
-					return <DomainsFormatter domains={value.domainNames} createdOn={value.createdOn} />;
+					return <div><DomainsFormatter domains={value.domainNames} createdOn={value.createdOn} />
+							<Link className="small d-inline-flex align-items-center gap-1 mt-1" to={`/nginx/proxy/${value.id}/analytics`}><IconChartBar size={14}/> Analytics</Link></div>;
 				},
 			}),
 			columnHelper.accessor((row: any) => row, {
@@ -145,6 +147,7 @@ export default function Table({
 									<IconEdit size={16} />
 									<T id="action.edit" />
 								</a>
+								<Link className="dropdown-item" to={`/nginx/proxy/${info.row.original.id}/analytics`}><IconChartBar size={16}/> Analytics</Link>
 								<HasPermission section={PROXY_HOSTS} permission={MANAGE} hideError>
 									<a
 										className="dropdown-item"

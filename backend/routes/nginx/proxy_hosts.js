@@ -1,6 +1,7 @@
 import express from "express";
 import fs from "node:fs";
 import internalProxyHost from "../../internal/proxy-host.js";
+import { getHostAnalytics, getHostRequests, exportHostAnalyticsCsv } from "../../internal/proxy-analytics.js";
 import jwtdecode from "../../lib/express/jwt-decode.js";
 import apiValidator from "../../lib/validator/api.js";
 import validator from "../../lib/validator/index.js";
@@ -272,5 +273,68 @@ router
 			next(err);
 		}
 	});
+
+
+/**
+ * Per-host analytics. Read permissions match the existing per-host log route.
+ */
+router
+  .route("/:host_id/analytics")
+  .options((_, res) => res.sendStatus(204))
+  .all(jwtdecode())
+  .get(async (req, res, next) => {
+    try {
+      const id = Number(req.params.host_id);
+      const hours = req.query.hours === undefined ? 24 : Number(req.query.hours);
+      if (!Number.isSafeInteger(id) || id < 1 || ![1, 24, 168, 720, 2160].includes(hours))
+        return res.status(400).send({ error: { code: 400, message: "Invalid analytics parameters" } });
+      await res.locals.access.can("proxy_hosts:get", id);
+      await internalProxyHost.get(res.locals.access, { id });
+      res.status(200).send(getHostAnalytics(id, hours));
+    } catch (err) { next(err); }
+  });
+
+router
+  .route("/:host_id/analytics/requests")
+  .options((_, res) => res.sendStatus(204))
+  .all(jwtdecode())
+  .get(async (req, res, next) => {
+    try {
+      const id = Number(req.params.host_id);
+      const hours = req.query.hours === undefined ? 24 : Number(req.query.hours);
+      const limit = req.query.limit === undefined ? 50 : Number(req.query.limit);
+      const offset = req.query.offset === undefined ? 0 : Number(req.query.offset);
+      const status = req.query.status === undefined ? null : Number(req.query.status);
+      if (!Number.isSafeInteger(id) || id < 1 || ![1, 24, 168].includes(hours) ||
+          !Number.isInteger(limit) || limit < 1 || limit > 100 ||
+          !Number.isInteger(offset) || offset < 0 || offset > 10000 ||
+          (status !== null && ![200,301,302,400,401,403,404,429,500,502,503,504].includes(status)))
+        return res.status(400).send({ error: { code: 400, message: "Invalid analytics request filters" } });
+      await res.locals.access.can("proxy_hosts:get", id);
+      await internalProxyHost.get(res.locals.access, { id });
+      res.status(200).send(getHostRequests(id, hours, limit, offset, status));
+    } catch (err) { next(err); }
+  });
+
+
+router
+  .route("/:host_id/analytics/export")
+  .options((_, res) => res.sendStatus(204))
+  .all(jwtdecode())
+  .get(async (req, res, next) => {
+    try {
+      const id = Number(req.params.host_id);
+      const hours = req.query.hours === undefined ? 24 : Number(req.query.hours);
+      if (!Number.isSafeInteger(id) || id < 1 || ![1,24,168].includes(hours))
+        return res.status(400).send({ error: { code: 400, message: "Invalid export window" } });
+      await res.locals.access.can("proxy_hosts:get", id);
+      await internalProxyHost.get(res.locals.access, { id });
+      const result = exportHostAnalyticsCsv(id, hours);
+      res.set("Content-Type", "text/csv; charset=utf-8");
+      res.set("Content-Disposition", `attachment; filename="npmi-host-${id}-analytics.csv"`);
+      res.set("X-Analytics-Truncated", String(result.truncated));
+      res.status(200).send(result.csv);
+    } catch (err) { next(err); }
+  });
 
 export default router;

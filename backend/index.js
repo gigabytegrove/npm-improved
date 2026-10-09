@@ -2,6 +2,7 @@
 
 import app from "./app.js";
 import internalCertificate from "./internal/certificate.js";
+import { startAnalyticsCollector } from "./internal/proxy-analytics.js";
 import internalDatabaseManager from "./internal/database-manager.js";
 import internalIpRanges from "./internal/ip_ranges.js";
 import internalInstanceSync from "./internal/instance-sync.js";
@@ -41,6 +42,7 @@ async function appStart() {
 		})
 		.then(() => {
 			internalCertificate.initTimer();
+			startAnalyticsCollector();
 			internalIpRanges.initTimer();
 			internalInstanceSync.initTimer();
 			internalDatabaseManager.initWatcher();
