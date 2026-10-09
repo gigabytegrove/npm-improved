@@ -11,7 +11,7 @@ import {
   type NodeHours, type NodeHost, type NodeReport,
 } from "src/api/backend";
 import { HasPermission } from "src/components";
-import { ADMIN } from "src/modules/Permissions";
+import { ADMIN, VIEW } from "src/modules/Permissions";
 import "./analytics-center.css";
 
 type Tab = "overview" | "hosts" | "traffic" | "streams" | "performance" | "security" | "requests";
@@ -199,7 +199,7 @@ export default function AnalyticsCenter() {
     catch (err) { setExportError(err instanceof Error ? err.message : String(err)); }
     finally { setExporting(false); }
   };
-  return <HasPermission section={ADMIN} pageLoading loadingNoLogo>
+  return <HasPermission section={ADMIN} permission={VIEW} pageLoading loadingNoLogo>
     <div className="npmi-center mt-4">
       <div className="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
         <div>

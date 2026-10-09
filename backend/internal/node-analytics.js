@@ -13,10 +13,12 @@ export const NODE_STATUS_CLASSES = ["2xx", "3xx", "4xx", "5xx"];
 
 export function parseNodeFilters(query = {}) {
   const hours = query.hours === undefined ? 24 : Number(query.hours);
-  const hostId = query.host_id === undefined || query.host_id === ""
-    ? null : Number(query.host_id);
-  const statusClass = query.status_class === undefined || query.status_class === ""
-    ? null : String(query.status_class);
+  const hostValue = query.hostId ?? query.host_id;
+  const hostId = hostValue === undefined || hostValue === ""
+    ? null : Number(hostValue);
+  const statusValue = query.statusClass ?? query.status_class;
+  const statusClass = statusValue === undefined || statusValue === ""
+    ? null : String(statusValue);
   if (!NODE_WINDOWS.includes(hours)) throw new RangeError("Invalid reporting window");
   if (hostId !== null && (!Number.isSafeInteger(hostId) || (hostId < 1 && hostId > -1000000)))
     throw new RangeError("Invalid proxy host identifier");
