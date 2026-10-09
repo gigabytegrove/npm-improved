@@ -67,7 +67,6 @@ EXPOSE 80 81 443
 
 COPY backend /app
 COPY --from=frontend-builder /build/frontend/dist /app/frontend
-COPY scripts/update-handoff.sh /usr/local/libexec/npm-improved/update-handoff.sh
 COPY docker/rootfs /
 COPY --from=controlplane-builder /out/npm-improved-control-plane /usr/local/bin/npm-improved-control-plane
 
@@ -84,7 +83,6 @@ RUN ln -s NginxProxyManager.crt 1d0e3f10.0 && update-ca-certificates
 WORKDIR /app
 RUN yarn install --frozen-lockfile \
 	&& yarn cache clean \
-	&& chmod 0755 /usr/local/libexec/npm-improved/update-handoff.sh
 
 # Remove frontend service not required for prod, dev nginx config as well
 RUN rm -rf /etc/s6-overlay/s6-rc.d/user/contents.d/frontend /etc/nginx/conf.d/dev.conf \

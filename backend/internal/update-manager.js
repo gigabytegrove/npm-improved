@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import http from "node:http";
 import path from "node:path";
 import authModel from "../models/auth.js";
 import errs from "../lib/error.js";
@@ -9,11 +8,10 @@ import internalDatabaseManager from "./database-manager.js";
 import internalDisasterRecovery from "./disaster-recovery.js";
 import internalInstanceSync from "./instance-sync.js";
 
-const DOCKER_SOCKET = "/var/run/docker.sock";
 const STATUS_FILE = "/data/update-status.json";
 const AUDIT_MARKER_FILE = "/data/update-audit-marker.json";
-const HELPER_IMAGE = "docker:27-cli";
-const EMBEDDED_HANDOFF_SCRIPT = "/usr/local/libexec/npm-improved/update-handoff.sh";
+const HOST_READY_FILE = "/data/host-updater-ready.json";
+const HOST_REQUEST_FILE = "/data/host-update-request.json";
 const OFFICIAL_IMAGE_PREFIX = "ghcr.io/gigabytegrove/npm-improved:";
 const ACTIVE_STATES = new Set(["preflight", "pulling", "staging", "restarting", "verifying", "rolling_back"]);
 const VALID_MODES = new Set(["sqlite", "mysql", "postgres"]);
@@ -35,60 +33,6 @@ const writeJsonFile = (filename, value) => {
 	fs.renameSync(temporary, filename);
 };
 
-const dockerRequest = (method, requestPath, body) =>
-	new Promise((resolve, reject) => {
-		const payload = body === undefined ? null : Buffer.from(JSON.stringify(body));
-		const req = http.request(
-			{
-				socketPath: DOCKER_SOCKET,
-				path: requestPath,
-				method,
-				headers: payload
-					? {
-							"Content-Type": "application/json",
-							"Content-Length": payload.length,
-						}
-					: undefined,
-			},
-			(res) => {
-				let raw = "";
-				res.setEncoding("utf8");
-				res.on("data", (chunk) => {
-					raw += chunk;
-				});
-				res.on("end", () => {
-					if ((res.statusCode || 500) < 200 || (res.statusCode || 500) >= 300) {
-						reject(new Error(`Docker API ${method} ${requestPath} failed with HTTP ${res.statusCode}: ${raw.slice(0, 500)}`));
-						return;
-					}
-					resolve({ statusCode: res.statusCode || 0, raw });
-				});
-			},
-		);
-		req.on("error", reject);
-		if (payload) req.write(payload);
-		req.end();
-	});
-
-const ensureHelperImage = async () => {
-	const result = await dockerRequest(
-		"POST",
-		"/images/create?fromImage=docker&tag=27-cli",
-	);
-	for (const line of result.raw.split(/\r?\n/)) {
-		if (!line.trim()) continue;
-		try {
-			const event = JSON.parse(line);
-			if (event.error) {
-				throw new Error(event.error);
-			}
-		} catch (err) {
-			if (err instanceof SyntaxError) continue;
-			throw err;
-		}
-	}
-};
-
 const configuredMode = () => {
 	const mode = (process.env.NPM_DEPLOYMENT_MODE || "sqlite").trim().toLowerCase();
 	return VALID_MODES.has(mode) ? mode : "sqlite";
@@ -96,26 +40,23 @@ const configuredMode = () => {
 
 const capabilities = () => {
 	const projectDir = (process.env.NPM_HOST_PROJECT_DIR || "").trim();
-	const socketAvailable = fs.existsSync(DOCKER_SOCKET);
-	const embeddedHandoffAvailable = fs.existsSync(EMBEDDED_HANDOFF_SCRIPT);
+	const ready = readJsonFile(HOST_READY_FILE, null);
+	const hostReady = ready?.mode === "native-host-service" && ready.project_dir === projectDir && projectDir !== "";
 
 	return {
-		enabled: socketAvailable && projectDir !== "" && embeddedHandoffAvailable,
-		docker_socket_available: socketAvailable,
+		enabled: hostReady,
+		docker_socket_available: false,
 		host_project_configured: projectDir !== "",
 		host_project_dir: projectDir || null,
 		deployment_mode: configuredMode(),
-		helper_image: HELPER_IMAGE,
-		handoff_source: "embedded",
-		embedded_handoff_available: embeddedHandoffAvailable,
-		reason:
-			!socketAvailable
-				? "Docker socket is not available to this NPM Improved container."
-				: projectDir === ""
-					? "The host project directory is not configured. Run the current NPM Improved Docker installer once to enable UI updates."
-					: !embeddedHandoffAvailable
-						? "This NPM Improved image is missing its embedded update handoff."
-						: null,
+		helper_image: null,
+		handoff_source: "native-host-service",
+		host_service_installed: hostReady,
+		reason: projectDir === ""
+			? "Host project directory is not configured."
+			: !hostReady
+				? "Install the native NPM Improved host updater once using scripts/install-host-updater. No helper container is used."
+				: null,
 	};
 };
 
@@ -234,66 +175,29 @@ const verifyCurrentPassword = async (access, password) => {
 	}
 };
 
+/**
+ * systemd.path watches this queue on the Docker host and performs Compose
+ * actions directly. No helper container or Docker Hub dependency.
+ */
 const launchHandoff = async ({ action, targetImage, sourceVersion, targetVersion, initiatedBy }) => {
 	const caps = capabilities();
 	if (!caps.enabled) {
-		throw new errs.ValidationError(caps.reason || "Automatic updates are unavailable.");
+		throw new errs.ValidationError(caps.reason || "The native host updater is unavailable.");
 	}
-
-	const projectDir = caps.host_project_dir;
-	const helperName = `npm-improved-update-${Date.now()}`;
-	const handoffScript = fs.readFileSync(EMBEDDED_HANDOFF_SCRIPT, "utf8");
-
-	await ensureHelperImage();
-
-	const create = await dockerRequest(
-		"POST",
-		`/containers/create?name=${encodeURIComponent(helperName)}`,
-		{
-			Image: HELPER_IMAGE,
-			// Run the handoff bundled inside the currently running NPM Improved
-			// image. Never execute the host checkout's scripts/update-handoff.sh:
-			// UI updates replace the application image without updating that Git
-			// checkout, so using the host copy can permanently pin update logic
-			// to an older release.
-			Cmd: [
-				"sh",
-				"-c",
-				handoffScript,
-				"npm-improved-update-handoff",
-				action,
-				targetImage || "",
-				caps.deployment_mode,
-				sourceVersion || "",
-				targetVersion || "",
-			],
-			WorkingDir: projectDir,
-			Env: [
-				`NPM_UPDATE_STATUS_FILE=${path.posix.join(projectDir, "data/update-status.json")}`,
-				`NPM_UPDATE_PROJECT_DIR=${projectDir}`,
-				`NPM_UPDATE_INITIATED_BY=${initiatedBy || ""}`,
-			],
-			Labels: {
-				"com.gigabytegrove.npm-improved.role": "update-handoff",
-				"com.gigabytegrove.npm-improved.temporary": "true",
-			},
-			HostConfig: {
-				AutoRemove: true,
-				Binds: [
-					"/var/run/docker.sock:/var/run/docker.sock",
-					`${projectDir}:${projectDir}`,
-				],
-			},
-		},
-	);
-
-	const created = JSON.parse(create.raw || "{}");
-	if (!created.Id) {
-		throw new Error("Docker did not return an updater handoff container ID.");
+	if (fs.existsSync(HOST_REQUEST_FILE)) {
+		throw new errs.ValidationError("A native host update request is already queued.");
 	}
-
-	await dockerRequest("POST", `/containers/${created.Id}/start`);
-	return { helper_id: created.Id, helper_name: helperName };
+	const request = {
+		project_dir: caps.host_project_dir,
+		action,
+		target_image: targetImage || "",
+		mode: caps.deployment_mode,
+		source_version: sourceVersion || "unknown",
+		target_version: targetVersion || "unknown",
+		initiated_by: String(initiatedBy || ""),
+	};
+	writeJsonFile(HOST_REQUEST_FILE, request);
+	return { handoff_source: "native-host-service", queued: true };
 };
 
 const startUpdate = async (access, release, password) => {
@@ -332,7 +236,7 @@ const startUpdate = async (access, release, password) => {
 	});
 
 	try {
-		const helper = await launchHandoff({
+		const hostService = await launchHandoff({
 			action: "update",
 			targetImage,
 			sourceVersion,
@@ -346,11 +250,11 @@ const startUpdate = async (access, release, password) => {
 				source_version: sourceVersion,
 				target_version: targetVersion,
 				target_image: targetImage,
-				helper_id: helper.helper_id,
+				handoff_source: hostService.handoff_source,
 				preflight: safety,
 			},
 		});
-		return { ...getStatus(), helper };
+		return { ...getStatus(), host_service: hostService };
 	} catch (err) {
 		writeJsonFile(STATUS_FILE, {
 			...getStatus(),
@@ -393,7 +297,7 @@ const rollback = async (access, password) => {
 		initiated_by: initiatedBy,
 	});
 
-	const helper = await launchHandoff({
+	const hostService = await launchHandoff({
 		action: "rollback",
 		targetImage,
 		sourceVersion,
@@ -407,10 +311,10 @@ const rollback = async (access, password) => {
 			source_version: sourceVersion,
 			target_version: targetVersion,
 			target_image: targetImage,
-			helper_id: helper.helper_id,
+			handoff_source: hostService.handoff_source,
 		},
 	});
-	return { ...getStatus(), helper };
+	return { ...getStatus(), host_service: hostService };
 };
 
 const restart = async (access, password) => {
@@ -434,7 +338,7 @@ const restart = async (access, password) => {
 		initiated_by: initiatedBy,
 	});
 
-	const helper = await launchHandoff({
+	const hostService = await launchHandoff({
 		action: "restart",
 		targetImage: "",
 		sourceVersion,
@@ -446,7 +350,7 @@ const restart = async (access, password) => {
 		object_type: "system",
 		meta: { version: sourceVersion, helper_id: helper.helper_id },
 	});
-	return { ...getStatus(), helper };
+	return { ...getStatus(), host_service: hostService };
 };
 
 const reconcileAudit = async () => {
