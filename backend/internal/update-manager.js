@@ -3,6 +3,7 @@ import http from "node:http";
 import path from "node:path";
 import authModel from "../models/auth.js";
 import errs from "../lib/error.js";
+import { evaluateNpmxRollingUpdate } from "../lib/rolling-update-policy.js";
 import internalAuditLog from "./audit-log.js";
 import internalDatabaseManager from "./database-manager.js";
 import internalDisasterRecovery from "./disaster-recovery.js";
@@ -185,10 +186,16 @@ const verifyOperationalSafety = async (access) => {
 	}
 
 	const sync = await internalInstanceSync.getStatus();
-	if (sync.enabled) {
-		throw new errs.ValidationError(
-			"Automatic updates are disabled while Instance Synchronization is enabled. Update synchronized nodes together during a maintenance window.",
-		);
+	// Rolling NPMX upgrades: mixed-version snapshot application is rejected by
+	// the NPMX protocol until every node is upgraded. Proxy traffic continues
+	// independently while operators update peers sequentially.
+	// Existing protections against migrations, restores and duplicate same-node
+	// update jobs remain in place.
+	let coordination;
+	try {
+		coordination = evaluateNpmxRollingUpdate(sync);
+	} catch (err) {
+		throw new errs.ValidationError(err.message);
 	}
 
 	const recovery = await internalDisasterRecovery.status(access);
@@ -199,7 +206,9 @@ const verifyOperationalSafety = async (access) => {
 	return {
 		database_engine: database.current?.engine || "unknown",
 		shared_mysql: Boolean(database.mysqlSharedMode),
-		instance_sync: Boolean(sync.enabled),
+		instance_sync: coordination.enabled,
+		instance_sync_role: coordination.role,
+		requires_sequential_updates: coordination.requiresSequentialUpdates,
 		restore_in_progress: Boolean(recovery.restoreInProgress),
 	};
 };
