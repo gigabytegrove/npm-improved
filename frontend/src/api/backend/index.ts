@@ -81,3 +81,5 @@ export * from "./instanceSync";
 export * from "./database";
 
 export * from "./updateManager";
+
+export * from "./getNodeAnalytics";

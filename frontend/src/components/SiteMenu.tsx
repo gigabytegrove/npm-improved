@@ -32,6 +32,7 @@ import styles from "./SiteMenu.module.css";
 
 interface MenuItem {
 	label: string;
+	literalLabel?: string;
 	icon?: React.ElementType;
 	to: string;
 	permissionSection?: Section | typeof ADMIN;
@@ -94,6 +95,13 @@ const controlItems: MenuItem[] = [
 
 const observabilityItems: MenuItem[] = [
 	{
+		to: "/analytics",
+		icon: IconFileAnalytics,
+		label: "analytics-center",
+		literalLabel: "Analytics Center",
+		permissionSection: ADMIN,
+	},
+	{
 		to: "/audit-log",
 		icon: IconBook2,
 		label: "auditlogs",
@@ -152,7 +160,7 @@ function MenuLink({ item, onNavigate }: { item: MenuItem; onNavigate: () => void
 			>
 				<span className={styles.itemIcon}>{Icon ? <Icon size={19} stroke={1.8} /> : null}</span>
 				<span className={styles.itemLabel}>
-					<T id={item.label} />
+					{item.literalLabel || <T id={item.label} />}
 				</span>
 			</a>
 		</HasPermission>
