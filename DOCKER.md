@@ -136,7 +136,7 @@ NPM_BACKUP_RETENTION=7
 
 Backups are retained under `/data/backups`. Copy disaster-recovery backups off the Docker host as part of your normal backup process.
 
-## Updating (v1.4.1+)
+## Updating (v1.4.2+)
 
 NPM Improved uses **one application container**. It never launches a second
 container to update, restart or roll back that application.
@@ -153,29 +153,55 @@ recreates only the app service, checks its Docker and control-plane health
 and verifies the exact release version. Failures restore the previous
 application image. No helper images are pulled from Docker Hub.
 
-### One-time native host updater installation
+### Managed host updater lifecycle
 
-Requirements: Linux host with systemd, root access for installation, Python 3,
-Docker Engine and Docker Compose v2. **No Docker socket mount inside NPMi is
-required.**
+**No helper/updater Docker containers are ever used.** On supported Linux
+systems, the normal NPMi installer provisions its native root-owned updater
+before starting the NPMi app. Use the normal installer from a trusted checkout:
 
-After installing NPM Improved from source as root on a systemd host, the
-installer provisions the host watcher automatically. For existing installations
-or an installer run without root access, run from a trusted repository checkout:
+```bash
+sudo ./scripts/install-docker sqlite
+```
+
+Use `mysql` or `postgres` for those deployments. The installer configures
+`NPM_HOST_PROJECT_DIR`, validates the Docker Compose deployment and installs
+both a native systemd request watcher and a native maintenance timer. It aborts
+if native provisioning fails instead of leaving an app with a broken Update UI.
+The original database, certificates, and project-specific ports remain intact.
+
+On each subsequent release, the existing host-side dispatcher completes the
+app upgrade, verifies health, then downloads its version-matched host updater
+package from the same GitHub Release. The package is validated against the
+release SHA-256 checksums, checked for unexpected entries and installed in
+per-project root-owned host directories. A systemd timer retries maintenance
+if the network temporarily prevents the component upgrade. This process does
+not create any Docker containers other than replacing the existing NPMi app.
+
+**Existing installations using v1.4.1's unmaintained native dispatcher**
+need one last host-side bootstrap from the trusted v1.4.2 repository checkout:
 
 ```bash
 sudo ./scripts/install-host-updater /absolute/path/to/existing/npm-project
 ```
 
-This creates a per-installation systemd service and path watcher. It does not
-start any additional containers. Use `systemctl list-units 'npm-improved-update-*'`
-to inspect native watcher status.
+That installs the *managed* dispatcher once. Future app versions update both
+components automatically without repeating these commands.
 
-The older v1.4.0 updater still contains the `docker:27-cli` launcher. Before
-the first v1.4.1 upgrade, existing deployments require a **one-time Compose
-app-only upgrade on the host**, plus installation of this native updater. Keep
-the current Compose project name, .env, data and certificates. After v1.4.1,
-future updates work entirely through **Settings → Update**.
+Running `docker compose up` directly on an unprepared host is not an
+equivalent installer: Docker container permissions cannot grant the root-owned
+systemd installation that is required for in-place restart. Use the supported
+host installer for new nodes.
+
+For operational checks, use:
+
+```bash
+systemctl list-units 'npm-improved-update-*.path' --all
+systemctl list-timers 'npm-improved-update-*-maintenance.timer' --all
+```
+
+**Settings → Update** displays the host-updater version and whether its
+automatic maintenance is enabled. No Docker socket mount is required inside
+the NPMi application.
 
 ### Operational guarantees
 

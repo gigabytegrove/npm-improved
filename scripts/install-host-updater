@@ -1,25 +1,41 @@
 #!/usr/bin/env bash
-# Install a systemd host-side updater. NEVER launches updater containers.
+# Host-owned native updater bootstrap/upgrade. No updater containers.
 set -Eeuo pipefail
-if [ "$(id -u)" -ne 0 ]; then echo "Run as root." >&2; exit 1; fi
-command -v systemctl >/dev/null || { echo "systemd is required." >&2; exit 1; }
-command -v python3 >/dev/null || { echo "Python 3 is required." >&2; exit 1; }
-command -v docker >/dev/null || { echo "Docker is required." >&2; exit 1; }
+umask 022
+
+[ "$(id -u)" -eq 0 ] || { echo "Run NPMi's installer with host root privileges." >&2; exit 1; }
+for command in systemctl python3 docker sha256sum; do
+  command -v "$command" >/dev/null || { echo "Missing required host command: $command" >&2; exit 1; }
+done
 docker compose version >/dev/null || { echo "Docker Compose v2 required." >&2; exit 1; }
+[ -d /run/systemd/system ] || { echo "systemd is required for the native updater." >&2; exit 1; }
+
 SOURCE="$(cd "$(dirname "$0")" && pwd)"
-if [ "$#" -gt 0 ]; then ROOT="$(realpath "$1")"; else ROOT="$(realpath "$SOURCE/..")"; fi
+ROOT="$(realpath "${1:-$SOURCE/..}")"
 if [[ ! "$ROOT" =~ ^/[a-zA-Z0-9._/-]+$ || "$ROOT" == *".."* ]]; then
-  echo "Unsafe NPMi project directory." >&2
-  exit 1
+  echo "Unsafe installation path." >&2; exit 1
 fi
 [ -f "$ROOT/.env" ] && [ -d "$ROOT/data" ] || {
-  echo "NPMi Compose project with .env and data directory required." >&2; exit 1;
+  echo "Expected the existing NPMi .env and data directory in $ROOT." >&2; exit 1;
 }
-install -d -m 0755 /usr/local/libexec/npm-improved
-install -m 0755 "$SOURCE/update-handoff.sh" /usr/local/libexec/npm-improved/update-handoff.sh
-install -m 0755 "$SOURCE/host-update-dispatch.py" /usr/local/libexec/npm-improved/host-update-dispatch.py
-ID="$(printf %s "$ROOT" | sha256sum | cut -c1-12)"
+VERSION="$(tr -d '[:space:]' < "$SOURCE/../.version")"
+[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+  echo "The updater package must have a stable version." >&2; exit 1;
+}
+ID="$(printf '%s' "$ROOT" | sha256sum | cut -c1-12)"
 UNIT="npm-improved-update-$ID"
+BIN="/usr/local/libexec/npm-improved/$ID"
+
+# Each installation gets its own root-owned programs. Multiple deployments
+# on a shared Docker host never overwrite each other's update executors.
+install -d -m 0755 "$BIN"
+for name in update-handoff.sh host-update-dispatch.py host-update-maintenance.py; do
+  [ -f "$SOURCE/$name" ] || { echo "Missing trusted host program $name" >&2; exit 1; }
+  tempfile="$(mktemp "$BIN/.new-program-XXXXXXXX")"
+  install -m 0755 "$SOURCE/$name" "$tempfile"
+  mv -f "$tempfile" "$BIN/$name"
+done
+
 cat >"/etc/systemd/system/$UNIT.service" <<EOF
 [Unit]
 Description=NPM Improved native in-place updater ($ROOT)
@@ -30,13 +46,14 @@ After=docker.service
 Type=oneshot
 User=root
 WorkingDirectory=$ROOT
-ExecStart=/usr/local/libexec/npm-improved/host-update-dispatch.py $ROOT
+ExecStart=$BIN/host-update-dispatch.py $ROOT
 TimeoutStartSec=0
 UMask=0077
 EOF
+
 cat >"/etc/systemd/system/$UNIT.path" <<EOF
 [Unit]
-Description=NPM Improved native updater watcher ($ROOT)
+Description=NPM Improved native updater request watcher ($ROOT)
 
 [Path]
 PathExists=$ROOT/data/host-update-request.json
@@ -45,18 +62,68 @@ Unit=$UNIT.service
 [Install]
 WantedBy=multi-user.target
 EOF
+
+cat >"/etc/systemd/system/$UNIT-maintenance.service" <<EOF
+[Unit]
+Description=NPM Improved automatic host updater maintenance ($ROOT)
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=$ROOT
+ExecStart=$BIN/host-update-maintenance.py $ROOT
+TimeoutStartSec=120
+UMask=0077
+EOF
+
+cat >"/etc/systemd/system/$UNIT-maintenance.timer" <<EOF
+[Unit]
+Description=Check NPM Improved native updater version ($ROOT)
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=6h
+Persistent=true
+Unit=$UNIT-maintenance.service
+
+[Install]
+WantedBy=timers.target
+EOF
+
 systemctl daemon-reload
-systemctl enable --now "$UNIT.path"
-systemctl is-active --quiet "$UNIT.path" || { echo "Host updater did not activate." >&2; exit 1; }
-python3 - "$ROOT/data/host-updater-ready.json" "$ROOT" "$UNIT" <<'PY'
-import json, os, sys, tempfile
-dest, root, unit = sys.argv[1:]
-fd, temp = tempfile.mkstemp(dir=os.path.dirname(dest),prefix=".host-ready-")
-with os.fdopen(fd, "w", encoding="utf-8") as stream:
-    json.dump({"mode":"native-host-service","project_dir":root,"unit":unit}, stream)
-    stream.write("\n")
-os.chmod(temp,0o644)
-os.replace(temp,dest)
+systemctl enable --now "$UNIT.path" "$UNIT-maintenance.timer"
+systemctl is-active --quiet "$UNIT.path" || {
+  echo "The native NPMi updater service failed to activate." >&2; exit 1;
+}
+systemctl is-active --quiet "$UNIT-maintenance.timer" || {
+  echo "The native NPMi updater maintenance timer failed to activate." >&2; exit 1;
+}
+
+# Readiness is written only after all programs and systemd units are ready.
+python3 - "$ROOT/data/host-updater-ready.json" "$ROOT" "$UNIT" "$VERSION" <<'PY'
+import json
+import os
+from pathlib import Path
+import sys
+import tempfile
+
+destination, root, unit, version = sys.argv[1:]
+directory = Path(destination).parent
+fd, temporary = tempfile.mkstemp(dir=directory, prefix=".host-updater-ready-")
+with os.fdopen(fd, "w", encoding="utf-8") as output:
+    json.dump({"mode": "native-host-service",
+               "project_dir": root,
+               "unit": unit,
+               "component_version": version,
+               "protocol": 1,
+               "maintenance": "automatic"}, output)
+    output.write("\n")
+os.chmod(temporary, 0o644)
+os.replace(temporary, destination)
 PY
-echo "Native host updater enabled: $UNIT.path"
-echo "No helper containers or Docker Hub images will be required."
+
+echo "Native updater installed: $UNIT.path"
+echo "Self-maintenance enabled: $UNIT-maintenance.timer"
+echo "No external Docker containers are involved."

@@ -11,6 +11,7 @@ import internalInstanceSync from "./instance-sync.js";
 const STATUS_FILE = "/data/update-status.json";
 const AUDIT_MARKER_FILE = "/data/update-audit-marker.json";
 const HOST_READY_FILE = "/data/host-updater-ready.json";
+const HOST_MAINTENANCE_FILE = "/data/host-updater-maintenance.json";
 const HOST_REQUEST_FILE = "/data/host-update-request.json";
 const OFFICIAL_IMAGE_PREFIX = "ghcr.io/gigabytegrove/npm-improved:";
 const ACTIVE_STATES = new Set(["preflight", "pulling", "staging", "restarting", "verifying", "rolling_back"]);
@@ -42,6 +43,8 @@ const capabilities = () => {
 	const projectDir = (process.env.NPM_HOST_PROJECT_DIR || "").trim();
 	const ready = readJsonFile(HOST_READY_FILE, null);
 	const hostReady = ready?.mode === "native-host-service" && ready.project_dir === projectDir && projectDir !== "";
+	const maintenance = readJsonFile(HOST_MAINTENANCE_FILE, null);
+	const maintained = ready?.maintenance === "automatic" && Number(ready?.protocol) === 1;
 
 	return {
 		enabled: hostReady,
@@ -52,10 +55,13 @@ const capabilities = () => {
 		helper_image: null,
 		handoff_source: "native-host-service",
 		host_service_installed: hostReady,
+		host_updater_version: hostReady ? (ready?.component_version || "legacy") : null,
+		host_updater_automatic_maintenance: hostReady && maintained,
+		host_updater_maintenance_error: maintenance?.status === "failed" ? (maintenance.error || "Updater maintenance failed.") : null,
 		reason: projectDir === ""
-			? "Host project directory is not configured."
+			? "The installed deployment is missing NPM_HOST_PROJECT_DIR. Use the supported NPMi installer to configure native updates."
 			: !hostReady
-				? "Install the native NPM Improved host updater once using scripts/install-host-updater. No helper container is used."
+				? "This deployment was not bootstrapped by the NPMi host installer. Run the supported host installer once; routine app and host-updater updates are automatic afterward."
 				: null,
 	};
 };
