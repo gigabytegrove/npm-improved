@@ -16,7 +16,8 @@ def main():
         raise SystemExit("Invalid NPMi project directory")
     data = root / "data"
     queue = data / "host-update-request.json"
-    script = Path("/usr/local/libexec/npm-improved/update-handoff.sh")
+    script = Path(__file__).resolve().with_name("update-handoff.sh")
+    maintenance = script.with_name("host-update-maintenance.py")
     if not script.is_file() or not os.access(script, os.X_OK):
         raise SystemExit("Native update runner not installed")
     with (data / ".host-update.lock").open("a+") as lock:
@@ -72,6 +73,20 @@ def main():
             )
             if result.returncode:
                 raise SystemExit(result.returncode)
+
+            # Application replacement is verified. Update the native host
+            # programs from the *published* matching release in-place.
+            # An unreachable GitHub release must never undo a healthy app.
+            # The host's periodic maintenance timer retries failed refreshes.
+            app_release = version if action == "update" else source
+            if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", app_release.lstrip("v")):
+                try:
+                    subprocess.run(
+                        [str(maintenance), str(root), "--version", app_release.lstrip("v")],
+                        check=True, timeout=110,
+                    )
+                except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+                    print(f"Native updater will retry maintenance: {error}", file=sys.stderr)
         except (ValueError, TypeError, OSError, json.JSONDecodeError) as error:
             status_path = data / "update-status.json"
             try:

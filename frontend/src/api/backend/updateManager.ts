@@ -19,6 +19,9 @@ export interface UpdateCapabilities {
 	helperImage: string | null;
 	handoffSource: string;
 	hostServiceInstalled: boolean;
+	hostUpdaterVersion: string | null;
+	hostUpdaterAutomaticMaintenance: boolean;
+	hostUpdaterMaintenanceError: string | null;
 	reason: string | null;
 }
 

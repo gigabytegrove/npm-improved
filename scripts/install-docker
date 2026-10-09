@@ -387,6 +387,20 @@ if [ "$CHECK_ONLY" -eq 1 ]; then
 	exit 0
 fi
 
+# A supported NPM Improved deployment MUST provision the native host
+# updater before starting the app. Do not silently ship broken UI updates.
+# No helper container is ever created.
+mkdir -p "$ROOT_DIR/data"
+if [ "$(id -u)" -eq 0 ]; then
+  "$ROOT_DIR/scripts/install-host-updater" "$ROOT_DIR"
+elif command -v sudo >/dev/null 2>&1; then
+  sudo "$ROOT_DIR/scripts/install-host-updater" "$ROOT_DIR"
+else
+  echo "ERROR: Cannot install the native host updater without root privileges." >&2
+  echo "Use sudo to run this installer. No updater container is used." >&2
+  exit 1
+fi
+
 echo
 if [ "$CLEAN_BUILD" -eq 1 ]; then
 	echo "Building NPM Improved without Docker layer cache ..."
@@ -477,11 +491,4 @@ echo "  Commit:   ${runtime_build_commit}"
 echo
 "${compose[@]}" ps
 
-# Native updater runs on the Docker host, not in a temporary container.
-# Installing the systemd watcher needs host root privileges only once.
-if [ "$(id -u)" -eq 0 ] && command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
-  ./scripts/install-host-updater "$ROOT_DIR"
-else
-  echo "Native in-place updates: install host watcher once with:"
-  echo "  sudo ./scripts/install-host-updater $ROOT_DIR"
-fi
+

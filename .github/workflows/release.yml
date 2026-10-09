@@ -145,9 +145,20 @@ jobs:
             docker image rm "$IMAGE" >/dev/null 2>&1 || true
           done
 
+          # Native host runner lifecycle is distributed with every release.
+          # No helper image is needed: the host verifies and upgrades itself.
+          tar -czf "$OUT/npm-improved-${TAG}-host-updater.tar.gz" \
+            scripts/install-host-updater \
+            scripts/host-update-dispatch.py \
+            scripts/host-update-maintenance.py \
+            scripts/update-handoff.sh \
+            .version
+
           (
             cd "$OUT"
-            sha256sum npm-improved-${TAG}-linux-*.tar.gz > "npm-improved-${TAG}-SHA256SUMS.txt"
+            sha256sum npm-improved-${TAG}-linux-*.tar.gz \
+              npm-improved-${TAG}-host-updater.tar.gz \
+              > "npm-improved-${TAG}-SHA256SUMS.txt"
           )
 
           ls -lh "$OUT"

@@ -17,6 +17,8 @@ on:
       - "scripts/update-handoff.sh"
       - "scripts/install-host-updater"
       - "scripts/host-update-dispatch.py"
+      - "scripts/host-update-maintenance.py"
+      - "scripts/test_host_updater_maintenance.py"
       - ".github/workflows/docker.yml"
   push:
     branches:
@@ -67,6 +69,8 @@ jobs:
           sh -n scripts/update-handoff.sh
           bash -n scripts/install-host-updater
           python3 -m py_compile scripts/host-update-dispatch.py
+          python3 -m py_compile scripts/host-update-maintenance.py
+          python3 -m unittest discover -s scripts -p "test_host_updater_maintenance.py"
 
       - name: Ensure updater never creates a helper container
         run: |
@@ -75,6 +79,7 @@ jobs:
             exit 1
           fi
           test -f scripts/host-update-dispatch.py
+          test -f scripts/host-update-maintenance.py
           test -f scripts/install-host-updater
 
       - name: Validate installer preflight
@@ -118,17 +123,14 @@ jobs:
           sed -i 's/^INITIAL_ADMIN_EMAIL=.*/INITIAL_ADMIN_EMAIL=update-ci@example.com/' .env
           sed -i 's/^INITIAL_ADMIN_PASSWORD=.*/INITIAL_ADMIN_PASSWORD=update-ci-password-12345/' .env
 
-          # Install only root-owned host-side files: NO helper Docker container.
-          sudo mkdir -p /usr/local/libexec/npm-improved
-          sudo install -m 0755 scripts/update-handoff.sh /usr/local/libexec/npm-improved/update-handoff.sh
-          sudo install -m 0755 scripts/host-update-dispatch.py /usr/local/libexec/npm-improved/host-update-dispatch.py
-          python3 - "$GITHUB_WORKSPACE" <<'PY'
-          import json, pathlib, sys
-          root = sys.argv[1]
-          (pathlib.Path("data") / "host-updater-ready.json").write_text(
-              json.dumps({"mode":"native-host-service","project_dir":root,"unit":"ci-test"}) + "\n"
-          )
-          PY
+          # Exercise the real first-install path. It installs a host service
+          # and a versioned maintenance timer; never creates helper containers.
+          sudo ./scripts/install-host-updater "$GITHUB_WORKSPACE"
+          HASH="$(printf %s "$GITHUB_WORKSPACE" | sha256sum | cut -c1-12)"
+          systemctl is-active --quiet "npm-improved-update-$HASH.path"
+          systemctl is-active --quiet "npm-improved-update-$HASH-maintenance.timer"
+          jq -e '.component_version == "1.4.2" and .maintenance == "automatic"' \
+            data/host-updater-ready.json
 
           NPM_BUILD_VERSION=1.4.1-ci \
           NPM_BUILD_COMMIT="$GITHUB_SHA" \
@@ -160,7 +162,7 @@ jobs:
             >/tmp/npmi-update-restart.json
 
           test -s data/host-update-request.json
-          sudo /usr/local/libexec/npm-improved/host-update-dispatch.py "$GITHUB_WORKSPACE"
+          sudo "/usr/local/libexec/npm-improved/$HASH/host-update-dispatch.py" "$GITHUB_WORKSPACE"
 
           RESULT="$(curl -fsS -H "Authorization: Bearer $TOKEN" \
             http://127.0.0.1:19181/api/version/update)"
