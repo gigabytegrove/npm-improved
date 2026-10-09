@@ -227,7 +227,10 @@ function processFile(fileName, hostId, deadline) {
       const peerIp = typeof raw.peer_ip === "string" && net.isIP(raw.peer_ip)
         ? raw.peer_ip : null;
       const userAgent = typeof raw.user_agent === "string"
-        ? raw.user_agent.replace(/[\x00-\x1f\x7f]/g, "").slice(0, 1024) : null;
+        ? [...raw.user_agent].filter((character) => {
+          const code = character.charCodeAt(0);
+          return code >= 32 && code !== 127;
+        }).join("").slice(0, 1024) : null;
       const botClass = classifyAnalyticsBot(userAgent);
       const epoch = Number(raw.epoch);
       const millisecondTime = Number.isFinite(epoch) && epoch > 0
