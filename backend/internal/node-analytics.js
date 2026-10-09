@@ -94,12 +94,12 @@ export function getNodeAnalytics(filters) {
         SUM(bytes_out) AS bytes_out, SUM(bytes_in) AS bytes_in,
         SUM(CASE WHEN status_band = '5xx' THEN requests ELSE 0 END) AS errors
         FROM analytics_hour WHERE ${where}
-        GROUP BY host_id ORDER BY requests DESC LIMIT 250`).all(...args)
+        GROUP BY host_id ORDER BY requests DESC`).all(...args)
     : db.prepare(`SELECT host_id, COUNT(*) AS requests,
         SUM(bytes_out) AS bytes_out, SUM(COALESCE(bytes_in,0)) AS bytes_in,
         SUM(CASE WHEN status >= 500 THEN 1 ELSE 0 END) AS errors
         FROM analytics_event WHERE ${where}
-        GROUP BY host_id ORDER BY requests DESC LIMIT 250`).all(...args);
+        GROUP BY host_id ORDER BY requests DESC`).all(...args);
 
   const rawConditions = ["occurred_at >= ?"];
   const rawArgs = [since];

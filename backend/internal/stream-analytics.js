@@ -173,7 +173,7 @@ export function getNodeStreamAnalytics(hours=24) {
   const rows=connection.prepare(`SELECT stream_id,protocol,
     ${sessionCount} AS sessions,SUM(bytes_sent) AS bytes_sent,
     SUM(bytes_received) AS bytes_received FROM ${source}
-    WHERE ${time}>=? GROUP BY stream_id,protocol ORDER BY sessions DESC LIMIT 250`).all(since);
+    WHERE ${time}>=? GROUP BY stream_id,protocol ORDER BY sessions DESC`).all(since);
   const totals={sessions:0,bytes_sent:0,bytes_received:0,tcp:0,udp:0};
   for(const row of rows) {
     const n=Number(row.sessions);
