@@ -1,0 +1,12 @@
+.npmi-host-analytics { max-width: 100%; }
+.npmi-analytics-kpi { height: 100%; border-top: 2px solid var(--tblr-primary, #2789ca); }
+.npmi-analytics-kpi .h2 { font-variant-numeric: tabular-nums; }
+.npmi-analytics-panel { height: 100%; }
+.npmi-analytics-chart svg { display: block; width: 100%; height: clamp(140px, 22vw, 230px); color: var(--tblr-secondary); }
+.npmi-analytics-status-bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--tblr-bg-surface-secondary, #ddd); }
+.npmi-analytics-band { min-width: 0; }
+.npmi-analytics-2xx { background: #27845d; }
+.npmi-analytics-3xx { background: #5899d0; }
+.npmi-analytics-4xx { background: #d5a044; }
+.npmi-analytics-5xx { background: #cd5963; }
+.npmi-analytics-panel td { max-width: 340px; word-break: break-word; }

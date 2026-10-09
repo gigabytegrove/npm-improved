@@ -35,3 +35,19 @@
     compress
     copytruncate
 }
+
+# Analytics source files are independent of legacy access logs.
+/data/logs/*_analytics.log {
+    su npm npm
+    create 0640
+    daily
+    rotate 2
+    missingok
+    notifempty
+    compress
+    delaycompress
+    sharedscripts
+    postrotate
+    kill -USR1 `cat /run/nginx/nginx.pid 2>/dev/null` 2>/dev/null || true
+    endscript
+}

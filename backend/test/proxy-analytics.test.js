@@ -50,3 +50,13 @@ test("status classification and percentile aggregation", () => {
   assert.equal(bucketAnalytics(rows, 60000).length, 1);
   assert.throws(() => bucketAnalytics(rows, 0), RangeError);
 });
+
+test("new nginx analytics format identifies host from trusted log filename", () => {
+  const raw = JSON.parse(input({ status: "201", bytes_sent: "202" }));
+  delete raw.host_id;
+  const row = parseAnalyticsEvent(JSON.stringify(raw), 5);
+  assert.equal(row?.hostId, 5);
+  assert.equal(row?.status, 201);
+  assert.equal(row?.bytes, 202);
+  assert.equal(parseAnalyticsEvent(JSON.stringify({ ...raw, host_id: 6 }), 5), null);
+});

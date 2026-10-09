@@ -21,7 +21,8 @@ export function parseAnalyticsEvent(line, expectedHostId) {
     return null;
   }
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const hostId = Number(raw.host_id);
+  // The log filename is authoritative; the Nginx format has no global host-ID variable.
+  const hostId = raw.host_id === undefined ? expectedHostId : Number(raw.host_id);
   const time = Date.parse(raw.time);
   const status = Number(raw.status);
   const bytes = Number(raw.bytes_sent);
