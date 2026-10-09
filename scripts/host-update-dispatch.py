@@ -50,7 +50,7 @@ def main():
             if not isinstance(source, str) or not re.fullmatch(r"[A-Za-z0-9._-]{1,40}", source):
                 raise ValueError("Invalid source version")
             if not isinstance(version, str) or not re.fullmatch(
-                r"(?:v?[0-9]+\.[0-9]+\.[0-9]+|previous|unknown|local)", version
+                r"(?:v?[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]{1,20})?|previous|unknown|local)", version
             ):
                 raise ValueError("Invalid destination version")
             if not isinstance(target, str):
