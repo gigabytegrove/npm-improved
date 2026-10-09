@@ -113,6 +113,10 @@ It can help you inspect health, validate Nginx, review failed configuration cand
 
 [Read about the Native Recovery Console](/guide/recovery-console).
 
+### Proxy Host Analytics
+
+Click **Analytics** on an individual Proxy Host to review requests, bandwidth, response codes, latency, trends, per-host activity and sanitized CSV exports. See [Proxy Host Analytics](/guide/proxy-host-analytics) for retention, privacy and node-local scope.
+
 ### System Health and observability
 
 The Control Center exposes health information for the major services NPM Improved depends on, including Nginx, database access, certificate processing, logs, and configuration processing.

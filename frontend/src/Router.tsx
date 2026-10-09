@@ -25,6 +25,7 @@ const AuditLog = lazy(() => import("src/pages/AuditLog"));
 const Logs = lazy(() => import("src/pages/Logs"));
 const Users = lazy(() => import("src/pages/Users"));
 const ProxyHosts = lazy(() => import("src/pages/Nginx/ProxyHosts"));
+const HostAnalytics = lazy(() => import("src/pages/Nginx/ProxyHosts/HostAnalytics"));
 const RedirectionHosts = lazy(() => import("src/pages/Nginx/RedirectionHosts"));
 const DeadHosts = lazy(() => import("src/pages/Nginx/DeadHosts"));
 const Streams = lazy(() => import("src/pages/Nginx/Streams"));
@@ -74,6 +75,7 @@ function Router() {
 									<Route path="/system-health" element={<SystemHealth />} />
 									<Route path="/users" element={<Users />} />
 									<Route path="/nginx/proxy" element={<ProxyHosts />} />
+									<Route path="/nginx/proxy/:id/analytics" element={<HostAnalytics />} />
 									<Route path="/nginx/redirection" element={<RedirectionHosts />} />
 									<Route path="/nginx/404" element={<DeadHosts />} />
 									<Route path="/nginx/stream" element={<Streams />} />
