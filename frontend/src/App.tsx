@@ -1,5 +1,4 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import EasyModal from "ez-modal-react";
 import { RawIntlProvider } from "react-intl";
 import { ToastContainer } from "react-toastify";
@@ -30,7 +29,6 @@ function App() {
 								closeButton={false}
 							/>
 						</AuthProvider>
-						<ReactQueryDevtools buttonPosition="bottom-right" position="right" />
 					</QueryClientProvider>
 				</ThemeProvider>
 			</LocaleProvider>
