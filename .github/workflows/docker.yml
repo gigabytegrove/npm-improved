@@ -157,7 +157,7 @@ jobs:
 
           # Traffic intelligence + active deny: API must enforce a rule in
           # Nginx, NOT merely store/display a row in Analytics Center.
-          BLOCK_ID="$(curl --fail-with-body -fsS -H "Authorization: Bearer $TOKEN" \
+          BLOCK_ID="$(curl --fail-with-body -sS -H "Authorization: Bearer $TOKEN" \
             -H 'Content-Type: application/json' \
             -d '{"type":"user_agent","target":"CI-Blocked-Agent-999","note":"integration test"}' \
             http://127.0.0.1:19181/api/analytics/blocks | jq -r '.id')"
@@ -165,10 +165,10 @@ jobs:
           CODE="$(curl -sS -o /dev/null -w '%{http_code}' \
             -A 'CI-Blocked-Agent-999' http://127.0.0.1:19180/)"
           test "$CODE" = "403"
-          curl --fail-with-body -fsS -H "Authorization: Bearer $TOKEN" \
+          curl --fail-with-body -sS -H "Authorization: Bearer $TOKEN" \
             "http://127.0.0.1:19181/api/analytics/blocks" \
             | jq -e --arg id "$BLOCK_ID" '.rules | any(.id == ($id|tonumber))'
-          curl --fail-with-body -fsS -X DELETE -H "Authorization: Bearer $TOKEN" \
+          curl --fail-with-body -sS -X DELETE -H "Authorization: Bearer $TOKEN" \
             "http://127.0.0.1:19181/api/analytics/blocks/$BLOCK_ID" \
             | jq -e '.target == "CI-Blocked-Agent-999"'
           CODE="$(curl -sS -o /dev/null -w '%{http_code}' \

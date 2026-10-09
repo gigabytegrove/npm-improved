@@ -8,6 +8,11 @@ import { getAnalyticsDatabase } from "./proxy-analytics.js";
 const DIR = process.env.NPM_ANALYTICS_POLICY_DIR || "/data/nginx/analytics";
 const IP_FILE = path.join(DIR, "blocked-ip-rules.conf");
 const UA_FILE = path.join(DIR, "blocked-ua-rules.conf");
+const containsControl = (value) => [...value].some((ch) => {
+  const code = ch.charCodeAt(0);
+  return code < 32 || code === 127;
+});
+
 
 export function validateBlockTarget(type, input) {
   if (typeof input !== "string" || !input.trim()) throw new RangeError("A block target is required");
@@ -20,10 +25,10 @@ export function validateBlockTarget(type, input) {
     if (mask !== undefined && Number(mask) > (family === 4 ? 32 : 128))
       throw new RangeError("Invalid CIDR prefix");
     if (mask === "0") throw new RangeError("A zero-prefix network block is not permitted");
-    return mask === undefined ? ip : ip + "/" + Number(mask);
+    return mask === undefined ? ip : `${ip}/${Number(mask)}`;
   }
   if (type === "user_agent") {
-    if (target.length > 160 || /[\x00-\x1f\x7f]/.test(target))
+    if (target.length > 160 || containsControl(target))
       throw new RangeError("User-agent patterns must be 1-160 printable characters");
     return target;
   }
@@ -40,12 +45,12 @@ export function renderBlockPolicy(rules) {
       // Literal substring match, case insensitive; no arbitrary regex/code.
       const escaped = [...value].map((ch) => /[a-zA-Z0-9_-]/.test(ch)
         ? ch : "\\" + ch).join("");
-      agents.push('    "~*' + escaped.replace(/"/g, '\\"') + '" 1;');
+      agents.push(`    "~*${escaped.replace(/"/g, '\\"')}" 1;`);
     }
   }
   return {
-    ip: "# NPMi local node IP denies\n" + ips.join("\n") + "\n",
-    ua: "# NPMi local node user-agent denies\n" + agents.join("\n") + "\n",
+    ip: `# NPMi local node IP denies\n${ips.join("\n")}\n`,
+    ua: `# NPMi local node user-agent denies\n${agents.join("\n")}\n`,
   };
 }
 
@@ -68,7 +73,7 @@ export function listNodeBlockRules() {
 }
 function atomicWrite(filename, value) {
   fs.mkdirSync(DIR, { recursive: true, mode: 0o750 });
-  const temp = filename + "." + process.pid + ".tmp";
+  const temp = `${filename}.${process.pid}.tmp`;
   fs.writeFileSync(temp, value, { mode: 0o640 });
   fs.renameSync(temp, filename);
 }
@@ -88,13 +93,13 @@ function activate(rules) {
         else atomicWrite(file, before[i]);
       } catch { /* preserve original error */ }
     });
-    throw new Error("Nginx rule activation failed; old policy restored: " + error.message);
+    throw new Error(`Nginx rule activation failed; old policy restored: ${error.message}`);
   }
 }
 export function initializeNodeBlocking() { activate(listNodeBlockRules()); }
 export function addNodeBlockRule({ type, target, note = "", operator }) {
   const normalized = validateBlockTarget(type, target);
-  if (typeof note !== "string" || note.length > 256 || /[\x00-\x1f\x7f]/.test(note))
+  if (typeof note !== "string" || note.length > 256 || containsControl(note))
     throw new RangeError("Invalid rule note");
   if (!/^[0-9]{1,12}$/.test(String(operator || "")))
     throw new RangeError("Invalid administrator");
