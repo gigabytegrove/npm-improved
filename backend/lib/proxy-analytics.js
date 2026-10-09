@@ -26,7 +26,10 @@ export function parseAnalyticsEvent(line, expectedHostId) {
   const time = Date.parse(raw.time);
   const status = Number(raw.status);
   const bytes = Number(raw.bytes_sent);
-  if (!Number.isSafeInteger(hostId) || hostId < 1 || hostId !== expectedHostId) return null;
+  // Negative identifiers are reserved for node-level HTTP routes that are
+  // not proxy hosts (redirects, 404 hosts, default site, fallback).
+  // Ordinary Host Analytics still requires a positive proxy-host ID.
+  if (!Number.isSafeInteger(hostId) || hostId === 0 || hostId !== expectedHostId) return null;
   if (!Number.isFinite(time) || !Number.isInteger(status) || status < 100 || status > 599) return null;
   if (!Number.isSafeInteger(bytes) || bytes < 0) return null;
   const duration = raw.request_time === null || raw.request_time === undefined || raw.request_time === "-"

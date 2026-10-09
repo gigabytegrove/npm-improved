@@ -113,6 +113,10 @@ It can help you inspect health, validate Nginx, review failed configuration cand
 
 [Read about the Native Recovery Console](/guide/recovery-console).
 
+### Analytics Center
+
+Use the [Analytics Center](/guide/analytics-center) for node-local HTTP routing and TCP/UDP stream session metrics, with links back to each Proxy Host's full Analytics view. NPMX synchronizes configuration but never duplicates node traffic statistics.
+
 ### Proxy Host Analytics
 
 Click **Analytics** on an individual Proxy Host to review requests, bandwidth, response codes, latency, trends, per-host activity and sanitized CSV exports. See [Proxy Host Analytics](/guide/proxy-host-analytics) for retention, privacy and node-local scope.

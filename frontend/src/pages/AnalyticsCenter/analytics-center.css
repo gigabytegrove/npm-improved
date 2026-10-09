@@ -1,0 +1,17 @@
+.npmi-center { width: 100%; min-width: 0; }
+.npmi-center-metric { border-top: 2px solid var(--tblr-primary, #238cce); }
+.npmi-center-metric .h2 { font-variant-numeric: tabular-nums; }
+.npmi-center-node { border-left: 3px solid #238cce; }
+.npmi-center-select { min-width: 200px; }
+.npmi-center-chart svg { display: block; width: 100%; height: clamp(155px, 22vw, 240px); }
+.npmi-center-status { height: 14px; display: flex; width: 100%; border-radius: 6px; overflow: hidden; background: var(--tblr-bg-surface-secondary, #ddd); }
+.npmi-center-status-2xx { background: #27845d; }
+.npmi-center-status-3xx { background: #5899d0; }
+.npmi-center-status-4xx { background: #d5a044; }
+.npmi-center-status-5xx { background: #cd5963; }
+.npmi-center-bar { width: 100%; height: 5px; border-radius: 2px; margin-top: 7px; background: var(--tblr-border-color, #dee2e6); overflow: hidden; }
+.npmi-center-bar > div { height: 100%; background: var(--tblr-primary, #238cce); }
+.npmi-center-breakdown-label { width: 60%; word-break: break-word; }
+.npmi-center-host-bar { min-width: 88px; width: 16%; }
+.npmi-center table td { vertical-align: middle; }
+@media (max-width: 767px) { .npmi-center .table { min-width: 580px; } }
