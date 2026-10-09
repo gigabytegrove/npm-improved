@@ -6,6 +6,10 @@ export interface NodeFilters {
   hours: NodeHours;
   hostId?: number | null;
   statusClass?: HttpStatusClass | null;
+  ip?: string | null;
+  userAgent?: string | null;
+  bot?: string | null;
+  connectionId?: string | null;
 }
 export interface NodeBreakdown {
   label: string;
@@ -38,6 +42,11 @@ export interface NodeReport {
   bytesIn: number;
   status: Record<string, number>;
   activeHosts: number;
+  uniqueIps: number | null;
+  blockedRequests: number | null;
+  ips: Array<{ ip: string; requests: number; bytesOut: number; errors: number; firstSeen: string; lastSeen: string }>;
+  userAgents: NodeBreakdown[];
+  bots: NodeBreakdown[];
   serverErrorRate: number;
   latencyMs: { samples: number; p50: number | null; p95: number | null; p99: number | null };
   firstSeen: string | null;
@@ -79,6 +88,16 @@ export interface NodeRequest {
   upstreamMs: number | null;
   upstreamStatus: string;
   device: string;
+  clientIp: string | null;
+  peerIp: string | null;
+  userAgent: string | null;
+  requestId: string | null;
+  connectionId: string | null;
+  connectionRequests: number | null;
+  scheme: string | null;
+  tls: string | null;
+  botClass: string | null;
+  blockReason: string | null;
 }
 export interface NodeRequests {
   total: number;
@@ -103,6 +122,10 @@ export async function getNodeAnalyticsRequests(
     offset,
     ...(filters.hostId ? { hostId: filters.hostId } : {}),
     ...(filters.statusClass ? { statusClass: filters.statusClass } : {}),
+    ...(filters.ip ? { ip: filters.ip } : {}),
+    ...(filters.userAgent ? { userAgent: filters.userAgent } : {}),
+    ...(filters.bot ? { bot: filters.bot } : {}),
+    ...(filters.connectionId ? { connectionId: filters.connectionId } : {}),
   }});
 }
 export async function exportNodeAnalytics(filters: NodeFilters): Promise<void> {
@@ -111,4 +134,33 @@ export async function exportNodeAnalytics(filters: NodeFilters): Promise<void> {
     ...(filters.hostId ? { hostId: filters.hostId } : {}),
     ...(filters.statusClass ? { statusClass: filters.statusClass } : {}),
   } }, "npmi-node-analytics.csv");
+}
+
+export interface NodeBlockRule {
+  id: number;
+  type: "ip" | "user_agent";
+  target: string;
+  note: string;
+  createdAt: number;
+  createdBy: string;
+}
+export interface NodeBlockAudit {
+  id: number;
+  action: string;
+  type: string;
+  target: string;
+  operator: string;
+  occurredAt: number;
+}
+export async function getNodeBlocks(): Promise<{rules: NodeBlockRule[]; audit: NodeBlockAudit[]}> {
+  return api.get({ url: "/analytics/blocks" });
+}
+export async function addNodeBlock(type: NodeBlockRule["type"], target: string, note = ""): Promise<NodeBlockRule> {
+  return api.post({ url: "/analytics/blocks", data: { type, target, note } });
+}
+export async function deleteNodeBlock(id: number): Promise<NodeBlockRule> {
+  return api.del({ url: `/analytics/blocks/${id}` });
+}
+export async function enableNodeScannerPreset(): Promise<{added: number}> {
+  return api.post({ url: "/analytics/blocks/scanner-presets", data: {} });
 }
