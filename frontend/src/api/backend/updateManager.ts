@@ -35,9 +35,16 @@ export interface UpdateStatus {
 	error: string | null;
 }
 
+export interface UpdateCoordination {
+	instanceSyncEnabled: boolean;
+	role: "primary" | "secondary" | null;
+	mode: "rolling" | "standalone";
+}
+
 export interface UpdateManagerResponse {
 	release: UpdateRelease;
 	capabilities: UpdateCapabilities;
+	coordination: UpdateCoordination;
 	status: UpdateStatus;
 }
 

@@ -1,6 +1,7 @@
 import express from "express";
 import internalRemoteVersion from "../internal/remote-version.js";
 import internalUpdateManager from "../internal/update-manager.js";
+import internalInstanceSync from "../internal/instance-sync.js";
 import jwtdecode from "../lib/express/jwt-decode.js";
 import { debug, express as logger } from "../logger.js";
 
@@ -67,9 +68,15 @@ router
 			const status = clearFailed
 				? internalUpdateManager.clearFailedStatus()
 				: internalUpdateManager.getStatus();
+			const sync = await internalInstanceSync.getStatus();
 			res.status(200).send({
 				release,
 				capabilities: internalUpdateManager.capabilities(),
+				coordination: {
+					instance_sync_enabled: Boolean(sync.enabled),
+					role: sync.enabled ? sync.role : null,
+					mode: sync.enabled ? "rolling" : "standalone",
+				},
 				status,
 			});
 		} catch (err) {
