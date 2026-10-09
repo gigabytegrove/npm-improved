@@ -64,7 +64,9 @@ function Breakdown({ title, data }: {
   );
 }
 function TrafficChart({ points }: { points: Array<{ at: string; requests: number }> }) {
-  const width = 720, height = 180, pad = 12;
+  const width = 720;
+  const height = 180;
+  const pad = 12;
   const max = Math.max(1, ...points.map((item) => item.requests));
   const coords = points.map((item, i) => ({
     x: pad + (points.length > 1 ? (i / (points.length - 1)) * (width - 2 * pad) : 0),
@@ -192,7 +194,7 @@ export default function HostAnalytics() {
               <>
                 <div className="card mb-3"><div className="card-header"><h3 className="card-title">HTTP response classes</h3></div>
                   <div className="card-body">
-                    <div className="npmi-analytics-status-bar" aria-label="HTTP response classes">
+                    <div className="npmi-analytics-status-bar" role="img" aria-label="HTTP response classes">
                       {(["2xx","3xx","4xx","5xx"] as const).map((key) => (
                         <div key={key} className={`npmi-analytics-band npmi-analytics-${key}`}
                           style={{ width: `${data.requests ? (100 * (data.status[key] || 0) / data.requests) : 0}%` }}/>

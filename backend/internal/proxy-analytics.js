@@ -225,7 +225,9 @@ export function startAnalyticsCollector() {
 
 const aggregateRows = (rows) => {
   const response = { "2xx": 0, "3xx": 0, "4xx": 0, "5xx": 0, other: 0 };
-  let requests = 0, bytesOut = 0, bytesIn = 0;
+  let requests = 0;
+  let bytesOut = 0;
+  let bytesIn = 0;
   for (const row of rows) {
     const bucket = Object.hasOwn(response, row.band) ? row.band : "other";
     const count = Number(row.requests || 0);
@@ -262,7 +264,8 @@ export function getHostAnalytics(hostId, hours = 24) {
   const now = Math.floor(Date.now() / 1000);
   const since = now - hours * 3600;
   const useRollup = hours > RAW_DAYS * 24;
-  let breakdownRows, timelineRows;
+  let breakdownRows;
+  let timelineRows;
   if (useRollup) {
     breakdownRows = db.prepare(`SELECT status_band AS band, SUM(requests) AS requests,
       SUM(bytes_out) AS bytes_out, SUM(bytes_in) AS bytes_in
