@@ -140,7 +140,8 @@ export function ingestStreamLogs() {
       catch(error) { logger.warn(`Stream analytics ingestion skipped ${file}: ${error.message}`); }
     }
     if(Date.now()-lastPrune>3600000) {
-      const connection=db(), retention=getAnalyticsRetention();
+      const connection = db();
+      const retention = getAnalyticsRetention();
       connection.prepare("DELETE FROM analytics_stream_event WHERE occurred_at<?")
         .run(Math.floor(Date.now()/1000)-retention.rawDays*86400);
       connection.prepare("DELETE FROM analytics_stream_hour WHERE bucket<?")
@@ -162,7 +163,8 @@ export function startStreamCollector() {
 
 export function getNodeStreamAnalytics(hours=24) {
   if(![1,24,168,720,2160].includes(hours)) throw new RangeError("Invalid stream reporting window");
-  const connection=db(), retention=getAnalyticsRetention();
+  const connection = db();
+      const retention = getAnalyticsRetention();
   const rolled=hours>retention.rawDays*24;
   const since=Math.floor(Date.now()/1000)-hours*3600;
   const source=rolled?"analytics_stream_hour":"analytics_stream_event";
