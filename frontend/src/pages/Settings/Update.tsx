@@ -277,6 +277,22 @@ export default function Update() {
 				</Alert>
 			) : null}
 
+			{updaterReady ? (
+				<div className="alert alert-info">
+					<strong>Native host updater: {data?.capabilities?.hostUpdaterVersion || "unknown"}</strong>
+					<div className="mt-1">
+						{data?.capabilities?.hostUpdaterAutomaticMaintenance
+							? "Automatic host updater maintenance is enabled. Future releases upgrade both the application and its native updater without a secondary container."
+							: "Legacy host updater detected. Install the managed native host updater package once to enable automatic maintenance."}
+					</div>
+					{data?.capabilities?.hostUpdaterMaintenanceError ? (
+						<div className="mt-1 text-warning">
+							Last host-updater maintenance attempt: {data.capabilities.hostUpdaterMaintenanceError}.
+							The native host timer will retry.
+						</div>
+					) : null}
+				</div>
+			) : null}
 			{data?.status?.error ? (
 				<Alert variant="danger">
 					<div className="d-flex gap-2 align-items-start">
