@@ -295,7 +295,7 @@ jobs:
             -e MARIADB_USER=npmi \
             -e MARIADB_PASSWORD=ci-database-password \
             -e MARIADB_ROOT_PASSWORD=ci-root-password \
-            mariadb:11
+            public.ecr.aws/docker/library/mariadb:11
 
           for attempt in $(seq 1 60); do
             if docker exec npmi-db-wizard-mysql mariadb-admin ping -h127.0.0.1 -uroot -pci-root-password --silent >/dev/null 2>&1; then
