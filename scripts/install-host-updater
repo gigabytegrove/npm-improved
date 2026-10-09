@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Install a systemd host-side updater. NEVER launches updater containers.
+set -Eeuo pipefail
+if [ "$(id -u)" -ne 0 ]; then echo "Run as root." >&2; exit 1; fi
+command -v systemctl >/dev/null || { echo "systemd is required." >&2; exit 1; }
+command -v python3 >/dev/null || { echo "Python 3 is required." >&2; exit 1; }
+command -v docker >/dev/null || { echo "Docker is required." >&2; exit 1; }
+docker compose version >/dev/null || { echo "Docker Compose v2 required." >&2; exit 1; }
+SOURCE="$(cd "$(dirname "$0")" && pwd)"
+if [ "$#" -gt 0 ]; then ROOT="$(realpath "$1")"; else ROOT="$(realpath "$SOURCE/..")"; fi
+if [[ ! "$ROOT" =~ ^/[a-zA-Z0-9._/-]+$ || "$ROOT" == *".."* ]]; then
+  echo "Unsafe NPMi project directory." >&2
+  exit 1
+fi
+[ -f "$ROOT/.env" ] && [ -d "$ROOT/data" ] || {
+  echo "NPMi Compose project with .env and data directory required." >&2; exit 1;
+}
+install -d -m 0755 /usr/local/libexec/npm-improved
+install -m 0755 "$SOURCE/update-handoff.sh" /usr/local/libexec/npm-improved/update-handoff.sh
+install -m 0755 "$SOURCE/host-update-dispatch.py" /usr/local/libexec/npm-improved/host-update-dispatch.py
+ID="$(printf %s "$ROOT" | sha256sum | cut -c1-12)"
+UNIT="npm-improved-update-$ID"
+cat >"/etc/systemd/system/$UNIT.service" <<EOF
+[Unit]
+Description=NPM Improved native in-place updater ($ROOT)
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=$ROOT
+ExecStart=/usr/local/libexec/npm-improved/host-update-dispatch.py $ROOT
+TimeoutStartSec=0
+UMask=0077
+EOF
+cat >"/etc/systemd/system/$UNIT.path" <<EOF
+[Unit]
+Description=NPM Improved native updater watcher ($ROOT)
+
+[Path]
+PathExists=$ROOT/data/host-update-request.json
+Unit=$UNIT.service
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl enable --now "$UNIT.path"
+systemctl is-active --quiet "$UNIT.path" || { echo "Host updater did not activate." >&2; exit 1; }
+python3 - "$ROOT/data/host-updater-ready.json" "$ROOT" "$UNIT" <<'PY'
+import json, os, sys, tempfile
+dest, root, unit = sys.argv[1:]
+fd, temp = tempfile.mkstemp(dir=os.path.dirname(dest),prefix=".host-ready-")
+with os.fdopen(fd, "w", encoding="utf-8") as stream:
+    json.dump({"mode":"native-host-service","project_dir":root,"unit":unit}, stream)
+    stream.write("\n")
+os.chmod(temp,0o644)
+os.replace(temp,dest)
+PY
+echo "Native host updater enabled: $UNIT.path"
+echo "No helper containers or Docker Hub images will be required."

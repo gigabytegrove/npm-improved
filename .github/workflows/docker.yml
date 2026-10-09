@@ -15,6 +15,8 @@ on:
       - "DOCKER.md"
       - "scripts/install-docker"
       - "scripts/update-handoff.sh"
+      - "scripts/install-host-updater"
+      - "scripts/host-update-dispatch.py"
       - ".github/workflows/docker.yml"
   push:
     branches:
@@ -63,15 +65,17 @@ jobs:
         run: |
           bash -n scripts/install-docker
           sh -n scripts/update-handoff.sh
+          bash -n scripts/install-host-updater
+          python3 -m py_compile scripts/host-update-dispatch.py
 
-      - name: Verify temporary updater image requirements
+      - name: Ensure updater never creates a helper container
         run: |
-          docker run --rm docker:27-cli sh -c '
-            docker compose version &&
-            command -v wget &&
-            command -v gzip &&
-            command -v sha256sum
-          '
+          if grep -E 'docker:27-cli|/containers/create\?name=|ensureHelperImage' backend/internal/update-manager.js; then
+            echo "Secondary updater containers are forbidden."
+            exit 1
+          fi
+          test -f scripts/host-update-dispatch.py
+          test -f scripts/install-host-updater
 
       - name: Validate installer preflight
         run: ./scripts/install-docker sqlite --check-only
@@ -88,31 +92,23 @@ jobs:
       - name: Build production image
         run: docker build --pull --progress=plain -f docker/Dockerfile -t npm-improved:ci .
 
-      - name: Verify native Update manager restart handoff
+      - name: Verify native in-place Update manager restart
         shell: bash
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
 
           cp .env /tmp/npmi-update-test.env
-
-          cleanup_update_test() {
+          cleanup() {
             docker compose -f compose.yaml --env-file .env down --remove-orphans >/dev/null 2>&1 || true
-            docker ps -aq --filter label=com.gigabytegrove.npm-improved.role=update-handoff | xargs -r docker rm -f >/dev/null 2>&1 || true
             sudo rm -rf ./data ./letsencrypt
-            if [ -f /tmp/npmi-host-update-handoff.sh ]; then
-              mv /tmp/npmi-host-update-handoff.sh scripts/update-handoff.sh
-            fi
-            if [ -f /tmp/npmi-update-test.env ]; then
-              cp /tmp/npmi-update-test.env .env
-              rm -f /tmp/npmi-update-test.env
-            fi
+            cp /tmp/npmi-update-test.env .env || true
+            rm -f /tmp/npmi-update-test.env
           }
-          trap cleanup_update_test EXIT
+          trap cleanup EXIT
 
           docker tag npm-improved:ci npm-improved:local
           mkdir -p data letsencrypt
           chmod 0777 data letsencrypt
-
           sed -i "s|^NPM_HOST_PROJECT_DIR=.*|NPM_HOST_PROJECT_DIR=$GITHUB_WORKSPACE|" .env
           sed -i 's|^NPM_DEPLOYMENT_MODE=.*|NPM_DEPLOYMENT_MODE=sqlite|' .env
           sed -i 's|^NPM_IMAGE=.*|NPM_IMAGE=npm-improved:local|' .env
@@ -122,82 +118,59 @@ jobs:
           sed -i 's/^INITIAL_ADMIN_EMAIL=.*/INITIAL_ADMIN_EMAIL=update-ci@example.com/' .env
           sed -i 's/^INITIAL_ADMIN_PASSWORD=.*/INITIAL_ADMIN_PASSWORD=update-ci-password-12345/' .env
 
-          NPM_BUILD_VERSION=1.1.0-ci \
+          # Install only root-owned host-side files: NO helper Docker container.
+          sudo mkdir -p /usr/local/libexec/npm-improved
+          sudo install -m 0755 scripts/update-handoff.sh /usr/local/libexec/npm-improved/update-handoff.sh
+          sudo install -m 0755 scripts/host-update-dispatch.py /usr/local/libexec/npm-improved/host-update-dispatch.py
+          python3 - "$GITHUB_WORKSPACE" <<'PY'
+          import json, pathlib, sys
+          root = sys.argv[1]
+          (pathlib.Path("data") / "host-updater-ready.json").write_text(
+              json.dumps({"mode":"native-host-service","project_dir":root,"unit":"ci-test"}) + "\n"
+          )
+          PY
+
+          NPM_BUILD_VERSION=1.4.1-ci \
           NPM_BUILD_COMMIT="$GITHUB_SHA" \
           NPM_BUILD_DATE="$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
             docker compose -f compose.yaml --env-file .env up -d --no-build app
 
           for attempt in $(seq 1 90); do
-            if curl -fsS http://127.0.0.1:19181/api/ >/dev/null 2>&1; then
-              break
-            fi
-            if [ "$attempt" -eq 90 ]; then
-              docker compose -f compose.yaml --env-file .env logs app
-              exit 1
-            fi
+            if curl -fsS http://127.0.0.1:19181/api/ >/dev/null 2>&1; then break; fi
+            if [ "$attempt" -eq 90 ]; then docker compose -f compose.yaml logs app; exit 1; fi
             sleep 1
           done
 
-          TOKEN="$(
-            curl -fsS \
-              -H 'Content-Type: application/json' \
-              -d '{"identity":"update-ci@example.com","secret":"update-ci-password-12345"}' \
-              http://127.0.0.1:19181/api/tokens | jq -r '.token'
-          )"
-          test -n "$TOKEN"
-          test "$TOKEN" != "null"
-
-          MANAGER="$(
-            curl -fsS \
-              -H "Authorization: Bearer $TOKEN" \
-              http://127.0.0.1:19181/api/version/update
-          )"
-          jq -e '
+          TOKEN="$(curl -fsS -H 'Content-Type: application/json' \
+            -d '{"identity":"update-ci@example.com","secret":"update-ci-password-12345"}' \
+            http://127.0.0.1:19181/api/tokens | jq -r '.token')"
+          test -n "$TOKEN" && test "$TOKEN" != "null"
+          curl -fsS -H "Authorization: Bearer $TOKEN" \
+            http://127.0.0.1:19181/api/version/update | jq -e '
             .capabilities.enabled == true and
-            .capabilities.deployment_mode == "sqlite" and
-            .capabilities.handoff_source == "embedded" and
-            .capabilities.embedded_handoff_available == true
-          ' <<<"$MANAGER"
+            .capabilities.handoff_source == "native-host-service" and
+            .capabilities.helper_image == null and
+            .capabilities.host_service_installed == true
+          '
 
-          # Prove that lifecycle actions do not execute the Git checkout's
-          # scripts/update-handoff.sh. UI image updates do not update that
-          # checkout, so relying on it would pin updater behavior to an old
-          # release forever.
-          mv scripts/update-handoff.sh /tmp/npmi-host-update-handoff.sh
-          test ! -f scripts/update-handoff.sh
-
-          curl -fsS \
-            -H "Authorization: Bearer $TOKEN" \
+          curl -fsS -H "Authorization: Bearer $TOKEN" \
             -H 'Content-Type: application/json' \
             -d '{"password":"update-ci-password-12345"}' \
-            -X POST \
-            http://127.0.0.1:19181/api/version/update/restart >/tmp/npmi-update-restart.json
+            -X POST http://127.0.0.1:19181/api/version/update/restart \
+            >/tmp/npmi-update-restart.json
 
-          completed=0
-          for attempt in $(seq 1 120); do
-            RESULT="$(
-              curl -fsS \
-                -H "Authorization: Bearer $TOKEN" \
-                http://127.0.0.1:19181/api/version/update 2>/dev/null || true
-            )"
-            if [ -n "$RESULT" ] && [ "$(jq -r '.status.state // empty' <<<"$RESULT")" = "completed" ]; then
-              completed=1
-              break
-            fi
-            if [ -n "$RESULT" ] && [ "$(jq -r '.status.state // empty' <<<"$RESULT")" = "failed" ]; then
-              echo "$RESULT"
-              docker compose -f compose.yaml --env-file .env logs app
-              exit 1
-            fi
-            sleep 2
-          done
-          test "$completed" = "1"
+          test -s data/host-update-request.json
+          sudo /usr/local/libexec/npm-improved/host-update-dispatch.py "$GITHUB_WORKSPACE"
 
-          sleep 2
+          RESULT="$(curl -fsS -H "Authorization: Bearer $TOKEN" \
+            http://127.0.0.1:19181/api/version/update)"
+          jq -e '.status.state == "completed"' <<<"$RESULT"
+          test ! -e data/host-update-request.json
           test -z "$(docker ps -aq --filter label=com.gigabytegrove.npm-improved.role=update-handoff)"
+          echo "PASS: restart completed through native host worker without helper containers."
 
           trap - EXIT
-          cleanup_update_test
+          cleanup
 
       - name: Verify NPMX pairing and node-local default-site sync
         shell: bash
@@ -322,7 +295,7 @@ jobs:
             -e MARIADB_USER=npmi \
             -e MARIADB_PASSWORD=ci-database-password \
             -e MARIADB_ROOT_PASSWORD=ci-root-password \
-            mariadb:11
+            public.ecr.aws/docker/library/mariadb:11
 
           for attempt in $(seq 1 60); do
             if docker exec npmi-db-wizard-mysql mariadb-admin ping -h127.0.0.1 -uroot -pci-root-password --silent >/dev/null 2>&1; then

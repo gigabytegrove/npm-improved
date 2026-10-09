@@ -242,7 +242,7 @@ set_env() {
 }
 
 # Persist the host deployment location and database mode so the authenticated
-# Settings -> Update manager can launch a temporary self-cleaning handoff.
+# Settings -> Update manager can queue native host-side lifecycle actions.
 # Existing NPM_IMAGE selections are preserved; first-time/source deployments
 # default to the locally built image.
 set_env NPM_HOST_PROJECT_DIR "$ROOT_DIR"
@@ -476,3 +476,12 @@ echo "  Version:  ${runtime_build_version}"
 echo "  Commit:   ${runtime_build_commit}"
 echo
 "${compose[@]}" ps
+
+# Native updater runs on the Docker host, not in a temporary container.
+# Installing the systemd watcher needs host root privileges only once.
+if [ "$(id -u)" -eq 0 ] && command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+  ./scripts/install-host-updater "$ROOT_DIR"
+else
+  echo "Native in-place updates: install host watcher once with:"
+  echo "  sudo ./scripts/install-host-updater $ROOT_DIR"
+fi
