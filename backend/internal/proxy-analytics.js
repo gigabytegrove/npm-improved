@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { parseAnalyticsEvent } from "../lib/proxy-analytics.js";
@@ -211,9 +212,61 @@ export function ingestAnalyticsLogs() {
   }
 }
 
+
+export function injectAnalyticsLog(existing, hostId) {
+  if (typeof existing !== "string" || !Number.isSafeInteger(hostId) || hostId < 1) return existing;
+  const currentLog = `access_log /data/logs/proxy-host-${hostId}_access.log proxy;`;
+  const nextLog = `access_log /data/logs/proxy-host-${hostId}_analytics.log proxy_analytics;`;
+  if (existing.includes(nextLog)) return existing;
+  return existing.split("\n").map((line) => {
+    if (line.trim() !== currentLog) return line;
+    const indentation = line.slice(0, line.indexOf("access_log"));
+    return `${line}\n${indentation}${nextLog}`;
+  }).join("\n");
+}
+
+export function upgradeExistingAnalyticsHostConfigs() {
+  const directory = "/data/nginx/proxy_host";
+  if (!fs.existsSync(directory)) return 0;
+  const changes = [];
+  for (const filename of fs.readdirSync(directory)) {
+    if (!/^[1-9]\d*\.conf$/.test(filename)) continue;
+    const hostId = Number(filename.slice(0, -5));
+    const fullPath = path.join(directory, filename);
+    const current = fs.readFileSync(fullPath, "utf8");
+    const updated = injectAnalyticsLog(current, hostId);
+    if (updated !== current) changes.push({ fullPath, current, updated, mode: fs.statSync(fullPath).mode });
+  }
+  if (!changes.length) return 0;
+  const applied = [];
+  try {
+    for (const change of changes) {
+      const temporary = `${change.fullPath}.analytics-${process.pid}.tmp`;
+      fs.writeFileSync(temporary, change.updated, { mode: change.mode });
+      fs.renameSync(temporary, change.fullPath);
+      applied.push(change);
+    }
+    execFileSync("/usr/sbin/nginx", ["-t"], { stdio: "pipe" });
+    execFileSync("/usr/sbin/nginx", ["-s", "reload"], { stdio: "pipe" });
+    logger.info(`Activated host analytics logging on ${applied.length} existing hosts`);
+    return applied.length;
+  } catch (error) {
+    for (const change of applied.reverse()) {
+      const temporary = `${change.fullPath}.analytics-rollback-${process.pid}.tmp`;
+      try {
+        fs.writeFileSync(temporary, change.current, { mode: change.mode });
+        fs.renameSync(temporary, change.fullPath);
+      } catch (rollbackError) {
+        logger.error(`Analytics configuration rollback failed for ${change.fullPath}: ${rollbackError.message}`);
+      }
+    }
+    throw new Error(`Existing host analytics activation failed; originals restored: ${error.message}`);
+  }
+}
+
 export function startAnalyticsCollector() {
   if (timer || process.env.NPM_ANALYTICS_ENABLED === "false") return;
-  try { getDb(); ingestAnalyticsLogs(); }
+  try { getDb(); upgradeExistingAnalyticsHostConfigs(); ingestAnalyticsLogs(); }
   catch (error) { logger.warn(`Analytics storage unavailable: ${error.message}`); }
   timer = setInterval(() => {
     try { ingestAnalyticsLogs(); }
