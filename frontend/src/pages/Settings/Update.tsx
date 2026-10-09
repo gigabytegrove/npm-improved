@@ -105,6 +105,7 @@ export default function Update() {
 	const active = ACTIVE_STATES.has(data?.status?.state || "");
 	const updateAvailable = Boolean(data?.release?.updateAvailable);
 	const updaterReady = Boolean(data?.capabilities?.enabled);
+	const rolling = Boolean(data?.coordination?.instanceSyncEnabled);
 	const canRollback = Boolean(data?.status?.previousImage);
 	const progress = UPDATE_PROGRESS[data?.status?.state || "idle"] ?? 0;
 
@@ -156,7 +157,7 @@ export default function Update() {
 
 	const actionDescription =
 		authAction === "update"
-			? "NPM Improved will download the new image, replace only the application container, verify health, and automatically roll back if verification fails."
+			? "NPM Improved will update this node, verify health, and automatically roll back on failure. Upgrade the other NPMX node separately once this node is healthy."
 			: authAction === "rollback"
 				? "NPM Improved will restore the previously recorded application image and verify that it becomes healthy."
 				: "NPM Improved will restart the application container and verify that it returns healthy.";
@@ -256,6 +257,16 @@ export default function Update() {
 				</div>
 			</div>
 
+			{rolling ? (
+				<Alert variant="info">
+					<strong>Rolling NPMX update — {data?.coordination?.role} node</strong>
+					<div className="mt-1">
+						Upgrade one proxy node at a time, verifying health before upgrading the other.
+						NPMX snapshot synchronization temporarily pauses while node versions differ,
+						then resumes once both nodes match. The other proxy can continue serving traffic.
+					</div>
+				</Alert>
+			) : null}
 			{!updaterReady ? (
 				<Alert variant="warning">
 					<strong>Automatic updates are not ready on this deployment.</strong>
