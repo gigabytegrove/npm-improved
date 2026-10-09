@@ -166,7 +166,7 @@ const getRow = async () => {
 				role: "primary",
 				public_url: "",
 				primary_url: "",
-				interval_seconds: 60,
+				interval_seconds: 30,
 				last_sync: null,
 				last_attempt: null,
 				last_error: null,
@@ -184,7 +184,7 @@ const getRow = async () => {
 		role: "primary",
 		public_url: "",
 		primary_url: "",
-		interval_seconds: 60,
+		interval_seconds: 30,
 		last_sync: null,
 		last_attempt: null,
 		last_error: null,
@@ -227,7 +227,7 @@ const sanitizedStatus = async () => {
 		role: meta.role,
 		publicUrl: meta.public_url || "",
 		primaryUrl: meta.primary_url || "",
-		intervalSeconds: meta.interval_seconds || 60,
+		intervalSeconds: meta.interval_seconds || 30,
 		secretConfigured: Boolean(readSecret()),
 		lastSync: meta.last_sync || null,
 		lastAttempt: meta.last_attempt || null,
@@ -297,7 +297,7 @@ const internalInstanceSync = {
 			throw new errs.ValidationError("Instance sync role must be primary or secondary");
 		}
 
-		const intervalSeconds = Number.parseInt(data.intervalSeconds ?? current.interval_seconds ?? 60, 10);
+		const intervalSeconds = Number.parseInt(data.intervalSeconds ?? current.interval_seconds ?? 30, 10);
 		if (
 			!Number.isInteger(intervalSeconds) ||
 			intervalSeconds < MIN_INTERVAL_SECONDS ||
@@ -928,7 +928,7 @@ const internalInstanceSync = {
 				return null;
 			});
 			const nextDelay = status
-				? Math.max(MIN_INTERVAL_SECONDS, status.intervalSeconds || 60) * 1000
+				? Math.max(MIN_INTERVAL_SECONDS, status.intervalSeconds || 30) * 1000
 				: 60_000;
 
 			if (status?.enabled && status.role === "secondary") {

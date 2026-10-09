@@ -89,7 +89,7 @@ export default function InstanceSync() {
 				role: data.role,
 				publicUrl: data.publicUrl || "",
 				primaryUrl: data.primaryUrl || "",
-				intervalSeconds: data.intervalSeconds || 60,
+				intervalSeconds: data.intervalSeconds || 30,
 			}}
 			onSubmit={async (values, { setSubmitting }) => {
 				setMessage("");

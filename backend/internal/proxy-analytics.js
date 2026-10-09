@@ -11,7 +11,17 @@ const DATABASE_PATH = process.env.NPM_ANALYTICS_DB || "/data/analytics.sqlite";
 const MAX_CHUNK = 512 * 1024;
 const RAW_DAYS = Math.min(30, Math.max(1, Number.parseInt(process.env.NPM_ANALYTICS_RAW_DAYS || "7", 10) || 7));
 const ROLLUP_DAYS = Math.min(365, Math.max(30, Number.parseInt(process.env.NPM_ANALYTICS_ROLLUP_DAYS || "90", 10) || 90));
-const LOG_PATTERN = /^proxy-host-(\d+)_analytics\.log(?:\.1)?$/;
+const LOG_PATTERN = /^(?:(proxy-host|redirection-host|dead-host)-(\d+)|default-host|fallback-http)_analytics\.log(?:\.1)?$/;
+const NODE_ROUTE_OFFSETS = { "redirection-host": 1000000, "dead-host": 2000000 };
+export function analyticsSourceId(filename) {
+  const match = LOG_PATTERN.exec(filename);
+  if (!match) return null;
+  if (filename.startsWith("default-host_")) return -3000000;
+  if (filename.startsWith("fallback-http_")) return -3000001;
+  const id = Number(match[2]);
+  if (!Number.isSafeInteger(id) || id < 1 || id >= 1000000) return null;
+  return match[1] === "proxy-host" ? id : -(NODE_ROUTE_OFFSETS[match[1]] + id);
+}
 let database = null;
 let timer = null;
 let busy = false;
@@ -98,6 +108,10 @@ function getDb() {
   database = db;
   return database;
 }
+
+// Consumers share the collector's connection to the node-local database.
+export const getAnalyticsDatabase = () => getDb();
+export const getAnalyticsRetention = () => ({ rawDays: RAW_DAYS, rollupDays: ROLLUP_DAYS });
 
 function processFile(fileName, hostId, deadline) {
   const filename = path.join(ANALYTICS_DIR, fileName);
@@ -194,7 +208,8 @@ export function ingestAnalyticsLogs() {
       .sort((a, b) => Number(b.endsWith(".1")) - Number(a.endsWith(".1")));
     for (const name of names) {
       if (Date.now() > deadline) break;
-      const hostId = Number(LOG_PATTERN.exec(name)[1]);
+      const hostId = analyticsSourceId(name);
+      if (hostId === null) continue;
       try { processed += processFile(name, hostId, deadline); }
       catch (error) { logger.warn(`Analytics ingestion skipped ${name}: ${error.message}`); }
     }
@@ -225,17 +240,46 @@ export function injectAnalyticsLog(existing, hostId) {
   }).join("\n");
 }
 
+export function injectNonProxyAnalyticsLog(existing, source, id = null) {
+  if (typeof existing !== "string") return existing;
+  const stem = id === null ? source : `${source}-${id}`;
+  const oldFormat = source === "default-host" ? "combined" : source === "stream" ? "stream" : "standard";
+  const oldLine = `access_log /data/logs/${stem}_access.log ${oldFormat};`;
+  const newLine = `access_log /data/logs/${stem}_analytics.log ${source === "stream" ? "stream_analytics" : "proxy_analytics"};`;
+  if (existing.includes(newLine)) return existing;
+  return existing.split("\n").map((line) => {
+    if (line.trim() !== oldLine) return line;
+    const indent = line.slice(0, line.indexOf("access_log"));
+    return `${line}\n${indent}${newLine}`;
+  }).join("\n");
+}
+
 export function upgradeExistingAnalyticsHostConfigs() {
-  const directory = "/data/nginx/proxy_host";
-  if (!fs.existsSync(directory)) return 0;
+  // Persistent generated routes are kept across image updates, so refresh
+  // analytics access logs for every existing enabled HTTP routing category.
+  const sources = [
+    { folder: "proxy_host", kind: "proxy-host" },
+    { folder: "redirection_host", kind: "redirection-host" },
+    { folder: "dead_host", kind: "dead-host" },
+    { folder: "default_host", kind: "default-host" },
+    { folder: "stream", kind: "stream" },
+  ];
   const changes = [];
-  for (const filename of fs.readdirSync(directory)) {
-    if (!/^[1-9]\d*\.conf$/.test(filename)) continue;
-    const hostId = Number(filename.slice(0, -5));
-    const fullPath = path.join(directory, filename);
-    const current = fs.readFileSync(fullPath, "utf8");
-    const updated = injectAnalyticsLog(current, hostId);
-    if (updated !== current) changes.push({ fullPath, current, updated, mode: fs.statSync(fullPath).mode });
+  for (const source of sources) {
+    const directory = path.join("/data/nginx", source.folder);
+    if (!fs.existsSync(directory)) continue;
+    for (const filename of fs.readdirSync(directory)) {
+      if (!filename.endsWith(".conf")) continue;
+      const numeric = /^[1-9]\d*\.conf$/.exec(filename);
+      if (source.kind !== "default-host" && !numeric) continue;
+      const id = numeric ? Number(filename.slice(0, -5)) : null;
+      const fullPath = path.join(directory, filename);
+      const current = fs.readFileSync(fullPath, "utf8");
+      const updated = source.kind === "proxy-host"
+        ? injectAnalyticsLog(current, id)
+        : injectNonProxyAnalyticsLog(current, source.kind, id);
+      if (updated !== current) changes.push({ fullPath, current, updated, mode: fs.statSync(fullPath).mode });
+    }
   }
   if (!changes.length) return 0;
   const applied = [];
