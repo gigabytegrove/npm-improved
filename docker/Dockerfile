@@ -7,7 +7,7 @@
 ARG BASE_IMAGE=ghcr.io/gigabytegrove/npm-improved:v1.4.0
 
 FROM --platform=$BUILDPLATFORM ${BASE_IMAGE} AS frontend-builder
-ENV NODE_OPTIONS=--openssl-legacy-provider
+ENV NODE_ENV=development NODE_OPTIONS=--openssl-legacy-provider
 WORKDIR /build/frontend
 COPY frontend/package.json frontend/yarn.lock ./
 RUN yarn install --frozen-lockfile
