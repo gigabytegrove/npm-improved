@@ -199,3 +199,47 @@ export async function getNodeDimension(
     limit: 50,
   }});
 }
+
+export interface NodeProfileDimension {
+  label: string;
+  requests: number;
+  bytesOut: number;
+  firstSeen: string;
+  lastSeen: string;
+}
+export interface NodeProfile {
+  kind: "ips" | "user-agents";
+  value: string;
+  hours: NodeHours;
+  rawUnavailable: boolean;
+  requests: number;
+  bytesOut: number;
+  bytesIn: number;
+  errors: number;
+  serverErrors: number;
+  blocked: number;
+  routeCount: number;
+  ipCount: number;
+  agentCount: number;
+  connections: number;
+  firstSeen: string | null;
+  lastSeen: string | null;
+  averageMs: number | null;
+  timeline: Array<{ at: string; requests: number; bytesOut: number; errors: number; blocked: number }>;
+  routes: NodeProfileDimension[];
+  domains: NodeProfileDimension[];
+  methods: NodeProfileDimension[];
+  statuses: NodeProfileDimension[];
+  bots: NodeProfileDimension[];
+  paths: NodeProfileDimension[];
+  connectionsList: NodeProfileDimension[];
+  relatedIps: NodeProfileDimension[];
+  relatedAgents: NodeProfileDimension[];
+}
+export async function getNodeProfile(kind: "ips" | "user-agents", value: string, filters: NodeFilters): Promise<NodeProfile> {
+  return api.get({ url: `/analytics/node/profiles/${kind}`, params: {
+    value, hours: filters.hours,
+    ...(filters.hostId !== null && filters.hostId !== undefined ? { hostId: filters.hostId } : {}),
+    ...(filters.statusClass ? { statusClass: filters.statusClass } : {}),
+  }});
+}

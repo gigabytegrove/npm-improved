@@ -54,7 +54,8 @@ export default function AnalyticsCenter() {
   const candidateHosts = useMemo(() => hostsQuery.data?.hosts || report.data?.hosts || [],
     [hostsQuery.data?.hosts, report.data?.hosts]);
   const active = analyticsPages.find((page) =>
-    location.pathname === (page.path ? "/analytics/" + page.path : "/analytics")) || analyticsPages[0];
+    (location.pathname === (page.path ? "/analytics/" + page.path : "/analytics") ||
+    (!!page.path && location.pathname.startsWith("/analytics/" + page.path + "/")))) || analyticsPages[0];
   const pageGroups = ["Reporting", "Investigation", "Security"];
 
   return <HasPermission section={ADMIN} permission={VIEW} pageLoading loadingNoLogo>

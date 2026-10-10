@@ -1,4 +1,5 @@
 import express from "express";
+import { getNodeProfile } from "../internal/analytics-profiles.js";
 import os from "node:os";
 import jwtdecode from "../lib/express/jwt-decode.js";
 import { addNodeBlockRule, deleteNodeBlockRule, listNodeBlockRules, getNodeBlockAudit, enableKnownScannerBlocking } from "../internal/analytics-blocking.js";
@@ -113,6 +114,16 @@ router.get("/node/dimensions/:kind", async (req, res, next) => {
       limit: req.query.limit === undefined ? 50 : Number(req.query.limit),
       offset: req.query.offset === undefined ? 0 : Number(req.query.offset),
     }));
+  } catch (err) { next(err); }
+});
+
+router.get("/node/profiles/:kind", async (req, res, next) => {
+  try {
+    await authorize(res);
+    const kind = req.params.kind;
+    if (!["ips", "user-agents"].includes(kind)) throw new RangeError("Unsupported profile");
+    const value = req.query.value;
+    res.status(200).send(getNodeProfile(kind, value, reportFilters(req.query)));
   } catch (err) { next(err); }
 });
 
