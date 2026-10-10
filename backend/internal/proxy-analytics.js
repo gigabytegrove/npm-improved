@@ -138,7 +138,7 @@ function getDb() {
     connection_id: "TEXT", connection_requests: "INTEGER", occurred_at_ms: "INTEGER",
     scheme: "TEXT", tls: "TEXT", bot_class: "TEXT", block_reason: "TEXT",
   })) {
-    if (!columns.has(name)) db.exec("ALTER TABLE analytics_event ADD COLUMN " + name + " " + definition);
+    if (!columns.has(name)) db.exec(`ALTER TABLE analytics_event ADD COLUMN ${name} ${definition}`);
   }
   db.exec("CREATE INDEX IF NOT EXISTS analytics_event_ip_time ON analytics_event(client_ip,occurred_at)");
   db.exec("CREATE INDEX IF NOT EXISTS analytics_event_bot_time ON analytics_event(bot_class,occurred_at)");
@@ -218,7 +218,7 @@ function processFile(fileName, hostId, deadline) {
       const duration = base.duration === null ? null : base.duration * 1000;
       const upstreamSeconds = numberOrNull(raw.upstream_time);
       const bucket = Math.floor(base.time / 3600000) * 3600;
-      const band = Math.floor(base.status / 100) + "xx";
+      const band = `${Math.floor(base.status / 100)}xx`;
       const bytesIn = numberOrNull(raw.request_length);
       // Explicitly requested investigation data. Never trust X-Forwarded-For
       // directly: Nginx $remote_addr has already applied configured real-IP trust.

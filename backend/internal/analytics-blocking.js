@@ -40,11 +40,11 @@ export function renderBlockPolicy(rules) {
   const agents = [];
   for (const rule of rules) {
     const value = validateBlockTarget(rule.type, rule.target);
-    if (rule.type === "ip") ips.push("    " + value + " 1;");
+    if (rule.type === "ip") ips.push(`    ${value} 1;`);
     else {
       // Literal substring match, case insensitive; no arbitrary regex/code.
       const escaped = [...value].map((ch) => /[a-zA-Z0-9_-]/.test(ch)
-        ? ch : "\\" + ch).join("");
+        ? ch : `\\${ch}`).join("");
       agents.push(`    "~*${escaped.replace(/"/g, '\\"')}" 1;`);
     }
   }

@@ -224,7 +224,7 @@ const validateBundle = (bundle) => {
 
 	for (const [table] of TABLES[bundle.scope]) {
 		if (!Array.isArray(bundle.database[table])) {
-			throw new Error("Backup table is missing: " + table);
+			throw new Error(`Backup table is missing: ${table}`);
 		}
 	}
 
@@ -369,7 +369,7 @@ const restoreFilesystem = (bundle) => {
 };
 
 const snapshotLiveFilesystem = () => {
-	const rollbackRoot = path.join("/data", "backups", ".restore-" + crypto.randomUUID());
+	const rollbackRoot = path.join("/data", "backups", `.restore-${crypto.randomUUID()}`);
 	fs.mkdirSync(rollbackRoot, { recursive: true, mode: 0o700 });
 
 	const sources = {
