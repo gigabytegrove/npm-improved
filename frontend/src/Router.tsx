@@ -39,6 +39,7 @@ const AnalyticsUserAgents = lazy(() => import("src/pages/AnalyticsCenter/UserAge
 const AnalyticsSecurity = lazy(() => import("src/pages/AnalyticsCenter/Security"));
 const AnalyticsBlocking = lazy(() => import("src/pages/AnalyticsCenter/Blocking"));
 const AnalyticsPerformance = lazy(() => import("src/pages/AnalyticsCenter/Performance"));
+const AnalyticsProfile = lazy(() => import("src/pages/AnalyticsCenter/Profile"));
 const RedirectionHosts = lazy(() => import("src/pages/Nginx/RedirectionHosts"));
 const DeadHosts = lazy(() => import("src/pages/Nginx/DeadHosts"));
 const Streams = lazy(() => import("src/pages/Nginx/Streams"));
@@ -117,7 +118,9 @@ function Router() {
                     <Route path="requests" element={<AnalyticsRequests />} />
                     <Route path="connections" element={<AnalyticsConnections />} />
                     <Route path="ips" element={<AnalyticsClients />} />
+                    <Route path="ips/detail" element={<AnalyticsProfile />} />
                     <Route path="user-agents" element={<AnalyticsUserAgents />} />
+                    <Route path="user-agents/detail" element={<AnalyticsProfile />} />
                     <Route path="security" element={<AnalyticsSecurity />} />
                     <Route path="blocking" element={<AnalyticsBlocking />} />
                     <Route path="performance" element={<AnalyticsPerformance />} />

@@ -43,11 +43,12 @@ export default function UserAgentsPage() {
           <thead><tr><th>Reported user agent</th><th className="text-end">Requests</th><th className="text-end">Errors</th><th>First / last seen</th><th>Actions</th></tr></thead>
           <tbody>
             {paged.data?.entries.map((row) => <tr key={row.value}>
-              <td className="text-break" style={{maxWidth:"440px"}}>{row.value}<div className="small text-secondary">{formatBytes(row.bytesOut)} sent · {row.routes} routes · {formatNumber(row.blocked)} denied</div></td>
+              <td className="text-break" style={{maxWidth:"440px"}}><Link to={`/analytics/user-agents/detail?value=${encodeURIComponent(row.value)}`}>{row.value}</Link><div className="small text-secondary">{formatBytes(row.bytesOut)} sent · {row.routes} routes · {formatNumber(row.blocked)} denied</div></td>
               <td className="text-end">{formatNumber(row.requests)}</td>
               <td className="text-end">{formatNumber(row.errors)}</td>
               <td className="text-nowrap">{new Date(row.firstSeen).toLocaleString()}<div className="small text-secondary">{new Date(row.lastSeen).toLocaleString()}</div></td>
               <td><div className="d-flex flex-wrap gap-2">
+                <Link to={`/analytics/user-agents/detail?value=${encodeURIComponent(row.value)}`}>Profile</Link>
                 <Link to={`/analytics/requests?userAgent=${encodeURIComponent(row.value)}`}>History</Link>
                 <Link to={`/analytics/blocking?type=user_agent&target=${encodeURIComponent(row.value.slice(0, 160))}`}>Prepare block</Link>
               </div></td>
