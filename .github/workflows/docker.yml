@@ -543,6 +543,27 @@ jobs:
 
           docker network create npmi-db-wizard
 
+          # Public registries occasionally throttle GitHub-hosted runners.
+          # Use only trusted official MariaDB images; fail rather than skip
+          # the full database migration test if none can be pulled.
+          MARIADB_CI_IMAGE=""
+          for candidate in \
+            docker.io/library/mariadb:11 \
+            public.ecr.aws/docker/library/mariadb:11 \
+            ghcr.io/mariadb/mariadb:11.4.12-ubi9
+          do
+            echo "Trying official MariaDB test image: $candidate"
+            if docker pull --quiet "$candidate"; then
+              MARIADB_CI_IMAGE="$candidate"
+              break
+            fi
+            echo "::warning::Registry unavailable for $candidate; trying next official mirror."
+          done
+          test -n "$MARIADB_CI_IMAGE" || {
+            echo "::error::Unable to retrieve the official MariaDB test image from any supported registry."
+            exit 1
+          }
+
           docker run -d \
             --name npmi-db-wizard-mysql \
             --network npmi-db-wizard \
@@ -550,7 +571,7 @@ jobs:
             -e MARIADB_USER=npmi \
             -e MARIADB_PASSWORD=ci-database-password \
             -e MARIADB_ROOT_PASSWORD=ci-root-password \
-            public.ecr.aws/docker/library/mariadb:11
+            "$MARIADB_CI_IMAGE"
 
           for attempt in $(seq 1 60); do
             if docker exec npmi-db-wizard-mysql mariadb-admin ping -h127.0.0.1 -uroot -pci-root-password --silent >/dev/null 2>&1; then
