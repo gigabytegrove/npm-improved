@@ -7,7 +7,7 @@ export default (req, res, next) => {
 			"Access-Control-Allow-Headers":
 				"Content-Type, Cache-Control, Pragma, Expires, Authorization, X-Dataset-Total, X-Dataset-Offset, X-Dataset-Limit",
 			"Access-Control-Max-Age": 5 * 60,
-			"Access-Control-Expose-Headers": "X-Dataset-Total, X-Dataset-Offset, X-Dataset-Limit",
+			"Access-Control-Expose-Headers": "X-Dataset-Total, X-Dataset-Offset, X-Dataset-Limit, X-NPMi-Node-Hostname",
 		});
 		next();
 	} else {

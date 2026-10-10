@@ -53,11 +53,18 @@ router.get("/", async (_, res /*, next*/) => {
 	const normalizedVersion = displayVersion.replace(/^v/, "").split("-").shift();
 	const versionParts = normalizedVersion.split(".").map((part) => Number.parseInt(part, 10) || 0);
 	const setup = await isSetup();
+	// Expose the configured NPMX identity separately from the physical hostname.
+	// Older Compose deployments may lack the host mount/modern updater marker.
+	const sync = await internalInstanceSync.getStatus().catch(() => null);
 
 	res.status(200).send({
 		status: "OK",
 		setup,
-		node: { hostname: getServingNodeHostname() },
+		node: {
+			hostname: getServingNodeHostname(),
+			name: sync?.nodeName || null,
+			role: sync?.role || null,
+		},
 		version: {
 			major: versionParts[0] || 0,
 			minor: versionParts[1] || 0,

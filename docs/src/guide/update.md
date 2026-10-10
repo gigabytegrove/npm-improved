@@ -34,16 +34,21 @@ Update progress is stored under `/data`, so refreshing or closing the browser do
 
 ## How replacement works
 
-The running NPM Improved application cannot replace its own Docker container after it stops. NPM Improved therefore uses a temporary Docker CLI handoff only during the lifecycle operation.
+The running NPM Improved application cannot replace its own Docker container after it stops. NPM Improved uses a **native, root-owned systemd host service** for in-place image replacement. The authenticated application writes a validated update request into its existing persistent `/data` directory. The host service then uses Docker Compose to update that installation, check health, and roll back if needed.
 
-The authenticated backend creates the handoff with:
+**No helper/updater Docker container is launched, and the application container is not given the Docker socket.**
 
-- the Docker socket;
-- the host NPM Improved project directory;
-- a fixed NPM Improved update script and action;
-- automatic container removal.
+New installations use `scripts/install-host-updater`, which provisions a host updater readiness marker, the physical Linux hostname, and a periodic systemd maintenance timer. Existing/older installations retain their original host service and project-specific Compose files during in-app updates.
 
-The handoff does not provide a general-purpose Docker command API to the browser and is not left running after the operation.
+### Existing hosts reporting "legacy" after a successful app update
+
+Updating the Docker application does not automatically replace an **older root-owned host updater program**. The older service still handles application updates but might not support managed self-maintenance or physical-host identity reporting. This is why a perfectly successful new-version application may say *Native host updater: legacy* and *Host: Unidentified*.
+
+Go to **Settings → Update → Native host updater**, open **One-time command for this host**, and copy the generated command. Run it **on that exact Linux Docker host, not inside the NPMi container**. It fetches the published updater archive for the installed release, verifies its SHA-256 checksum, and installs/activates the native systemd services without changing your Compose ports, NPMX settings, reverse proxy configuration, databases, or certificates.
+
+Do this **once for each independently hosted NPMi node**. It does not require an extra Docker container. Once the service is installed, future NPMi releases can refresh both the application and native host updater automatically. The physical Linux hostname is then available from the project-matched updater marker; reloading the UI picks it up.
+
+The *NPMX:* label in the header is the configured cluster node name, not necessarily the machine hostname. NPM Improved never substitutes the Docker container ID as the physical Linux hostname.
 
 ## Preflight checks
 
@@ -58,9 +63,9 @@ Before a stable update is applied, NPM Improved verifies that:
 - at least 512 MiB of staging space is free;
 - no database migration is active;
 - no disaster-recovery restore is active;
-- the deployment is not currently using Shared MySQL or Instance Synchronization.
+- the deployment is not currently using Shared MySQL mode. Rolling NPMX primary/secondary updates are supported one node at a time, and snapshots resume when versions match.
 
-Shared MySQL and Instance Synchronization are blocked from a single-node automatic update because participating nodes must stay on a compatible application/schema version. Update those deployments as coordinated maintenance operations.
+Shared MySQL mode is blocked from automatic per-node updates. NPMX primary and secondary deployments use rolling updates: update one node, verify health, update the other. Snapshot applies intentionally pause during mixed-version operation, then resume automatically when versions match.
 
 ## What is preserved
 
