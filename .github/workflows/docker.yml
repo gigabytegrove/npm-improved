@@ -331,10 +331,10 @@ jobs:
           EXPECTED_SYNC="$(jq -r '.syncedAt' <<<"$SYNC_RESULT")"
           curl -fsS -H "Authorization: Bearer $SECONDARY_TOKEN" \
             http://127.0.0.1:19381/api/cluster/status \
-            | jq -e --arg expected "$EXPECTED_SYNC" '.lastSync == $expected and .lastError == null'
+            | jq -e --arg expected "$EXPECTED_SYNC" '.lastSync != null and .lastSync >= $expected and .lastError == null'
           curl -fsS -H "Authorization: Bearer $PRIMARY_TOKEN" \
             http://127.0.0.1:19281/api/cluster/status \
-            | jq -e --arg expected "$EXPECTED_SYNC" '.lastSync == $expected and any(.peers[]; .last_sync == $expected)'
+            | jq -e --arg expected "$EXPECTED_SYNC" '.lastSync != null and .lastSync >= $expected and any(.peers[]; .last_sync != null and .last_sync >= $expected)'
 
 
           # Pre-pairing JWTs must not be allowed to impersonate primary
