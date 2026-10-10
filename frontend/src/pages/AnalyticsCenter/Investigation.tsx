@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  addNodeBlock, deleteNodeBlock, enableNodeScannerPreset, getNodeBlocks,
+  addNodeBlock, deleteNodeBlock, getNodeBlocks, getScannerPolicy, setScannerPolicy,
   type NodeBlockRule, type NodeReport,
 } from "src/api/backend";
 
@@ -27,6 +27,12 @@ export default function NodeInvestigation({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const scannerPolicy = useQuery({
+    queryKey: ["node-analytics-scanner-policy"],
+    queryFn: getScannerPolicy,
+    enabled: tab === "blocks",
+    refetchInterval: tab === "blocks" ? 30000 : false,
+  });
   const blockRules = useQuery({
     queryKey: ["node-analytics-block-rules"],
     queryFn: getNodeBlocks,
@@ -60,13 +66,17 @@ export default function NodeInvestigation({
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };
-  const enableScanners = async () => {
-    if (!window.confirm("Enable blocks for common scanner user-agent signatures on this node? These are claimed user agents and may be spoofed; legitimate scanning may also be blocked.")) return;
+  const changeScannerPolicy = async (enabled: boolean) => {
+    if (enabled && !window.confirm(
+      "Automatically deny requests claiming known scanner user agents on this node? User agents can be spoofed, and legitimate security scans may also match."
+    )) return;
     setBusy(true); setError(""); setMessage("");
     try {
-      const result = await enableNodeScannerPreset();
-      setMessage(count(result.added) + " known scanner signatures activated.");
-      await blockRules.refetch();
+      await setScannerPolicy(enabled);
+      setMessage(enabled
+        ? "Known scanner signature blocking is active for future requests on this node."
+        : "Known scanner signature blocking is disabled; custom rules are preserved.");
+      await Promise.all([blockRules.refetch(), scannerPolicy.refetch()]);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };
@@ -179,10 +189,20 @@ export default function NodeInvestigation({
         <div className="d-flex flex-wrap gap-2 mt-3">
           <button type="button" className="btn btn-danger" disabled={busy || !target.trim()}
             onClick={() => void apply()}>Block on this node</button>
-          <button type="button" className="btn btn-outline-secondary" disabled={busy}
-            onClick={() => void enableScanners()}>Enable known scanner signature blocking</button>
+          <button type="button"
+            className={`btn ${scannerPolicy.data?.enabled ? "btn-outline-warning" : "btn-outline-secondary"}`}
+            disabled={busy || scannerPolicy.isPending}
+            onClick={() => void changeScannerPolicy(!scannerPolicy.data?.enabled)}>
+            {scannerPolicy.data?.enabled ? "Disable automatic scanner blocking" : "Enable automatic scanner blocking"}
+          </button>
         </div>
-        <div className="text-secondary small mt-2">Known-scanner blocking is opt-in. It matches scanner user-agent signatures; it does not prove a request was malicious.</div>
+        <div className="text-secondary small mt-2">
+          Scanner protection: <strong>{scannerPolicy.data?.enabled ? "Active" : "Off"}</strong>
+          {scannerPolicy.data ? ` · ${scannerPolicy.data.activeSignatures}/${scannerPolicy.data.availableSignatures} known signatures` : ""}
+          . Nginx evaluates every incoming request against enabled signatures. This does not verify a crawler's identity,
+          block residential/IP-rotating bots automatically, or block known search engines.
+        </div>
+        {scannerPolicy.error ? <div className="text-danger small">{scannerPolicy.error.message}</div> : null}
       </div>
     </div>
     <div className="card mb-3">

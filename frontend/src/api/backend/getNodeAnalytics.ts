@@ -133,6 +133,10 @@ export async function exportNodeAnalytics(filters: NodeFilters): Promise<void> {
     hours: filters.hours,
     ...(filters.hostId ? { hostId: filters.hostId } : {}),
     ...(filters.statusClass ? { statusClass: filters.statusClass } : {}),
+    ...(filters.ip ? { ip: filters.ip } : {}),
+    ...(filters.userAgent ? { userAgent: filters.userAgent } : {}),
+    ...(filters.bot ? { bot: filters.bot } : {}),
+    ...(filters.connectionId ? { connectionId: filters.connectionId } : {}),
   } }, "npmi-node-analytics.csv");
 }
 
