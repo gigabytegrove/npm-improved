@@ -150,7 +150,7 @@ export default function InstanceSync() {
 
 						{message ? <Alert variant="success">{message}</Alert> : null}
 						{actionError ? <Alert variant="danger">{actionError}</Alert> : null}
-						{data.lastHeartbeatError ? (
+						{data.enabled && data.role === "secondary" && data.lastHeartbeatError ? (
 							<Alert variant="warning">
 								<strong>Configuration applied, but the primary did not confirm the sync heartbeat.</strong>{" "}
 								{data.lastHeartbeatError} The secondary will retry on its next scheduled synchronization.
@@ -519,8 +519,10 @@ export default function InstanceSync() {
 											setActionError("");
 											setMessage("");
 											try {
-												await runSync.mutateAsync();
-												setMessage("NPMX synchronization completed successfully.");
+												const result = await runSync.mutateAsync();
+												setMessage(result.heartbeatWarning
+													? "Configuration was applied, but the primary could not confirm the heartbeat. See warning above."
+													: "NPMX synchronization completed successfully.");
 											} catch (err) {
 												setActionError(err instanceof Error ? err.message : String(err));
 											}
