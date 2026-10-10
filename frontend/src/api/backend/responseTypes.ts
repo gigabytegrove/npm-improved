@@ -4,7 +4,7 @@ export interface HealthResponse {
 	status: string;
 	version: AppVersion;
 	setup: boolean;
-	node?: { hostname: string | null };
+	node?: { hostname: string | null; name?: string | null; role?: "primary" | "secondary" | null };
 }
 
 export interface TokenResponse {
