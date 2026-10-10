@@ -9,7 +9,7 @@ const ACME_INCLUDE = "include conf.d/include/letsencrypt-acme-challenge.conf;";
 
 // An image upgrade changes the templates, but does not automatically replace
 // host-specific .conf files persisted in /data. Refresh only hosts whose active
-// config still lacks the cluster-aware ACME location. Each replacement uses the
+// config still lacks the cluster-aware ACME location or still uses the\n// legacy Analytics Center deny variables, which can block ACME requests. Each replacement uses the
 // existing Nginx validation, rollback and reload transaction.
 export const refreshAcmeHostConfigs = async () => {
 	let attempted = 0;
@@ -36,7 +36,9 @@ export const refreshAcmeHostConfigs = async () => {
 					continue;
 				}
 			}
-			if (current.includes(ACME_INCLUDE)) continue;
+			if (current.includes(ACME_INCLUDE) &&
+				!current.includes("$npmi_analytics_block_ip") &&
+				!current.includes("$npmi_analytics_block_ua")) continue;
 			attempted++;
 			try {
 				await internalNginx.configure(model, type, host, {
