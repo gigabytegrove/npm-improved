@@ -31,6 +31,7 @@ const AnalyticsOverview = lazy(() => import("src/pages/AnalyticsCenter/Overview"
 const AnalyticsTrends = lazy(() => import("src/pages/AnalyticsCenter/Trends"));
 const AnalyticsTraffic = lazy(() => import("src/pages/AnalyticsCenter/Traffic"));
 const AnalyticsHosts = lazy(() => import("src/pages/AnalyticsCenter/Hosts"));
+const AnalyticsHostDetail = lazy(() => import("src/pages/AnalyticsCenter/HostDetail"));
 const AnalyticsStreams = lazy(() => import("src/pages/AnalyticsCenter/Streams"));
 const AnalyticsRequests = lazy(() => import("src/pages/AnalyticsCenter/Requests"));
 const AnalyticsConnections = lazy(() => import("src/pages/AnalyticsCenter/Connections"));
@@ -114,6 +115,7 @@ function Router() {
                     <Route path="trends" element={<AnalyticsTrends />} />
                     <Route path="traffic" element={<AnalyticsTraffic />} />
                     <Route path="hosts" element={<AnalyticsHosts />} />
+                    <Route path="hosts/detail" element={<AnalyticsHostDetail />} />
                     <Route path="streams" element={<AnalyticsStreams />} />
                     <Route path="requests" element={<AnalyticsRequests />} />
                     <Route path="connections" element={<AnalyticsConnections />} />
