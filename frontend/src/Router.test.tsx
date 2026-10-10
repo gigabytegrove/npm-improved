@@ -4,14 +4,15 @@ import type { ReactNode } from "react";
 import Router from "src/Router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { authState, sessionState } = vi.hoisted(() => ({
+const { authState, sessionState, healthState } = vi.hoisted(() => ({
 	authState: { authenticated: true, logout: vi.fn() },
 	sessionState: { isPending: false, isError: false, refetch: vi.fn() },
+	healthState: { data: { status: "OK", setup: true }, isLoading: false, isError: false },
 }));
 
 vi.mock("src/context", () => ({ useAuthState: () => authState }));
 vi.mock("src/hooks", () => ({
-	useHealth: () => ({ data: { status: "OK", setup: true }, isLoading: false, isError: false }),
+	useHealth: () => healthState,
 	useUser: () => sessionState,
 }));
 vi.mock("src/components", () => ({
@@ -52,6 +53,8 @@ describe("Router", () => {
 		authState.authenticated = true;
 		sessionState.isPending = false;
 		sessionState.isError = false;
+		healthState.isLoading = false;
+		healthState.isError = false;
 		window.history.replaceState(null, "", "/");
 	});
 
@@ -91,6 +94,7 @@ describe("Router", () => {
 
 	it("renders login immediately when credentials expire while health is unavailable", async () => {
 		authState.authenticated = false;
+		healthState.isError = true;
 		window.history.replaceState(null, "", "/login");
 		render(<Router />);
 		expect(await screen.findByRole("heading", { name: "Login" })).toBeVisible();
