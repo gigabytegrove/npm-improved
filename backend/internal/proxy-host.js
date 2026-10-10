@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import _ from "lodash";
 import errs from "../lib/error.js";
 import { castJsonIfNeed } from "../lib/helpers.js";
@@ -88,9 +89,31 @@ const internalProxyHost = {
 				freshRow.meta = newMeta;
 			}
 		} catch (err) {
-			await deleteUncommittedRow(proxyHostModel, row.id).catch((rollbackErr) => {
-				logger.error("Failed to remove uncommitted proxy host:", rollbackErr.message);
-			});
+			// A new host may already have a generated .conf even if SSL
+			// issuance or a later step fails. Revert both filesystem and
+			// database; removing only the row leaves an active ghost vhost
+			// that can shadow a later host with the same hostname.
+			try {
+				const configPath = internalNginx.getConfigName("proxy_host", row.id);
+				if (fs.existsSync(configPath)) {
+					await internalNginx.removeConfigTransactional(
+						proxyHostModel,
+						"proxy_host",
+						row,
+						{ operation: "failed-create-rollback", recordRevision: false },
+					);
+				}
+				await deleteUncommittedRow(proxyHostModel, row.id);
+			} catch (rollbackErr) {
+				// Do not delete the database row if we could not remove its
+				// active Nginx config: the record must remain visible for
+				// diagnosis and recovery instead of creating a hidden orphan.
+				logger.error(`CRITICAL: rollback of failed proxy host #${row.id} was incomplete:`, rollbackErr);
+				throw new errs.ConfigurationError(
+					`Proxy host creation failed; rollback of host #${row.id} could not finish. The record was preserved for safe recovery. Check server logs.`,
+					rollbackErr,
+				);
+			}
 			throw err;
 		}
 
