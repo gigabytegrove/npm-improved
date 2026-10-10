@@ -87,3 +87,15 @@
   .npmi-analytics-nav { flex-wrap: nowrap; }
   .npmi-analytics-nav-link { font-size: 13px; }
 }
+
+/* All Analytics section links remain underline-free in every interaction
+ * state; visible focus outline still communicates keyboard focus. */
+.npmi-analytics-nav a.npmi-analytics-nav-link,
+.npmi-analytics-nav a.npmi-analytics-nav-link:link,
+.npmi-analytics-nav a.npmi-analytics-nav-link:visited,
+.npmi-analytics-nav a.npmi-analytics-nav-link:hover,
+.npmi-analytics-nav a.npmi-analytics-nav-link:focus-visible,
+.npmi-analytics-nav a.npmi-analytics-nav-link:active {
+  text-decoration: none;
+  text-decoration-line: none;
+}
