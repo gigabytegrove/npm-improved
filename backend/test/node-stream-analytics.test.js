@@ -15,6 +15,8 @@ test("stream collector separates TCP/UDP sessions, handles rotation and ignores 
     time: new Date(Date.now()-10000).toISOString(),
     protocol:proto, status:"200", bytes_sent:String(sent),
     bytes_received:String(received), session_time:"1.250",
+    client_ip:"198.51.100.8", client_port:"51234", listen_port:"443",
+    upstream_addr:"172.18.0.21:8443",
   })+"\n";
   try {
     assert.equal(source.streamSourceId("stream-3_analytics.log"),3);
@@ -35,6 +37,16 @@ test("stream collector separates TCP/UDP sessions, handles rotation and ignores 
     assert.equal(report.udp,1);
     assert.equal(report.bytes_sent,320);
     assert.equal(report.streams.length,2);
+    const history=source.getNodeStreamSessions({hours:24});
+    assert.equal(history.total,2);
+    assert.equal(history.entries.length,2);
+    assert.equal(history.entries[0].client_ip,"198.51.100.8");
+    assert.equal(history.entries[0].client_port,51234);
+    assert.equal(history.entries[0].listen_port,443);
+    assert.equal(history.entries[0].upstream_addr,"172.18.0.21:8443");
+    assert.equal(source.getNodeStreamSessions({hours:24,clientIp:"198.51.100.8"}).total,2);
+    assert.equal(source.getNodeStreamSessions({hours:24,clientIp:"203.0.113.1"}).total,0);
+    assert.throws(()=>source.getNodeStreamSessions({hours:24,clientIp:"invalid"}),RangeError);
     assert.equal(report.timeline.reduce((total,row)=>total+row.sessions,0),2);
     assert.throws(()=>source.getNodeStreamAnalytics(9), RangeError);
   } finally {

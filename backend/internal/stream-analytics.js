@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import net from "node:net";
 import { getAnalyticsDatabase, getAnalyticsRetention } from "./proxy-analytics.js";
 import { global as logger } from "../logger.js";
 
@@ -33,7 +34,11 @@ function db() {
         status INTEGER NOT NULL,
         bytes_sent INTEGER NOT NULL,
         bytes_received INTEGER NOT NULL,
-        duration_ms REAL
+        duration_ms REAL,
+        client_ip TEXT,
+        client_port INTEGER,
+        listen_port INTEGER,
+        upstream_addr TEXT
       );
       CREATE INDEX IF NOT EXISTS analytics_stream_time ON analytics_stream_event(occurred_at,stream_id);
       CREATE TABLE IF NOT EXISTS analytics_stream_hour (
@@ -48,6 +53,13 @@ function db() {
       );
       CREATE INDEX IF NOT EXISTS analytics_stream_hour_time ON analytics_stream_hour(bucket);
     `);
+    const columns = new Set(connection.pragma("table_info(analytics_stream_event)").map((row) => row.name));
+    for (const [column,definition] of Object.entries({
+      client_ip:"TEXT",client_port:"INTEGER",listen_port:"INTEGER",upstream_addr:"TEXT",
+    })) {
+      if (!columns.has(column)) connection.exec(`ALTER TABLE analytics_stream_event ADD COLUMN ${column} ${definition}`);
+    }
+    connection.exec("CREATE INDEX IF NOT EXISTS analytics_stream_client_time ON analytics_stream_event(client_ip,occurred_at)");
     initialized = true;
   }
   return connection;
@@ -68,10 +80,21 @@ function sourceEvent(line, id, retentionMs) {
     !Number.isSafeInteger(sent) || sent < 0 ||
     !Number.isSafeInteger(received) || received < 0 ||
     (duration !== null && (!Number.isFinite(duration) || duration < 0))) return null;
+  const sourceIp = typeof raw.client_ip === "string" && net.isIP(raw.client_ip)
+    ? raw.client_ip : null;
+  const port = (value) => {
+    const number = Number(value);
+    return value !== "-" && value !== "" && Number.isSafeInteger(number) &&
+      number > 0 && number <= 65535 ? number : null;
+  };
+  const upstream = typeof raw.upstream_addr === "string" && raw.upstream_addr.length <= 253 &&
+    !/[\r\n]/.test(raw.upstream_addr) ? raw.upstream_addr : null;
   return {
     streamId: id,
     time: Math.floor(stamp / 1000), protocol, status, sent, received,
     duration: duration === null ? null : duration * 1000,
+    sourceIp,clientPort:port(raw.client_port),listenPort:port(raw.listen_port),
+    upstream,
   };
 }
 
@@ -102,8 +125,9 @@ function ingestFile(name, id) {
   }
   const lines = buffer.subarray(0,end+1).toString("utf8").split("\n");
   const insert = connection.prepare(`INSERT INTO analytics_stream_event
-    (stream_id,occurred_at,protocol,status,bytes_sent,bytes_received,duration_ms)
-    VALUES (?,?,?,?,?,?,?)`);
+    (stream_id,occurred_at,protocol,status,bytes_sent,bytes_received,duration_ms,
+      client_ip,client_port,listen_port,upstream_addr)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
   const rollup = connection.prepare(`INSERT INTO analytics_stream_hour
     (stream_id,bucket,protocol,status,sessions,bytes_sent,bytes_received)
     VALUES (?,?,?,?,?,?,?) ON CONFLICT(stream_id,bucket,protocol,status) DO UPDATE SET
@@ -115,7 +139,8 @@ function ingestFile(name, id) {
     for(const line of lines) {
       const value = sourceEvent(line, id, cutoff);
       if(!value) continue;
-      insert.run(id,value.time,value.protocol,value.status,value.sent,value.received,value.duration);
+      insert.run(id,value.time,value.protocol,value.status,value.sent,value.received,value.duration,
+        value.sourceIp,value.clientPort,value.listenPort,value.upstream);
       rollup.run(id,Math.floor(value.time/3600)*3600,value.protocol,value.status,1,value.sent,value.received);
       accepted++;
     }
@@ -200,4 +225,30 @@ export function getNodeStreamAnalytics(hours=24) {
     })),timeline,
     limitations:"TCP and UDP are counted as Nginx stream sessions, not HTTP requests; per-session metrics appear when the session ends.",
   };
+}
+
+/** Node-local stream-session history; records are written on session close. */
+export function getNodeStreamSessions({hours=24,streamId=null,clientIp=null,limit=50,offset=0}={}) {
+  if(![1,24,168,720,2160].includes(Number(hours)) ||
+    !Number.isSafeInteger(Number(limit)) || Number(limit)<1 || Number(limit)>100 ||
+    !Number.isSafeInteger(Number(offset)) || Number(offset)<0 || Number(offset)>10000)
+    throw new RangeError("Invalid session-history period or pagination");
+  if(streamId!==null && (!Number.isSafeInteger(Number(streamId)) || Number(streamId)<0))
+    throw new RangeError("Invalid stream identifier");
+  if(clientIp!==null && (typeof clientIp!=="string" || !net.isIP(clientIp)))
+    throw new RangeError("Invalid source IP");
+  const retained=getAnalyticsRetention();
+  if(Number(hours)>retained.rawDays*24) throw new RangeError("Individual stream sessions outside retained raw history");
+  const filter=["occurred_at >= ?"],values=[Math.floor(Date.now()/1000)-Number(hours)*3600];
+  if(streamId!==null) {filter.push("stream_id=?");values.push(Number(streamId));}
+  if(clientIp!==null) {filter.push("client_ip=?");values.push(clientIp);}
+  const condition=filter.join(" AND ");
+  const conn=db();
+  const total=conn.prepare(`SELECT COUNT(*) AS n FROM analytics_stream_event WHERE ${condition}`).get(...values).n;
+  const rows=conn.prepare(`SELECT id,stream_id,occurred_at,protocol,status,
+    bytes_sent,bytes_received,duration_ms,client_ip,client_port,listen_port,upstream_addr
+    FROM analytics_stream_event WHERE ${condition} ORDER BY occurred_at DESC,id DESC
+    LIMIT ? OFFSET ?`).all(...values,Number(limit),Number(offset));
+  return {total:Number(total),limit:Number(limit),offset:Number(offset),
+    entries:rows.map(row=>({...row,at:new Date(row.occurred_at*1000).toISOString()}))};
 }
