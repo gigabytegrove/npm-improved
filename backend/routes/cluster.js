@@ -10,6 +10,30 @@ const router = express.Router({
 	mergeParams: true,
 });
 
+// Nginx public ACME ingress. It can only return a bounded opaque Certbot
+// challenge token, never arbitrary filesystem content or an upstream response.
+router.get("/acme/:token", async (req, res, next) => {
+	try {
+		const result = await internalInstanceSync.resolveAcmeChallenge(req.params.token);
+		res.set({ "Cache-Control": "no-store", "Content-Type": "text/plain; charset=utf-8" });
+		res.status(result.status).send(result.value || "");
+	} catch (err) {
+		next(err);
+	}
+});
+
+// Peer lookups are signed with the existing NPMX shared secret and nonce;
+// only an enabled primary answers and no forwarding recursion is possible.
+router.get("/npmx/acme/:token", internalInstanceSync.requireNpmxAuth, async (req, res, next) => {
+	try {
+		const result = await internalInstanceSync.getAuthenticatedAcmeChallenge(req.params.token);
+		res.set({ "Cache-Control": "no-store", "Content-Type": "text/plain; charset=utf-8" });
+		res.status(result.status).send(result.value || "");
+	} catch (err) {
+		next(err);
+	}
+});
+
 // NPMX pairing is authenticated by a short-lived one-time pairing token and
 // an ephemeral X25519 key exchange. The persistent cluster secret is never
 // returned in plaintext.
