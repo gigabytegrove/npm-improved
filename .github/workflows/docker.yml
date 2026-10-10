@@ -385,10 +385,7 @@ jobs:
           docker exec npmi-npmx-primary sh -c '
             set -eu
             mkdir -p /data/nginx/proxy_host
-            printf "%s\\n" "server {" "  listen 80;" \\
-              "  server_name acme-orphan-ci.example.invalid;" \\
-              "  location / { return 404; }" "}" \\
-              > /data/nginx/proxy_host/999991.conf
+            printf "%s\\n" "server {" "  listen 80;" "  server_name acme-orphan-ci.example.invalid;" "  location / { return 404; }" "}" > /data/nginx/proxy_host/999991.conf
             nginx -t
             nginx -s reload
           '
