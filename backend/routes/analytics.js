@@ -13,6 +13,7 @@ import {
   getNodeAnalytics,
   getNodeAnalyticsRequests,
   getNodeClientProfile,
+  getNodeAgentProfile,
   parseNodeFilters,
 } from "../internal/node-analytics.js";
 
@@ -92,6 +93,13 @@ router.get("/node", async (req, res, next) => {
         };
       }),
     });
+  } catch (err) { next(err); }
+});
+
+router.get("/node/agent", async (req, res, next) => {
+  try {
+    await authorize(res);
+    res.status(200).send(getNodeAgentProfile(req.query.user_agent, reportFilters(req.query)));
   } catch (err) { next(err); }
 });
 
