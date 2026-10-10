@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  addNodeBlock, deleteNodeBlock, getNodeBlocks, getScannerPolicy, setScannerPolicy,
+  addNodeBlock, deleteNodeBlock, getNodeBlocks, getScannerPolicy, setScannerPolicy, getNodeClientProfile,
   type NodeBlockRule, type NodeReport,
 } from "src/api/backend";
 
@@ -22,11 +22,20 @@ export default function NodeInvestigation({
   onGoToBlocks: () => void;
 }) {
   const [blockType, setBlockType] = useState<NodeBlockRule["type"]>("ip");
+  const [inspectedIp, setInspectedIp] = useState<string | null>(null);
   const [target, setTarget] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const clientProfile = useQuery({
+    queryKey: ["analytics-client-profile", inspectedIp, report.hours, report.filters.hostId],
+    queryFn: () => getNodeClientProfile(inspectedIp!, {
+      hours: report.hours, hostId: report.filters.hostId,
+    }),
+    enabled: tab === "clients" && inspectedIp !== null,
+    refetchInterval: tab === "clients" && inspectedIp ? 20000 : false,
+  });
   const scannerPolicy = useQuery({
     queryKey: ["node-analytics-scanner-policy"],
     queryFn: getScannerPolicy,
@@ -98,6 +107,85 @@ export default function NodeInvestigation({
         <div className="small mt-2">Click an address to review its detailed request and connection history.</div>
       </div></div>
     </div>
+    {inspectedIp ? <div className="card mb-3">
+      <div className="card-header d-flex justify-content-between align-items-center">
+        <h3 className="card-title">Investigation: {inspectedIp}</h3>
+        <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => setInspectedIp(null)}>
+          Close investigation
+        </button>
+      </div>
+      {clientProfile.isPending ? <div className="card-body text-secondary">Loading this IP's history…</div> : null}
+      {clientProfile.error ? <div className="card-body text-danger">{clientProfile.error.message}</div> : null}
+      {clientProfile.data ? <div className="card-body">
+        <div className="row g-3 mb-3">
+          {([
+            ["Requests", count(clientProfile.data.requests)],
+            ["Routes", count(clientProfile.data.activeRoutes)],
+            ["Distinct user agents", count(clientProfile.data.distinctUserAgents)],
+            ["4xx errors", count(clientProfile.data.clientErrors)],
+            ["5xx errors", count(clientProfile.data.serverErrors)],
+            ["Denied", count(clientProfile.data.denied)],
+          ] as [string, string][]).map(([label,value])=><div className="col-6 col-md-2" key={label}>
+            <div className="text-secondary small">{label}</div><strong>{value}</strong>
+          </div>)}
+        </div>
+        <div className="small mb-3">
+          <strong>First observed:</strong> {clientProfile.data.firstSeen ? when(clientProfile.data.firstSeen) : "Unknown"}
+          <span className="mx-2">·</span>
+          <strong>Last observed:</strong> {clientProfile.data.lastSeen ? when(clientProfile.data.lastSeen) : "Unknown"}
+        </div>
+        <div className="row g-3">
+          <div className="col-lg-6">
+            <h4>Traffic trend</h4>
+            <div className="table-responsive" style={{maxHeight:240,overflowY:"auto"}}>
+              <table className="table table-sm">
+                <thead><tr><th>Time</th><th className="text-end">Requests</th><th className="text-end">Errors</th><th className="text-end">Blocked</th></tr></thead>
+                <tbody>{clientProfile.data.trend.map((point)=><tr key={point.at}>
+                  <td>{when(point.at)}</td><td className="text-end">{count(point.requests)}</td>
+                  <td className="text-end">{count(point.errors)}</td><td className="text-end">{count(point.blocked)}</td>
+                </tr>)}</tbody>
+              </table>
+            </div>
+          </div>
+          <div className="col-lg-6">
+            <h4>Routes visited</h4>
+            <div className="table-responsive" style={{maxHeight:240,overflowY:"auto"}}>
+              <table className="table table-sm"><thead><tr><th>Route</th><th className="text-end">Requests</th></tr></thead>
+              <tbody>{clientProfile.data.routes.map((row,i)=><tr key={i}>
+                <td>#{row.value}</td><td className="text-end">{count(row.requests)}</td>
+              </tr>)}</tbody></table>
+            </div>
+          </div>
+          <div className="col-lg-6">
+            <h4>User agents from this IP</h4>
+            <div className="table-responsive" style={{maxHeight:240,overflowY:"auto"}}>
+              <table className="table table-sm"><thead><tr><th>User agent</th><th className="text-end">Requests</th></tr></thead>
+                <tbody>{clientProfile.data.userAgents.map((row,i)=><tr key={i}>
+                  <td className="text-break">{row.value ?? "Unknown"}</td><td className="text-end">{count(row.requests)}</td>
+                </tr>)}</tbody>
+              </table>
+            </div>
+          </div>
+          <div className="col-lg-6">
+            <h4>Requested paths</h4>
+            <div className="table-responsive" style={{maxHeight:240,overflowY:"auto"}}>
+              <table className="table table-sm"><thead><tr><th>Path</th><th className="text-end">Requests</th></tr></thead>
+                <tbody>{clientProfile.data.paths.map((row,i)=><tr key={i}>
+                  <td className="text-break">{row.value ?? "/"}</td><td className="text-end">{count(row.requests)}</td>
+                </tr>)}</tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div className="d-flex flex-wrap gap-2 mt-3">
+          <button type="button" className="btn btn-outline-primary" onClick={()=>{
+            onFilterIp(inspectedIp); onGoToRequests();
+          }}>Full request / connection history</button>
+          <button type="button" className="btn btn-outline-danger" onClick={()=>prepare("ip",inspectedIp)}>Prepare IP block</button>
+        </div>
+        <p className="text-secondary small mt-3 mb-0">{clientProfile.data.limitations}</p>
+      </div> : null}
+    </div> : null}
     <div className="card">
       <div className="card-header"><h3 className="card-title">Top source IP addresses on this node</h3></div>
       <div className="table-responsive"><table className="table card-table table-vcenter">
@@ -106,7 +194,7 @@ export default function NodeInvestigation({
         <tbody>
           {report.ips.map((row) => <tr key={row.ip}>
             <td className="text-break"><button type="button" className="btn btn-link p-0" onClick={() => {
-              onFilterIp(row.ip); onGoToRequests();
+              setInspectedIp(row.ip);
             }}>{row.ip}</button></td>
             <td className="text-end">{count(row.requests)}</td><td className="text-end">{count(row.errors)}</td>
             <td>{when(row.firstSeen)}</td><td>{when(row.lastSeen)}</td>

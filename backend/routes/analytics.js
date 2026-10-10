@@ -12,6 +12,7 @@ import {
   exportNodeAnalyticsCsv,
   getNodeAnalytics,
   getNodeAnalyticsRequests,
+  getNodeClientProfile,
   parseNodeFilters,
 } from "../internal/node-analytics.js";
 
@@ -91,6 +92,14 @@ router.get("/node", async (req, res, next) => {
         };
       }),
     });
+  } catch (err) { next(err); }
+});
+
+router.get("/node/client", async (req, res, next) => {
+  try {
+    await authorize(res);
+    const report = getNodeClientProfile(req.query.ip, reportFilters(req.query));
+    res.status(200).send(report);
   } catch (err) { next(err); }
 });
 

@@ -168,3 +168,29 @@ export async function deleteNodeBlock(id: number): Promise<NodeBlockRule> {
 export async function enableNodeScannerPreset(): Promise<{added: number}> {
   return api.post({ url: "/analytics/blocks/scanner-presets", data: {} });
 }
+
+export interface ClientDimension {
+  value: string | number | null;
+  requests: number;
+  firstSeen: string;
+  lastSeen: string;
+}
+export interface NodeClientProfile {
+  ip: string; scope: "local-node"; hours: NodeHours;
+  requests: number;firstSeen:string|null;lastSeen:string|null;
+  activeRoutes:number;distinctUserAgents:number;bytesOut:number;
+  clientErrors:number;serverErrors:number;denied:number;
+  trend:Array<{at:string;requests:number;errors:number;blocked:number}>;
+  routes:ClientDimension[];
+  userAgents:ClientDimension[];
+  botClasses:ClientDimension[];
+  methods:ClientDimension[];
+  statusCodes:ClientDimension[];
+  paths:ClientDimension[];
+  limitations:string;
+}
+export async function getNodeClientProfile(ip:string,filters:NodeFilters):Promise<NodeClientProfile> {
+  return api.get({url:"/analytics/node/client",params:{
+    ip,hours:filters.hours,...(filters.hostId ? {hostId:filters.hostId}:{}),
+  }});
+}
