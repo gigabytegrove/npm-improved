@@ -3,6 +3,8 @@ import { ProxyAgent } from "proxy-agent";
 import { debug, remoteVersion as logger } from "../logger.js";
 import pjson from "../package.json" with { type: "json" };
 
+const RELEASE_REQUEST_TIMEOUT_MS = 8_000;
+const MAX_RELEASE_RESPONSE_BYTES = 1024 * 1024;
 const VERSION_URL = "https://api.github.com/repos/gigabytegrove/npm-improved/releases/latest";
 const BUILD_VERSION_PATTERN = /^v?(\d+)\.(\d+)\.(\d+)/;
 
@@ -24,6 +26,11 @@ const getCurrentVersion = () => {
 
 const internalRemoteVersion = {
 	cache_timeout: 1000 * 60 * 15,
+	unavailable: () => ({
+		current: getCurrentVersion(), latest: null, update_available: false,
+		release_name: null, release_notes: null, published_at: null,
+		release_url: null,
+	}),
 	last_result: null,
 	last_fetch_time: null,
 
@@ -86,7 +93,11 @@ const internalRemoteVersion = {
 					let rawData = "";
 					res.on("data", (chunk) => {
 						rawData += chunk;
+							if (rawData.length > MAX_RELEASE_RESPONSE_BYTES) {
+								res.destroy(new Error("GitHub release response is too large"));
+							}
 					});
+					res.on("error", reject);
 					res.on("end", () => {
 						resolve({
 							statusCode: res.statusCode || 0,
@@ -94,8 +105,9 @@ const internalRemoteVersion = {
 						});
 					});
 				})
-				.on("error", (err) => {
-					reject(err);
+				.on("error", reject)
+				.setTimeout(RELEASE_REQUEST_TIMEOUT_MS, function () {
+					this.destroy(new Error("GitHub release check timed out"));
 				});
 		});
 	},
