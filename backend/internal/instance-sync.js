@@ -212,6 +212,13 @@ const getRow = async () => {
 		meta.peers = [];
 		changed = true;
 	}
+	// A secondary receives the primary's user table on first pairing/sync.
+	// Tokens issued before this boundary could refer to a different user ID.
+	// Record the boundary once, never on each normal snapshot refresh.
+	if (row.value === "enabled" && meta.role === "secondary" && !meta.write_session_floor) {
+		meta.write_session_floor = Math.ceil(Date.now() / 1000);
+		changed = true;
+	}
 	if (changed) {
 		await settingModel.query().findById(SETTING_ID).patch({ meta });
 		row.meta = meta;
@@ -665,6 +672,7 @@ const internalInstanceSync = {
 				...meta,
 				role: "secondary",
 				primary_url: primaryUrl,
+				write_session_floor: Math.ceil(Date.now() / 1000),
 				last_error: null,
 				primary_status: payload.primary || null,
 			},
@@ -965,6 +973,11 @@ const internalInstanceSync = {
 			const primaryUrl = normalizeUrl(meta.primary_url, "Primary node URL", true);
 			const selfId = String(meta.node_id || "");
 			const authUserId = await validateLocalActor(res.locals.token);
+			if (authUserId.issuedAt < Number(meta.write_session_floor || 0)) {
+				throw new errs.ValidationError(
+					"This sign-in predates NPMX pairing or the safe-write upgrade. Sign out and sign in again to make configuration changes.",
+				);
+			}
 			const preflight = await npmxRequest(primaryUrl, secret, selfId, "/status");
 			if (!preflight.ok) {
 				throw new errs.ValidationError("Primary node is unavailable. Configuration was not changed.");

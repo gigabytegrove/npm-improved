@@ -317,6 +317,14 @@ jobs:
           echo "$SYNC_RESULT"
           jq -e '.ok == true and .primary.protocol == "npmx"' <<<"$SYNC_RESULT"
 
+          # A newly paired secondary now has the primary's user/permission
+          # database. Discard tokens from the pre-pairing local user table.
+          SECONDARY_TOKEN="$(curl -fsS -H 'Content-Type: application/json' \
+            -d '{"identity":"primary@example.com","secret":"primary-password-12345"}' \
+            http://127.0.0.1:19381/api/tokens | jq -r '.token')"
+          test -n "$SECONDARY_TOKEN" && test "$SECONDARY_TOKEN" != "null"
+
+
           PRIMARY_PAGE=""
           SECONDARY_PAGE=""
           for attempt in $(seq 1 20); do
