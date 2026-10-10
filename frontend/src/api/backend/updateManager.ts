@@ -48,6 +48,7 @@ export interface UpdateCoordination {
 
 export interface UpdateManagerResponse {
 	release: UpdateRelease;
+	releaseError?: string | null;
 	capabilities: UpdateCapabilities;
 	coordination: UpdateCoordination;
 	status: UpdateStatus;

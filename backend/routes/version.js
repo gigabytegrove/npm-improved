@@ -59,7 +59,16 @@ router
 		try {
 			await res.locals.access.can("settings:get");
 			const refresh = req.query.refresh === "1" || req.query.refresh === "true";
-			const release = await internalRemoteVersion.get(refresh);
+			// Progress is local and must not depend on GitHub availability.
+			let releaseError = null;
+			let release;
+			try {
+				release = await internalRemoteVersion.get(refresh);
+			} catch (error) {
+				releaseError = error instanceof Error ? error.message : "Release check unavailable";
+				release = internalRemoteVersion.unavailable();
+				debug(logger, `Remote version unavailable: ${releaseError}`);
+			}
 			await internalUpdateManager.reconcileAudit().catch((err) => {
 				debug(logger, `Update audit reconciliation failed: ${err}`);
 			});
@@ -71,6 +80,7 @@ router
 			const sync = await internalInstanceSync.getStatus();
 			res.status(200).send({
 				release,
+				release_error: releaseError,
 				capabilities: internalUpdateManager.capabilities(),
 				coordination: {
 					instance_sync_enabled: Boolean(sync.enabled),

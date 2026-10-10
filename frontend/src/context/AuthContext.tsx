@@ -52,7 +52,10 @@ function AuthProvider({ children, tokenRefreshInterval = 5 * 60 * 1000 }: Props)
 				queryClient.clear();
 				setTwoFactorChallenge(null);
 				if (window.location.pathname !== "/login") {
+					// Update the URL and auth state together without a hard reload. The
+					// Router renders Login directly, with no intermediate error view.
 					window.history.replaceState(null, "", "/login");
+					window.dispatchEvent(new PopStateEvent("popstate"));
 				}
 			}
 		};
