@@ -1,6 +1,7 @@
 import express from "express";
 import os from "node:os";
 import jwtdecode from "../lib/express/jwt-decode.js";
+import { addNodeBlockRule, deleteNodeBlockRule, listNodeBlockRules, getNodeBlockAudit, enableKnownScannerBlocking } from "../internal/analytics-blocking.js";
 import internalProxyHost from "../internal/proxy-host.js";
 import internalRedirectionHost from "../internal/redirection-host.js";
 import internalDeadHost from "../internal/dead-host.js";
@@ -34,10 +35,12 @@ const authorize = async (res) => {
   await res.locals.access.can("settings:get");
 };
 
-const reportFilters = (query) => parseNodeFilters({
-  hours: query.hours,
-  host_id: query.host_id,
-  status_class: query.status_class,
+const reportFilters = (query) => ({
+  ...parseNodeFilters(query),
+  ip: query.ip,
+  user_agent: query.user_agent,
+  bot: query.bot,
+  connection_id: query.connection_id,
 });
 
 router.get("/node", async (req, res, next) => {
@@ -109,6 +112,51 @@ router.get("/node/export", async (req, res, next) => {
     res.set("Content-Disposition", 'attachment; filename="npmi-node-analytics.csv"');
     res.set("X-Analytics-Truncated", String(result.truncated));
     res.status(200).send(result.csv);
+  } catch (err) { next(err); }
+});
+
+/**
+ * Blocking is local to the inspected node. Only administrators allowed to
+ * change protection settings can mutate deny rules. Nginx test/reload and
+ * rollback happen before acknowledging successful activation.
+ */
+const authorizeWrite = async (res) => {
+  await res.locals.access.can("settings:update", "http-protection");
+};
+router.get("/blocks", async (_req, res, next) => {
+  try {
+    await authorize(res);
+    res.status(200).send({ rules: listNodeBlockRules(), audit: getNodeBlockAudit() });
+  } catch (err) { next(err); }
+});
+router.post("/blocks", async (req, res, next) => {
+  try {
+    await authorizeWrite(res);
+    const operator = res.locals.access.token.getUserId(1);
+    if (!req.body || typeof req.body !== "object" || Array.isArray(req.body))
+      throw new RangeError("Rule body must be an object");
+    const rule = addNodeBlockRule({
+      type: req.body.type,
+      target: req.body.target,
+      note: req.body.note || "",
+      operator,
+    });
+    res.status(201).send(rule);
+  } catch (err) { next(err); }
+});
+router.delete("/blocks/:id", async (req, res, next) => {
+  try {
+    await authorizeWrite(res);
+    const operator = res.locals.access.token.getUserId(1);
+    const id = Number(req.params.id);
+    res.status(200).send(deleteNodeBlockRule(id, operator));
+  } catch (err) { next(err); }
+});
+router.post("/blocks/scanner-presets", async (_req, res, next) => {
+  try {
+    await authorizeWrite(res);
+    const operator = res.locals.access.token.getUserId(1);
+    res.status(200).send(enableKnownScannerBlocking(operator));
   } catch (err) { next(err); }
 });
 
