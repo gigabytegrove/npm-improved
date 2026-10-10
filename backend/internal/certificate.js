@@ -8,6 +8,7 @@ import { ProxyAgent } from "proxy-agent";
 import tempWrite from "temp-write";
 import dnsPlugins from "../certbot/dns-plugins.json" with { type: "json" };
 import { installPlugin } from "../lib/certbot.js";
+import { explainCertbotFailure, readNewCertbotLog, snapshotCertbotLog } from "../lib/certbot-diagnostics.js";
 import { applyAtomicCertificateFiles, runCertificateMutationWithRollback } from "../lib/certificate-transaction.js";
 import { calculateCertificateLifecycle, normalizeCertificateLifecyclePolicy } from "../lib/certificate-lifecycle.js";
 import { useLetsencryptServer, useLetsencryptStaging } from "../lib/config.js";
@@ -1099,9 +1100,16 @@ const internalCertificate = {
 
 		logger.info(`Command: ${certbotCommand} ${args ? args.join(" ") : ""}`);
 
-		const result = await utils.execFile(certbotCommand, args, adds.opts);
-		logger.success(result);
-		return result;
+		const logSnapshot = snapshotCertbotLog();
+		try {
+			const result = await utils.execFile(certbotCommand, args, adds.opts);
+			logger.success(result);
+			return result;
+		} catch (err) {
+			const message = explainCertbotFailure(readNewCertbotLog(logSnapshot), certificate.domain_names);
+			logger.error("Let's Encrypt HTTP-01 failed: " + message);
+			throw new error.ValidationError(message, err);
+		}
 	},
 
 	/**
@@ -1165,10 +1173,15 @@ const internalCertificate = {
 
 		logger.info(`Command: ${certbotCommand} ${args ? args.join(" ") : ""}`);
 
+		const logSnapshot = snapshotCertbotLog();
 		try {
 			const result = await utils.execFile(certbotCommand, args, adds.opts);
 			logger.info(result);
 			return result;
+		} catch (err) {
+			const message = explainCertbotFailure(readNewCertbotLog(logSnapshot), certificate.domain_names);
+			logger.error("Let's Encrypt DNS-01 failed: " + message);
+			throw new error.ValidationError(message, err);
 		} finally {
 			// Remove the credentials file whether certbot succeeded or failed.
 			//
