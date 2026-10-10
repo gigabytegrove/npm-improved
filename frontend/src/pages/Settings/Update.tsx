@@ -75,6 +75,34 @@ const badgeClass = (state?: string) => {
 	return "bg-secondary-lt text-secondary";
 };
 
+
+/** Existing native host service cannot replace its own root-owned programs
+ * from inside the unprivileged application container. Generate a verified,
+ * copy-and-run one-time bootstrap for that precise host project instead.
+ */
+const quoteShell = (value: string) => `'${value.replace(/'/g, "'\\''")}'`;
+const hostUpdaterBootstrap = (projectDir: string, version: string) => {
+	if (!/^v?\\d+\\.\\d+\\.\\d+$/.test(version)) return null;
+	const release = version.startsWith("v") ? version : `v${version}`;
+	return [
+		"set -euo pipefail",
+		`NPMI_PROJECT=${quoteShell(projectDir)}`,
+		`NPMI_RELEASE=${quoteShell(release)}`,
+		'NPMI_ASSET="npm-improved-${NPMI_RELEASE}-host-updater.tar.gz"',
+		'NPMI_SUMS="npm-improved-${NPMI_RELEASE}-SHA256SUMS.txt"',
+		'NPMI_TMP="$(mktemp -d)"',
+		'trap \'rm -rf "$NPMI_TMP"\' EXIT',
+		'cd "$NPMI_TMP"',
+		'NPMI_BASE="https://github.com/gigabytegrove/npm-improved/releases/download/${NPMI_RELEASE}"',
+		'curl -fsSL "$NPMI_BASE/$NPMI_SUMS" -o "$NPMI_SUMS"',
+		'curl -fsSL "$NPMI_BASE/$NPMI_ASSET" -o "$NPMI_ASSET"',
+		'grep -F "  $NPMI_ASSET" "$NPMI_SUMS" > selected-checksum.txt',
+		'sha256sum -c selected-checksum.txt',
+		'tar -xzf "$NPMI_ASSET"',
+		'sudo bash scripts/install-host-updater "$NPMI_PROJECT"',
+	].join("\\n");
+};
+
 type AuthAction = "update" | "rollback" | "restart";
 
 export default function Update() {
@@ -108,6 +136,9 @@ export default function Update() {
 	const rolling = Boolean(data?.coordination?.instanceSyncEnabled);
 	const canRollback = Boolean(data?.status?.previousImage);
 	const progress = UPDATE_PROGRESS[data?.status?.state || "idle"] ?? 0;
+	const bootstrapCommand = data?.capabilities?.hostProjectDir && data?.release?.current
+		? hostUpdaterBootstrap(data.capabilities.hostProjectDir, data.release.current)
+		: null;
 
 	const published = useMemo(() => {
 		if (!data?.release?.publishedAt) return null;
@@ -243,24 +274,26 @@ export default function Update() {
 							) : null}
 						</div>
 
-						<div className="d-grid gap-2" style={{ minWidth: "13rem" }}>
-							<Button
-								actionType="primary"
-								onClick={() => openAuth("update")}
-								disabled={!updaterReady || !updateAvailable || active || runningAction !== null}
-							>
-								<IconDownload size={18} />
-								Update to {data?.release?.latest || "latest"}
-							</Button>
-							<div className="text-secondary small text-center">
-								Admin password required.
+						{updateAvailable ? (
+							<div className="d-grid gap-2" style={{ minWidth: "13rem" }}>
+								<Button
+									actionType="primary"
+									onClick={() => openAuth("update")}
+									disabled={!updaterReady || active || runningAction !== null}
+								>
+									<IconDownload size={18} />
+									Update to {data?.release?.latest || "latest"}
+								</Button>
+								<div className="text-secondary small text-center">
+									Admin password required.
+								</div>
 							</div>
-						</div>
+						) : null}
 					</div>
 				</div>
 			</div>
 
-			{rolling ? (
+			{rolling && (updateAvailable || active) ? (
 				<Alert variant="info">
 					<strong>Rolling NPMX update — {data?.coordination?.role} node</strong>
 					<div className="mt-1">
@@ -280,21 +313,43 @@ export default function Update() {
 				</Alert>
 			) : null}
 
-			{updaterReady ? (
-				<div className="alert alert-info">
-					<strong>Native host updater: {data?.capabilities?.hostUpdaterVersion || "unknown"}</strong>
+			{updaterReady && !data?.capabilities?.hostUpdaterAutomaticMaintenance ? (
+				<Alert variant="warning">
+					<strong>Native host updater: legacy — one-time host upgrade needed</strong>
 					<div className="mt-1">
-						{data?.capabilities?.hostUpdaterAutomaticMaintenance
-							? "Automatic host updater maintenance is enabled. Future releases upgrade both the application and its native updater without a secondary container."
-							: "Legacy host updater detected. Install the managed native host updater package once to enable automatic maintenance."}
+						The application has updated successfully, but its root-owned host updater
+						cannot upgrade itself from inside Docker. The host service still needs
+						a one-time managed installation to enable future automatic maintenance
+						and report the physical hostname. No new containers are involved.
 					</div>
+					{bootstrapCommand ? (
+						<details className="mt-2">
+							<summary className="fw-semibold">One-time command for this host</summary>
+							<div className="small mt-2">
+								Run on the Linux Docker host for this NPMi installation (not inside the container).
+								The official release archive is checked against its published SHA-256 checksum
+								before the native service is installed.
+							</div>
+							<pre className="mt-2 p-2 border rounded overflow-auto user-select-all"><code>{bootstrapCommand}</code></pre>
+							<Button type="button" onClick={() => {
+								void navigator.clipboard.writeText(bootstrapCommand).catch((err) =>
+									setActionError(err instanceof Error ? err.message : "Clipboard unavailable. Select and copy the command above."),
+								);
+							}}>
+								Copy host command
+							</Button>
+						</details>
+					) : <div className="mt-2">Set NPM_HOST_PROJECT_DIR and install the managed native updater on the Docker host.</div>}
 					{data?.capabilities?.hostUpdaterMaintenanceError ? (
-						<div className="mt-1 text-warning">
-							Last host-updater maintenance attempt: {data.capabilities.hostUpdaterMaintenanceError}.
-							The native host timer will retry.
+						<div className="mt-2 text-danger">
+							Last host-updater maintenance error: {data.capabilities.hostUpdaterMaintenanceError}
 						</div>
 					) : null}
-				</div>
+				</Alert>
+			) : data?.capabilities?.hostUpdaterMaintenanceError ? (
+				<Alert variant="warning">
+					Host updater maintenance reported: {data.capabilities.hostUpdaterMaintenanceError}
+				</Alert>
 			) : null}
 			{data?.status?.error ? (
 				<Alert variant="danger">
