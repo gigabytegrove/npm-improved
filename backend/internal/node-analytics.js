@@ -359,3 +359,53 @@ export function getNodeClientProfile(ip, filters = {}) {
     limitations:"IP addresses can represent NAT, proxies and shared networks; bot classes are inferred from self-declared user agents.",
   };
 }
+
+/**
+ * One user-agent's traffic, grouped by source IP, host, bot label and time.
+ * Claims about the client software are not cryptographic proof.
+ */
+export function getNodeAgentProfile(userAgent, filters = {}) {
+  const { hours, hostId } = parseNodeFilters(filters);
+  if (typeof userAgent !== "string" || !userAgent || userAgent.length > 1024)
+    throw new RangeError("Invalid user-agent string");
+  const cutoff = Math.floor(Date.now()/1000) - hours*3600;
+  const where = "occurred_at >= ? AND user_agent = ?" +
+    (hostId === null ? "" : " AND host_id = ?");
+  const args = hostId === null ? [cutoff, userAgent] : [cutoff,userAgent,hostId];
+  const db = getAnalyticsDatabase();
+  const summary = db.prepare(`SELECT COUNT(*) AS requests,
+    COUNT(DISTINCT client_ip) AS unique_ips,
+    COUNT(DISTINCT host_id) AS routes,
+    SUM(CASE WHEN status >= 400 THEN 1 ELSE 0 END) AS errors,
+    SUM(CASE WHEN block_reason IS NOT NULL THEN 1 ELSE 0 END) AS blocked,
+    MIN(occurred_at) AS first_seen,MAX(occurred_at) AS last_seen
+    FROM analytics_event WHERE ${where}`).get(...args);
+  const stride = hours === 1 ? 60 : hours <= 24 ? 3600 : 86400;
+  const timeline = db.prepare(`SELECT CAST(occurred_at/? AS INTEGER)*? AS bucket,
+    COUNT(*) AS requests,SUM(CASE WHEN status>=400 THEN 1 ELSE 0 END) AS errors,
+    SUM(CASE WHEN block_reason IS NOT NULL THEN 1 ELSE 0 END) AS blocked
+    FROM analytics_event WHERE ${where} GROUP BY bucket ORDER BY bucket`)
+    .all(stride,stride,...args).map(row=>({
+      at:new Date(row.bucket*1000).toISOString(),requests:Number(row.requests),
+      errors:Number(row.errors),blocked:Number(row.blocked),
+    }));
+  const breakdown=(field,limit)=>db.prepare(`SELECT ${field} AS value,
+    COUNT(*) AS requests,MIN(occurred_at) AS first_seen,MAX(occurred_at) AS last_seen
+    FROM analytics_event WHERE ${where} GROUP BY ${field}
+    ORDER BY requests DESC LIMIT ?`).all(...args,limit).map(row=>({
+      value:row.value,requests:Number(row.requests),
+      first_seen:new Date(row.first_seen*1000).toISOString(),
+      last_seen:new Date(row.last_seen*1000).toISOString(),
+    }));
+  return {
+    user_agent:userAgent,scope:"local-node",hours,requests:Number(summary.requests),
+    unique_ips:Number(summary.unique_ips||0),routes:Number(summary.routes||0),
+    errors:Number(summary.errors||0),blocked:Number(summary.blocked||0),
+    first_seen:summary.first_seen===null?null:new Date(summary.first_seen*1000).toISOString(),
+    last_seen:summary.last_seen===null?null:new Date(summary.last_seen*1000).toISOString(),
+    timeline,ips:breakdown("client_ip",100),route_breakdown:breakdown("host_id",50),
+    paths:breakdown("path",30),bot_classes:breakdown("bot_class",15),
+    status_codes:breakdown("status",30),
+    limitations:"User-agent strings are supplied by clients and may be forged. A shared user agent is not proof that requests originate from one device.",
+  };
+}

@@ -194,3 +194,18 @@ export async function getNodeClientProfile(ip:string,filters:NodeFilters):Promis
     ip,hours:filters.hours,...(filters.hostId ? {hostId:filters.hostId}:{}),
   }});
 }
+
+export interface NodeAgentProfile {
+  userAgent:string;scope:"local-node";hours:NodeHours;requests:number;
+  uniqueIps:number;routes:number;errors:number;blocked:number;
+  firstSeen:string|null;lastSeen:string|null;
+  timeline:Array<{at:string;requests:number;errors:number;blocked:number}>;
+  ips:ClientDimension[];routeBreakdown:ClientDimension[];
+  paths:ClientDimension[];botClasses:ClientDimension[];
+  statusCodes:ClientDimension[];limitations:string;
+}
+export async function getNodeAgentProfile(userAgent:string, filters:NodeFilters):Promise<NodeAgentProfile>{
+  return api.get({url:"/analytics/node/agent",params:{
+    userAgent,hours:filters.hours,...(filters.hostId?{hostId:filters.hostId}:{}),
+  }});
+}

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  addNodeBlock, deleteNodeBlock, getNodeBlocks, getScannerPolicy, setScannerPolicy, getNodeClientProfile,
+  addNodeBlock, deleteNodeBlock, getNodeBlocks, getScannerPolicy, setScannerPolicy, getNodeClientProfile, getNodeAgentProfile,
   type NodeBlockRule, type NodeReport,
 } from "src/api/backend";
 
@@ -23,11 +23,20 @@ export default function NodeInvestigation({
 }) {
   const [blockType, setBlockType] = useState<NodeBlockRule["type"]>("ip");
   const [inspectedIp, setInspectedIp] = useState<string | null>(null);
+  const [inspectedAgent, setInspectedAgent] = useState<string | null>(null);
   const [target, setTarget] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const agentProfile = useQuery({
+    queryKey: ["analytics-agent-profile", inspectedAgent, report.hours, report.filters.hostId],
+    queryFn: () => getNodeAgentProfile(inspectedAgent!, {
+      hours: report.hours, hostId: report.filters.hostId,
+    }),
+    enabled: tab === "agents" && inspectedAgent !== null,
+    refetchInterval: tab === "agents" && inspectedAgent ? 20000 : false,
+  });
   const clientProfile = useQuery({
     queryKey: ["analytics-client-profile", inspectedIp, report.hours, report.filters.hostId],
     queryFn: () => getNodeClientProfile(inspectedIp!, {
@@ -210,6 +219,61 @@ export default function NodeInvestigation({
   </>;
 
   if (tab === "agents") return <>
+    {inspectedAgent ? <div className="card mb-3">
+      <div className="card-header d-flex justify-content-between align-items-center gap-2">
+        <h3 className="card-title">User-agent investigation</h3>
+        <button type="button" className="btn btn-sm btn-outline-secondary"
+          onClick={() => setInspectedAgent(null)}>Close</button>
+      </div>
+      <div className="card-body">
+        <div className="text-break small mb-3">{inspectedAgent}</div>
+        {agentProfile.isPending ? <div className="text-secondary">Loading agent traffic…</div> : null}
+        {agentProfile.error ? <div className="text-danger">{agentProfile.error.message}</div> : null}
+        {agentProfile.data ? <>
+          <div className="row g-3 mb-3">
+            {([
+              ["Requests", count(agentProfile.data.requests)],
+              ["Source IPs", count(agentProfile.data.uniqueIps)],
+              ["Routes", count(agentProfile.data.routes)],
+              ["HTTP errors", count(agentProfile.data.errors)],
+              ["Denied", count(agentProfile.data.blocked)],
+            ] as [string,string][]).map(([label,value])=><div className="col-6 col-md-2" key={label}>
+              <div className="text-secondary small">{label}</div><strong>{value}</strong>
+            </div>)}
+          </div>
+          <p className="small">
+            First: {agentProfile.data.firstSeen ? when(agentProfile.data.firstSeen) : "Unknown"}
+            {" · "}Last: {agentProfile.data.lastSeen ? when(agentProfile.data.lastSeen) : "Unknown"}
+          </p>
+          <div className="row g-3">
+            {([
+              ["Traffic trend",agentProfile.data.timeline.map(row=>({value:when(row.at),requests:row.requests}))],
+              ["Source IPs",agentProfile.data.ips],
+              ["Routes",agentProfile.data.routeBreakdown],
+              ["Top paths",agentProfile.data.paths],
+              ["HTTP status codes",agentProfile.data.statusCodes],
+            ] as Array<[string,Array<{value:string|number|null;requests:number}>]>).map(([label,entries])=><div className="col-lg-6" key={label}>
+              <h4>{label}</h4>
+              <div className="table-responsive" style={{maxHeight:230,overflowY:"auto"}}>
+                <table className="table table-sm"><thead><tr><th>Value</th><th className="text-end">Requests</th></tr></thead>
+                  <tbody>{entries.map((entry,i)=><tr key={i}>
+                    <td className="text-break">{entry.value ?? "Unknown"}</td>
+                    <td className="text-end">{count(entry.requests)}</td>
+                  </tr>)}</tbody></table>
+              </div>
+            </div>)}
+          </div>
+          <div className="d-flex gap-2 flex-wrap mt-3">
+            <button type="button" className="btn btn-outline-primary" onClick={()=>{
+              onFilterAgent(inspectedAgent);onGoToRequests();
+            }}>Full request history</button>
+            <button type="button" className="btn btn-outline-danger"
+              onClick={()=>prepare("user_agent",inspectedAgent.slice(0,160))}>Prepare agent block</button>
+          </div>
+          <p className="text-secondary small mt-3 mb-0">{agentProfile.data.limitations}</p>
+        </> : null}
+      </div>
+    </div> : null}
     <div className="card mb-3">
       <div className="card-header"><h3 className="card-title">Bot and automation signals</h3></div>
       <div className="card-body text-secondary small">
@@ -235,7 +299,7 @@ export default function NodeInvestigation({
           <td className="text-break">{row.label}</td><td className="text-end">{count(row.requests)}</td>
           <td><div className="d-flex flex-wrap gap-1">
             <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => {
-              onFilterAgent(row.label); onGoToRequests();
+              setInspectedAgent(row.label);
             }}>History</button>
             <button type="button" className="btn btn-sm btn-outline-danger" onClick={() =>
               prepare("user_agent", row.label.slice(0, 160))}>Prepare block</button>
