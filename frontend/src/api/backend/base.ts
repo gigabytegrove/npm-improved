@@ -47,15 +47,23 @@ function buildBody(data?: Record<string, any>): string | undefined {
 
 // Handle authentication loss *before* attempting to decode an error body.
 // nginx, proxies and some API errors may return non-JSON 401 responses.
-export function expireUnauthorizedResponse(response: Pick<Response, "status">, authenticatedRequest = true) {
-	if (response.status === 401 && authenticatedRequest && AuthStore.token) {
-		AuthStore.clear(); // AuthProvider reacts immediately; no page reload required.
+export function expireUnauthorizedResponse(
+	response: Pick<Response, "status">,
+	authenticatedRequest = true,
+	requestToken?: string,
+) {
+	const activeToken = AuthStore.token?.token;
+	// A request may finish after the five-minute refresh has installed a
+	// newer token. Never let its stale 401 revoke the refreshed session.
+	if (response.status === 401 && authenticatedRequest && activeToken &&
+		(!requestToken || requestToken === activeToken)) {
+		AuthStore.clear();
 	}
 }
 
-async function processResponse(response: Response, authenticatedRequest = true) {
+async function processResponse(response: Response, authenticatedRequest = true, requestToken?: string) {
 	observeBackendNode(response.headers?.get("X-NPMi-Node-Hostname") ?? null);
-	expireUnauthorizedResponse(response, authenticatedRequest);
+	expireUnauthorizedResponse(response, authenticatedRequest, requestToken);
 	let payload: any;
 	try {
 		payload = await response.json();
@@ -82,18 +90,19 @@ async function baseGet({ url, params }: GetArgs, abortController?: AbortControll
 	const headers = buildAuthHeader();
 	const signal = abortController?.signal;
 	const response = await fetch(apiUrl, { method, headers, signal });
-	return response;
+	return { response, requestToken: headers?.Authorization?.slice(7) };
 }
 
 export async function get(args: GetArgs, abortController?: AbortController) {
-	return processResponse(await baseGet(args, abortController));
+	const { response, requestToken } = await baseGet(args, abortController);
+	return processResponse(response, true, requestToken);
 }
 
 export async function download({ url, params }: GetArgs, filename = "download.file") {
 	const headers = buildAuthHeader();
 	const res = await fetch(buildUrl({ url, params }), { headers });
 	observeBackendNode(res.headers?.get("X-NPMi-Node-Hostname") ?? null);
-	if (!res.ok) return processResponse(res);
+	if (!res.ok) return processResponse(res, true, headers?.Authorization?.slice(7));
 	const bl = await res.blob();
 	const u = window.URL.createObjectURL(bl);
 	const a = document.createElement("a");
@@ -137,14 +146,14 @@ export async function post({ url, params, data, noAuth }: PostArgs, abortControl
 
 	const signal = abortController?.signal;
 	const response = await fetch(apiUrl, { method, headers, body, signal });
-	return processResponse(response, !noAuth);
+	return processResponse(response, !noAuth, headers.Authorization?.slice(7));
 }
 
 export async function downloadPost(
 	{ url, params, data }: PostArgs,
 	filename = "download.file",
 ) {
-	const headers = {
+	const headers: Record<string, string> = {
 		...buildAuthHeader(),
 		[contentTypeHeader]: "application/json",
 	};
@@ -156,7 +165,7 @@ export async function downloadPost(
 
 	observeBackendNode(response.headers?.get("X-NPMi-Node-Hostname") ?? null);
 	if (!response.ok) {
-		expireUnauthorizedResponse(response);
+		expireUnauthorizedResponse(response, true, headers.Authorization?.slice(7));
 		let message = "Download failed";
 		try {
 			const payload = await response.json();
@@ -187,14 +196,14 @@ interface PutArgs {
 export async function put({ url, params, data }: PutArgs, abortController?: AbortController) {
 	const apiUrl = buildUrl({ url, params });
 	const method = "PUT";
-	const headers = {
+	const headers: Record<string, string> = {
 		...buildAuthHeader(),
 		[contentTypeHeader]: "application/json",
 	};
 	const signal = abortController?.signal;
 	const body = buildBody(data);
 	const response = await fetch(apiUrl, { method, headers, body, signal });
-	return processResponse(response);
+	return processResponse(response, true, headers.Authorization?.slice(7));
 }
 
 interface DeleteArgs {
@@ -209,5 +218,5 @@ export async function del({ url, params }: DeleteArgs, abortController?: AbortCo
 	};
 	const signal = abortController?.signal;
 	const response = await fetch(apiUrl, { method, headers, signal });
-	return processResponse(response);
+	return processResponse(response, true, headers.Authorization?.slice(7));
 }

@@ -25,7 +25,7 @@ export default {
 		const Token = TokenModel();
 
 		data.scope = data.scope || "user";
-		data.expiry = data.expiry || "1d";
+		data.expiry = data.expiry || "7d";
 
 		const user = await userModel
 			.query()
@@ -106,7 +106,7 @@ export default {
 		const Token = TokenModel();
 		const thisData = data || {};
 
-		thisData.expiry = thisData.expiry || "1d";
+		thisData.expiry = thisData.expiry || "7d";
 
 		if (access?.token.getUserId(0)) {
 			// Create a moment of the expiry expression
@@ -153,7 +153,7 @@ export default {
 	 */
 	verify2FA: async (challengeToken, code, expiry) => {
 		const Token = TokenModel();
-		const tokenExpiry = expiry || "1d";
+		const tokenExpiry = expiry || "7d";
 
 		// Verify challenge token
 		let tokenData;
@@ -205,7 +205,7 @@ export default {
 	 * @returns {Promise}
 	 */
 	getTokenFromUser: async (user) => {
-		const expire = "1d";
+		const expire = "7d";
 		const Token = TokenModel();
 		const expiry = parseDatePeriod(expire);
 

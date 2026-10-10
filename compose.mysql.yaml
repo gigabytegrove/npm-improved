@@ -36,6 +36,8 @@ services:
     volumes:
       - ./data:/data
       - ./letsencrypt:/etc/letsencrypt
+      # Host identity, read-only: never use the Docker container hostname.
+      - /etc/hostname:/run/npm-improved/host-hostname:ro
     depends_on:
       db:
         condition: service_healthy

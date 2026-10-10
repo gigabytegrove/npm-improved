@@ -50,6 +50,18 @@ function Router() {
 	const { authenticated, logout } = useAuthState();
 	const session = useUser("me", { enabled: authenticated, retry: false });
 
+	// Losing authentication must show Login immediately, even while the
+	// health check is loading or the updater is restarting the backend.
+	// Only a confirmed first-time installation enters the setup wizard.
+	if (!authenticated) {
+		if (health.data?.status === "OK" && !health.data.setup) return <Setup />;
+		return (
+			<Suspense fallback={<LoadingPage />}>
+				<Login />
+			</Suspense>
+		);
+	}
+
 	if (health.isLoading) {
 		return <LoadingPage />;
 	}
@@ -60,14 +72,6 @@ function Router() {
 
 	if (!health.data?.setup) {
 		return <Setup />;
-	}
-
-	if (!authenticated) {
-		return (
-			<Suspense fallback={<LoadingPage />}>
-				<Login />
-			</Suspense>
-		);
 	}
 
 	// Never display protected data before the server has verified /users/me.

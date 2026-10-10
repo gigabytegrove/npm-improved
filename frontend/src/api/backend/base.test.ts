@@ -40,6 +40,20 @@ describe("API session expiration", () => {
 		expect(AuthStore.token).toBeNull();
 	});
 
+	it("ignores stale 401 responses after another request refreshes the token", async () => {
+		let completeRequest: ((result: Response) => void) | undefined;
+		vi.stubGlobal("fetch", vi.fn().mockImplementation(() =>
+			new Promise<Response>((resolve) => { completeRequest = resolve; })));
+		const pending = get({ url: "/users/me" });
+		AuthStore.set({
+			token: "renewed-jwt",
+			expires: new Date(Date.now() + 7 * 86400000).toISOString(),
+		});
+		completeRequest?.(unauthorized(async () => ({ error: { message: "Old session expired" } })));
+		await expect(pending).rejects.toThrow("Old session expired");
+		expect(AuthStore.token?.token).toBe("renewed-jwt");
+	});
+
 	it("immediately expires credentials for a JSON HTTP 401 response", async () => {
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(unauthorized(async () =>
 			({ error: { message: "Invalid token" } }))));
