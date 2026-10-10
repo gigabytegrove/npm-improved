@@ -72,7 +72,7 @@ class HostUpdaterBundleTests(unittest.TestCase):
     def test_transient_dns_failures_retry_then_succeed(self):
         response = io.BytesIO(b"verified release content")
         failure = URLError(socket.gaierror(-3, "Temporary failure in name resolution"))
-        with mock.patch.object(module, "urlopen", side_effect=[failure, response]) as loader, \\
+        with mock.patch.object(module, "urlopen", side_effect=[failure, response]) as loader, \
              mock.patch.object(module.time, "sleep") as sleep:
             self.assertEqual(module.fetch("https://github.com/test-release"), b"verified release content")
             self.assertEqual(loader.call_count, 2)
@@ -80,7 +80,7 @@ class HostUpdaterBundleTests(unittest.TestCase):
 
     def test_permanent_http_error_does_not_retry(self):
         failure = HTTPError("https://github.com/release", 404, "Not Found", {}, None)
-        with mock.patch.object(module, "urlopen", side_effect=failure) as loader, \\
+        with mock.patch.object(module, "urlopen", side_effect=failure) as loader, \
              mock.patch.object(module.time, "sleep") as sleep:
             with self.assertRaises(HTTPError):
                 module.fetch("https://github.com/release")
