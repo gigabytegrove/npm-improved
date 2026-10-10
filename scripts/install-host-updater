@@ -118,7 +118,8 @@ with os.fdopen(fd, "w", encoding="utf-8") as output:
                "unit": unit,
                "component_version": version,
                "protocol": 1,
-               "maintenance": "automatic"}, output)
+               "maintenance": "automatic",
+               "host_hostname": os.uname().nodename}, output)
     output.write("\n")
 os.chmod(temporary, 0o644)
 os.replace(temporary, destination)

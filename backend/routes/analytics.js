@@ -1,6 +1,7 @@
 import express from "express";
 import { getNodeProfile } from "../internal/analytics-profiles.js";
 import os from "node:os";
+import { getServingNodeHostname } from "../lib/node-identity.js";
 import jwtdecode from "../lib/express/jwt-decode.js";
 import { addNodeBlockRule, deleteNodeBlockRule, listNodeBlockRules, getNodeBlockAudit, enableKnownScannerBlocking } from "../internal/analytics-blocking.js";
 import internalProxyHost from "../internal/proxy-host.js";
@@ -73,6 +74,7 @@ router.get("/node", async (req, res, next) => {
         })),
       },
       node: {
+        hostname: getServingNodeHostname(),
         name: sync.nodeName || os.hostname(),
         id: sync.nodeId || null,
         role: sync.enabled ? sync.role : "standalone",

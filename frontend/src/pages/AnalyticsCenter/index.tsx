@@ -72,8 +72,8 @@ export default function AnalyticsCenter() {
       {report.data ? <div className="card mb-3 npmi-center-node">
         <div className="card-body d-flex align-items-center flex-wrap gap-3">
           <IconServer size={25}/>
-          <div className="flex-grow-1"><strong>{report.data.node.name}</strong>
-            <div className="small text-secondary">This node only · {report.data.node.role} · {report.data.node.version || "unknown version"}</div>
+          <div className="flex-grow-1"><strong>Serving host: {report.data.node.hostname || "Unidentified"}</strong>
+            <div className="small text-secondary">NPMX: {report.data.node.name} · {report.data.node.role} · {report.data.node.version || "unknown version"} · Analytics from this node only</div>
           </div>
           <span className="badge bg-success-lt text-success">Node-local reporting</span>
         </div>
