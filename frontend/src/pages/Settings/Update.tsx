@@ -203,6 +203,7 @@ export default function Update() {
 			</div>
 
 			{error ? <Alert variant="danger">{error.message}</Alert> : null}
+			{data?.releaseError ? <Alert variant="warning">GitHub release check unavailable: {data.releaseError}. Local updater progress and recovery controls remain available.</Alert> : null}
 			{actionError ? <Alert variant="danger">{actionError}</Alert> : null}
 
 			<div className="card mb-4">
@@ -232,6 +233,8 @@ export default function Update() {
 							<div className="text-secondary">
 								{updateAvailable
 									? `${data?.release?.releaseName || data?.release?.latest} is ready to install.`
+									: data?.releaseError
+									? "Remote release availability has not been verified."
 									: "This installation matches the latest stable NPM Improved release."}
 							</div>
 
