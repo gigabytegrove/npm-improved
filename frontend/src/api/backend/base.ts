@@ -153,7 +153,7 @@ export async function downloadPost(
 	{ url, params, data }: PostArgs,
 	filename = "download.file",
 ) {
-	const headers = {
+	const headers: Record<string, string> = {
 		...buildAuthHeader(),
 		[contentTypeHeader]: "application/json",
 	};
@@ -196,7 +196,7 @@ interface PutArgs {
 export async function put({ url, params, data }: PutArgs, abortController?: AbortController) {
 	const apiUrl = buildUrl({ url, params });
 	const method = "PUT";
-	const headers = {
+	const headers: Record<string, string> = {
 		...buildAuthHeader(),
 		[contentTypeHeader]: "application/json",
 	};
