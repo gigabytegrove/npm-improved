@@ -316,6 +316,42 @@ jobs:
           grep -Fq 'secondary / 1.1.0-ci / NPMX/1' <<<"$SECONDARY_PAGE"
           ! grep -Fq 'Primary A' <<<"$SECONDARY_PAGE"
 
+
+          # An authenticated write sent to either node must be committed by
+          # the primary. The secondary may not mutate its independent SQLite
+          # copy or assign a conflicting ID.
+          curl --fail-with-body -sS -H "Authorization: Bearer $SECONDARY_TOKEN" \
+            -H 'Content-Type: application/json' -X PUT \
+            -d '{"value":"html","meta":{"html":"<h1>Written through secondary</h1>"}}' \
+            http://127.0.0.1:19381/api/settings/default-site \
+            | jq -e '.value == "html"'
+
+          curl --fail-with-body -sS -H "Authorization: Bearer $PRIMARY_TOKEN" \
+            http://127.0.0.1:19281/api/settings/default-site \
+            | jq -e '.meta.html | contains("Written through secondary")'
+
+          curl --fail-with-body -sS -H "Authorization: Bearer $SECONDARY_TOKEN" \
+            -X POST http://127.0.0.1:19381/api/cluster/sync-now \
+            | jq -e '.ok == true'
+
+          curl --fail-with-body -sS -H "Authorization: Bearer $SECONDARY_TOKEN" \
+            http://127.0.0.1:19381/api/settings/default-site \
+            | jq -e '.meta.html | contains("Written through secondary")'
+
+          # Stale record fingerprints must return HTTP 409 instead of deleting
+          # or overwriting the newer value on the primary.
+          STATUS_CODE="$(curl -sS -o /tmp/npmx-conflict-response.json -w '%{http_code}' \
+            -H "Authorization: Bearer $PRIMARY_TOKEN" \
+            -H 'X-NPMX-Expected-Fingerprint: missing' \
+            -H 'Content-Type: application/json' -X PUT \
+            -d '{"value":"html","meta":{"html":"<h1>stale-write-must-not-commit</h1>"}}' \
+            http://127.0.0.1:19281/api/settings/default-site)"
+          test "$STATUS_CODE" = "409"
+          jq -e '.error.code == 409' /tmp/npmx-conflict-response.json
+          curl --fail-with-body -sS -H "Authorization: Bearer $PRIMARY_TOKEN" \
+            http://127.0.0.1:19281/api/settings/default-site \
+            | jq -e '.meta.html | contains("Written through secondary")'
+
           sudo cat /tmp/npmi-npmx/primary/data/npmx-pairing.json | jq -e '.used == true and (.paired_node_id | length > 0)'
 
           trap - EXIT

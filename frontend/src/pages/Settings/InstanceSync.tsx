@@ -468,8 +468,9 @@ export default function InstanceSync() {
 										</>
 									) : (
 										<>
-											Secondaries are read-only for synchronized configuration. Pair with the primary
-											instead of manually entering cluster secrets.
+											You can edit synchronized configuration while signed into either node. Secondary edits are
+											validated and committed by the primary, which assigns IDs and prevents stale changes
+											from overwriting newer records. Use a direct primary URL for pairing and forwarding.
 										</>
 									)}
 								</Alert>
