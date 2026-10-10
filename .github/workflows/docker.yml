@@ -162,9 +162,23 @@ jobs:
             -d '{"type":"user_agent","target":"CI-Blocked-Agent-999","note":"integration test"}' \
             http://127.0.0.1:19181/api/analytics/blocks | jq -r '.id')"
           test -n "$BLOCK_ID" && test "$BLOCK_ID" != "null"
-          CODE="$(curl -sS -o /dev/null -w '%{http_code}' \
-            -A 'CI-Blocked-Agent-999' http://127.0.0.1:19180/)"
-          test "$CODE" = "403"
+          CODE="000"
+          for attempt in $(seq 1 12); do
+            CODE="$(curl -sS -o /dev/null -w '%{http_code}' \
+              -A 'CI-Blocked-Agent-999' http://127.0.0.1:19180/)"
+            if [ "$CODE" = "403" ]; then break; fi
+            sleep 0.25
+          done
+          echo "Blocked-user-agent HTTP status: $CODE"
+          if [ "$CODE" != "403" ]; then
+            echo "===== ACTIVE ANALYTICS BLOCK POLICY ====="
+            sudo cat data/nginx/analytics/blocked-ua-rules.conf || true
+            echo "===== GENERATED NGINX SERVER DIRECTIVES ====="
+            docker exec npm-improved-app-1 nginx -T 2>&1 | grep -E 'npmi_analytics_block|blocked-ua|analytics' | tail -n 60 || true
+            echo "===== CONTAINER LOGS ====="
+            docker compose -f compose.yaml logs --tail 80 app || true
+            exit 1
+          fi
           curl --fail-with-body -sS -H "Authorization: Bearer $TOKEN" \
             "http://127.0.0.1:19181/api/analytics/blocks" \
             | jq -e --arg id "$BLOCK_ID" '.rules | any(.id == ($id|tonumber))'
