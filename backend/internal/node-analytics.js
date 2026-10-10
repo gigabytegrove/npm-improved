@@ -290,3 +290,66 @@ export function exportNodeAnalyticsCsv(filters) {
   ].map(safe).join(","));
   return { csv: [headers.join(","),...csv].join("\n")+"\n", truncated: rows.length > 10000 };
 }
+
+
+/**
+ * Complete paginated investigative dimensions. Overview top-N caps never
+ * limit this endpoint: users can page through all retained IPs/agents.
+ */
+export function getNodeDimension(kind, filters = {}, options = {}) {
+  const columns = { ips: "client_ip", "user-agents": "user_agent", bots: "bot_class" };
+  const column = columns[kind];
+  if (!column) throw new RangeError("Unsupported analytics dimension");
+  const { hours, hostId, statusClass } = parseNodeFilters(filters);
+  const limit = options.limit === undefined ? 50 : Number(options.limit);
+  const offset = options.offset === undefined ? 0 : Number(options.offset);
+  const search = options.search === undefined ? "" : options.search;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 ||
+      !Number.isSafeInteger(offset) || offset < 0 || offset > 1000000 ||
+      typeof search !== "string" || search.length > 256)
+    throw new RangeError("Invalid dimension pagination or search");
+  if (hours > getAnalyticsRetention().rawDays * 24) {
+    return { kind, hours, limit, offset, search, total: 0, entries: [],
+      raw_unavailable: true };
+  }
+  const conditions = ["occurred_at >= ?", `${column} IS NOT NULL`, `${column} <> ''`];
+  const args = [Math.floor(Date.now() / 1000) - hours * 3600];
+  if (hostId !== null) { conditions.push("host_id = ?"); args.push(hostId); }
+  if (statusClass !== null) {
+    const min = Number(statusClass[0]) * 100;
+    conditions.push("status >= ? AND status < ?");
+    args.push(min, min + 100);
+  }
+  if (search.trim()) {
+    const escaped = search.trim().replace(/[\\%_]/g, (char) => "\\" + char);
+    conditions.push(`${column} LIKE ? ESCAPE '\\'`);
+    args.push(`%${escaped}%`);
+  }
+  const db = getAnalyticsDatabase();
+  const where = conditions.join(" AND ");
+  const total = db.prepare(`SELECT COUNT(DISTINCT ${column}) AS n
+    FROM analytics_event WHERE ${where}`).get(...args).n;
+  const rows = db.prepare(`SELECT ${column} AS value, COUNT(*) AS requests,
+    SUM(bytes_out) AS bytes_out, SUM(CASE WHEN status >= 400 THEN 1 ELSE 0 END) AS errors,
+    SUM(CASE WHEN status >= 500 THEN 1 ELSE 0 END) AS server_errors,
+    SUM(CASE WHEN block_reason IS NOT NULL THEN 1 ELSE 0 END) AS blocked,
+    COUNT(DISTINCT host_id) AS routes,
+    MIN(occurred_at) AS first_seen, MAX(occurred_at) AS last_seen
+    FROM analytics_event WHERE ${where}
+    GROUP BY ${column} ORDER BY requests DESC, value ASC
+    LIMIT ? OFFSET ?`).all(...args, limit, offset);
+  return {
+    kind, hours, search, total: Number(total), limit, offset, raw_unavailable: false,
+    entries: rows.map((row) => ({
+      value: row.value,
+      requests: Number(row.requests),
+      bytes_out: Number(row.bytes_out || 0),
+      errors: Number(row.errors || 0),
+      server_errors: Number(row.server_errors || 0),
+      blocked: Number(row.blocked || 0),
+      routes: Number(row.routes || 0),
+      first_seen: new Date(row.first_seen * 1000).toISOString(),
+      last_seen: new Date(row.last_seen * 1000).toISOString(),
+    })),
+  };
+}

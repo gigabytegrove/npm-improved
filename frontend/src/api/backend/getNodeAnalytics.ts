@@ -164,3 +164,38 @@ export async function deleteNodeBlock(id: number): Promise<NodeBlockRule> {
 export async function enableNodeScannerPreset(): Promise<{added: number}> {
   return api.post({ url: "/analytics/blocks/scanner-presets", data: {} });
 }
+
+export type NodeDimensionKind = "ips" | "user-agents" | "bots";
+export interface NodeDimensionRow {
+  value: string;
+  requests: number;
+  bytesOut: number;
+  errors: number;
+  serverErrors: number;
+  blocked: number;
+  routes: number;
+  firstSeen: string;
+  lastSeen: string;
+}
+export interface NodeDimensionReport {
+  kind: NodeDimensionKind;
+  hours: NodeHours;
+  total: number;
+  limit: number;
+  offset: number;
+  search: string;
+  rawUnavailable: boolean;
+  entries: NodeDimensionRow[];
+}
+export async function getNodeDimension(
+  kind: NodeDimensionKind, filters: NodeFilters, search = "", offset = 0,
+): Promise<NodeDimensionReport> {
+  return api.get({ url: `/analytics/node/dimensions/${kind}`, params: {
+    hours: filters.hours,
+    ...(filters.hostId ? { hostId: filters.hostId } : {}),
+    ...(filters.statusClass ? { statusClass: filters.statusClass } : {}),
+    search,
+    offset,
+    limit: 50,
+  }});
+}

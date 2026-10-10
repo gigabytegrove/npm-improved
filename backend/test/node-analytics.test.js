@@ -12,7 +12,7 @@ test("Node Analytics Center aggregates local hosts, filters, timestamps and safe
   const collector = await import("../internal/proxy-analytics.js?node-center=" + Date.now());
   // The analytics module resolves the common collector connection in this process.
   // Tests run in isolated Node test workers.
-  const { getNodeAnalytics, getNodeAnalyticsRequests, parseNodeFilters, exportNodeAnalyticsCsv } =
+  const { getNodeAnalytics, getNodeAnalyticsRequests, parseNodeFilters, exportNodeAnalyticsCsv, getNodeDimension } =
     await import("../internal/node-analytics.js");
 
   const now = new Date(Date.now() - 15000).toISOString();
@@ -41,6 +41,22 @@ test("Node Analytics Center aggregates local hosts, filters, timestamps and safe
     assert.equal(all.unique_ips, 1);
     assert.equal(all.ips[0].ip, "203.0.113.27");
     assert.equal(all.user_agents[0].label, "Mozilla/5.0");
+    const ips = getNodeDimension("ips", { hours: 24 }, { limit: 1, offset: 0 });
+    assert.equal(ips.total, 1);
+    assert.equal(ips.entries[0].value, "203.0.113.27");
+    assert.equal(ips.entries[0].requests, 3);
+    assert.equal(ips.entries[0].routes, 2);
+    assert.equal(ips.entries[0].errors, 2);
+    assert.equal(getNodeDimension("ips", { hours: 24 }, { search: "113.27" }).total, 1);
+    assert.equal(getNodeDimension("ips", { hours: 24 }, { search: "198.51.100" }).total, 0);
+    assert.equal(getNodeDimension("ips", { hours: 24, hostId: 1 }).entries[0].requests, 2);
+    assert.equal(getNodeDimension("user-agents", { hours: 24 }).entries[0].value, "Mozilla/5.0");
+    assert.equal(getNodeDimension("user-agents", { hours: 24 }, { search: "%5" }).total, 0);
+    assert.equal(getNodeDimension("user-agents", { hours: 24 }, { search: "Mozilla" }).total, 1);
+    assert.equal(getNodeDimension("ips", { hours: 2160 }).raw_unavailable, true);
+    assert.throws(() => getNodeDimension("made-up", { hours: 24 }), RangeError);
+    assert.throws(() => getNodeDimension("ips", { hours: 24 }, { limit: 999 }), RangeError);
+    assert.throws(() => getNodeDimension("ips", { hours: 24 }, { offset: -1 }), RangeError);
     assert.equal(all.status["2xx"], 1);
     assert.equal(all.status["4xx"], 1);
     assert.equal(all.status["5xx"], 1);

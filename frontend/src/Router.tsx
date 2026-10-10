@@ -27,6 +27,18 @@ const Users = lazy(() => import("src/pages/Users"));
 const ProxyHosts = lazy(() => import("src/pages/Nginx/ProxyHosts"));
 const HostAnalytics = lazy(() => import("src/pages/Nginx/ProxyHosts/HostAnalytics"));
 const AnalyticsCenter = lazy(() => import("src/pages/AnalyticsCenter"));
+const AnalyticsOverview = lazy(() => import("src/pages/AnalyticsCenter/Overview"));
+const AnalyticsTrends = lazy(() => import("src/pages/AnalyticsCenter/Trends"));
+const AnalyticsTraffic = lazy(() => import("src/pages/AnalyticsCenter/Traffic"));
+const AnalyticsHosts = lazy(() => import("src/pages/AnalyticsCenter/Hosts"));
+const AnalyticsStreams = lazy(() => import("src/pages/AnalyticsCenter/Streams"));
+const AnalyticsRequests = lazy(() => import("src/pages/AnalyticsCenter/Requests"));
+const AnalyticsConnections = lazy(() => import("src/pages/AnalyticsCenter/Connections"));
+const AnalyticsClients = lazy(() => import("src/pages/AnalyticsCenter/Clients"));
+const AnalyticsUserAgents = lazy(() => import("src/pages/AnalyticsCenter/UserAgents"));
+const AnalyticsSecurity = lazy(() => import("src/pages/AnalyticsCenter/Security"));
+const AnalyticsBlocking = lazy(() => import("src/pages/AnalyticsCenter/Blocking"));
+const AnalyticsPerformance = lazy(() => import("src/pages/AnalyticsCenter/Performance"));
 const RedirectionHosts = lazy(() => import("src/pages/Nginx/RedirectionHosts"));
 const DeadHosts = lazy(() => import("src/pages/Nginx/DeadHosts"));
 const Streams = lazy(() => import("src/pages/Nginx/Streams"));
@@ -77,7 +89,21 @@ function Router() {
 									<Route path="/users" element={<Users />} />
 									<Route path="/nginx/proxy" element={<ProxyHosts />} />
 									<Route path="/nginx/proxy/:id/analytics" element={<HostAnalytics />} />
-									<Route path="/analytics" element={<AnalyticsCenter />} />
+									<Route path="/analytics" element={<AnalyticsCenter />}>
+                    <Route index element={<AnalyticsOverview />} />
+                    <Route path="trends" element={<AnalyticsTrends />} />
+                    <Route path="traffic" element={<AnalyticsTraffic />} />
+                    <Route path="hosts" element={<AnalyticsHosts />} />
+                    <Route path="streams" element={<AnalyticsStreams />} />
+                    <Route path="requests" element={<AnalyticsRequests />} />
+                    <Route path="connections" element={<AnalyticsConnections />} />
+                    <Route path="ips" element={<AnalyticsClients />} />
+                    <Route path="user-agents" element={<AnalyticsUserAgents />} />
+                    <Route path="security" element={<AnalyticsSecurity />} />
+                    <Route path="blocking" element={<AnalyticsBlocking />} />
+                    <Route path="performance" element={<AnalyticsPerformance />} />
+                    <Route path="*" element={<ErrorNotFound />} />
+                  </Route>
 									<Route path="/nginx/redirection" element={<RedirectionHosts />} />
 									<Route path="/nginx/404" element={<DeadHosts />} />
 									<Route path="/nginx/stream" element={<Streams />} />
