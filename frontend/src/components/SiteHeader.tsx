@@ -1,5 +1,7 @@
 import {
 	IconActivityHeartbeat,
+	IconArrowsExchange,
+	IconServer2,
 	IconChevronDown,
 	IconLock,
 	IconLogout,
@@ -11,12 +13,14 @@ import { useLocation } from "react-router-dom";
 import { LocalePicker, ThemeSwitcher } from "src/components";
 import { useAuthState } from "src/context";
 import { useHealth, useUser } from "src/hooks";
+import { useBackendNode } from "src/modules/BackendNode";
 import { T } from "src/locale";
 import { showChangePasswordModal, showTwoFactorModal, showUserModal } from "src/modals";
 import styles from "./SiteHeader.module.css";
 
 const routeTitles: Array<[RegExp, string, string]> = [
 	[/^\/$/, "Dashboard", "Overview"],
+	[/^\/analytics(?:\/|$)/, "Analytics Center", "Local-node traffic and enforcement"],
 	[/^\/nginx\/proxy/, "Proxy Hosts", "HTTP and HTTPS routing"],
 	[/^\/nginx\/redirection/, "Redirection Hosts", "Redirect rules"],
 	[/^\/nginx\/stream/, "Streams", "TCP and UDP forwarding"],
@@ -56,6 +60,7 @@ const resolveTitle = (pathname: string, search = "") => {
 export function SiteHeader() {
 	const { data: currentUser } = useUser("me");
 	const health = useHealth();
+	const node = useBackendNode();
 	const location = useLocation();
 	const isAdmin = currentUser?.roles.includes("admin");
 	const { logout } = useAuthState();
@@ -84,6 +89,19 @@ export function SiteHeader() {
 			</div>
 
 			<div className={styles.actions}>
+				<div
+					className={styles.nodePill}
+					role="status"
+					aria-live="polite"
+					title={node.switched
+						? `API backend changed from ${node.previousHostname} to ${node.hostname}. A shared hostname may distribute each request to a different node.`
+						: "Physical hostname of the NPM Improved node that answered the latest API response. A shared proxy URL may route later requests to another node."}
+				>
+					<IconServer2 size={16} aria-hidden="true" />
+					<span className={styles.nodeLabel}>Node:</span>
+					<strong className={styles.nodeHostname}>{node.hostname || "Unidentified"}</strong>
+					{node.switched ? <IconArrowsExchange size={15} className={styles.nodeSwitched} aria-label="Node changed" /> : null}
+				</div>
 				<div className={styles.statusPill} title="NPM Improved control plane is responding">
 					<span className={styles.statusIcon}>
 						<IconActivityHeartbeat size={15} />

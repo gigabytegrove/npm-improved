@@ -1,4 +1,5 @@
 import express from "express";
+import { getServingNodeHostname } from "../lib/node-identity.js";
 import { isCI } from "../lib/config.js";
 import errs from "../lib/error.js";
 import logRequest from "../lib/express/log-request.js";
@@ -33,6 +34,14 @@ const router = express.Router({
 	mergeParams: true,
 });
 
+// Identify the exact API backend which answered this request, even when the
+// public UI hostname load-balances among several independently hosted nodes.
+router.use((_req, res, next) => {
+  const hostname = getServingNodeHostname();
+  if (hostname) res.set("X-NPMi-Node-Hostname", hostname);
+  res.set("Cache-Control", "private, no-store");
+  next();
+});
 router.use(logRequest);
 
 /**
@@ -48,6 +57,7 @@ router.get("/", async (_, res /*, next*/) => {
 	res.status(200).send({
 		status: "OK",
 		setup,
+		node: { hostname: getServingNodeHostname() },
 		version: {
 			major: versionParts[0] || 0,
 			minor: versionParts[1] || 0,

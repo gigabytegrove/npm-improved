@@ -7,7 +7,7 @@ const useHealth = (options = {}) => {
 	return useQuery<HealthResponse, Error>({
 		queryKey: ["health"],
 		queryFn: fetchHealth,
-		refetchOnWindowFocus: false,
+		refetchOnWindowFocus: true,
 		retry: 5,
 		refetchInterval: 15 * 1000, // 15 seconds
 		staleTime: 14 * 1000, // 14 seconds

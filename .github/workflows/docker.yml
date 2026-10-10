@@ -130,8 +130,9 @@ jobs:
           systemctl is-active --quiet "npm-improved-update-$HASH.path"
           systemctl is-active --quiet "npm-improved-update-$HASH-maintenance.timer"
           EXPECTED_VERSION="$(tr -d '[:space:]' < .version)"
-          jq -e --arg expected "$EXPECTED_VERSION" \
-            '.component_version == $expected and .maintenance == "automatic"' \
+          EXPECTED_HOSTNAME="$(hostname)"
+          jq -e --arg expected "$EXPECTED_VERSION" --arg host "$EXPECTED_HOSTNAME" \
+            '.component_version == $expected and .maintenance == "automatic" and .host_hostname == $host' \
             data/host-updater-ready.json
 
           NPM_BUILD_VERSION="$EXPECTED_VERSION-ci" \
@@ -144,6 +145,13 @@ jobs:
             if [ "$attempt" -eq 90 ]; then docker compose -f compose.yaml logs app; exit 1; fi
             sleep 1
           done
+
+          # Verify the API and its response header identify the PHYSICAL host
+          # (not the Docker container ID or the NPMX friendly name).
+          curl -fsS -D /tmp/npmi-ci-health-headers \
+            http://127.0.0.1:19181/api/ \
+            | jq -e --arg host "$EXPECTED_HOSTNAME" '.node.hostname == $host'
+          grep -Fi "X-NPMi-Node-Hostname: $EXPECTED_HOSTNAME" /tmp/npmi-ci-health-headers
 
           TOKEN="$(curl -fsS -H 'Content-Type: application/json' \
             -d '{"identity":"update-ci@example.com","secret":"update-ci-password-12345"}' \
