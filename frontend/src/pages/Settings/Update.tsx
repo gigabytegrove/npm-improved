@@ -82,7 +82,7 @@ const badgeClass = (state?: string) => {
  */
 const quoteShell = (value: string) => `'${value.replace(/'/g, "'\\''")}'`;
 const hostUpdaterBootstrap = (projectDir: string, version: string) => {
-	if (!/^v?\\d+\\.\\d+\\.\\d+$/.test(version)) return null;
+	if (!/^v?\d+\.\d+\.\d+$/.test(version)) return null;
 	const release = version.startsWith("v") ? version : `v${version}`;
 	return [
 		"set -euo pipefail",
@@ -100,7 +100,7 @@ const hostUpdaterBootstrap = (projectDir: string, version: string) => {
 		'sha256sum -c selected-checksum.txt',
 		'tar -xzf "$NPMI_ASSET"',
 		'sudo bash scripts/install-host-updater "$NPMI_PROJECT"',
-	].join("\\n");
+	].join("\n");
 };
 
 type AuthAction = "update" | "rollback" | "restart";
