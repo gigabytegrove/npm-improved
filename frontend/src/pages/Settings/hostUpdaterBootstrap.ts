@@ -21,6 +21,10 @@ export const hostUpdaterBootstrap = (projectDir: string, version: string) => {
 		'grep -F "  $NPMI_ASSET" "$NPMI_SUMS" > selected-checksum.txt',
 		'sha256sum -c selected-checksum.txt',
 		'tar -xzf "$NPMI_ASSET"',
-		'sudo bash scripts/install-host-updater "$NPMI_PROJECT"',
+		'if [ "$(id -u)" -eq 0 ]; then',
+		'  bash scripts/install-host-updater "$NPMI_PROJECT"',
+		'else',
+		'  sudo bash scripts/install-host-updater "$NPMI_PROJECT"',
+		'fi',
 	].join("\n");
 };
