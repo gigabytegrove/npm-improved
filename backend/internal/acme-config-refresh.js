@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { reconcileOrphanedHostConfigs } from "../lib/orphan-config-reconciliation.js";
 import internalNginx from "./nginx.js";
 import proxyHostModel from "../models/proxy_host.js";
 import redirectionHostModel from "../models/redirection_host.js";
@@ -56,4 +57,30 @@ export const refreshAcmeHostConfigs = async () => {
 	if (attempted) logger.info(`ACME template refresh: updated ${updated}/${attempted} enabled host configs`);
 	for (const message of errors) logger.error(`ACME template refresh failed: ${message}`);
 	return { attempted, updated, errors };
+};
+
+/**
+ * Reconcile generated configs against the authoritative database before
+ * template refresh. Unlike refreshAcmeHostConfigs, this catches files whose
+ * records were deleted or rolled back by a failed certificate request.
+ */
+export const quarantineOrphanedHostConfigs = async () => {
+	const result = await reconcileOrphanedHostConfigs({
+		groups: [
+			{ type: "proxy_host", model: proxyHostModel, directory: "/data/nginx/proxy_host" },
+			{ type: "redirection_host", model: redirectionHostModel, directory: "/data/nginx/redirection_host" },
+			{ type: "dead_host", model: deadHostModel, directory: "/data/nginx/dead_host" },
+		],
+		getConfigName: internalNginx.getConfigName,
+		validate: internalNginx.test,
+		reload: internalNginx.reload,
+		log: (message) => logger.warn(message),
+	});
+	for (const message of result.errors) {
+		logger.error(`Nginx orphan reconciliation failed: ${message}`);
+	}
+	if (result.quarantined.length) {
+		logger.warn(`Nginx orphan reconciliation quarantined ${result.quarantined.length} stale configuration files (backups in /data/nginx/orphan-quarantine)`);
+	}
+	return result;
 };

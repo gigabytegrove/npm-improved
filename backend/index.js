@@ -2,7 +2,7 @@
 
 import app from "./app.js";
 import internalCertificate from "./internal/certificate.js";
-import { refreshAcmeHostConfigs } from "./internal/acme-config-refresh.js";
+import { quarantineOrphanedHostConfigs, refreshAcmeHostConfigs } from "./internal/acme-config-refresh.js";
 import { startAnalyticsCollector } from "./internal/proxy-analytics.js";
 import { initializeNodeBlocking } from "./internal/analytics-blocking.js";
 import { startStreamCollector } from "./internal/stream-analytics.js";
@@ -59,8 +59,17 @@ async function appStart() {
 				// Each changed file is validated and restored automatically on
 				// failure; existing certificate and proxy traffic remains intact.
 				setTimeout(() => {
-					refreshAcmeHostConfigs().catch((err) => {
-						logger.error(`ACME template refresh failed: ${err instanceof Error ? err.message : String(err)}`);
+					// First quarantine orphaned Nginx configs, then refresh active
+					// hosts. A deleted host must never intercept a valid host's
+					// Let's Encrypt HTTP-01 challenge again.
+					(async () => {
+						const orphaned = await quarantineOrphanedHostConfigs();
+						if (orphaned.errors.length) {
+							logger.error("Nginx orphan reconciliation encountered errors; review logs before requesting certificates.");
+						}
+						await refreshAcmeHostConfigs();
+					})().catch((err) => {
+						logger.error(`Nginx startup reconciliation failed: ${err instanceof Error ? err.message : String(err)}`);
 					});
 				}, 2000).unref?.();
 
