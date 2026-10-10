@@ -399,15 +399,21 @@ jobs:
             exit 1
           }
           docker exec -w /app npmi-npmx-primary node --input-type=module -e '
+            import getDb from "./db.js";
             import { quarantineOrphanedHostConfigs } from "./internal/acme-config-refresh.js";
-            const result = await quarantineOrphanedHostConfigs();
-            if (result.errors.length ||
-                !result.quarantined.some((entry) =>
-                  entry.type === "proxy_host" && entry.id === 999991)) {
-              console.error("Orphan reconciliation failed:", JSON.stringify(result));
-              process.exit(1);
+            try {
+              const result = await quarantineOrphanedHostConfigs();
+              if (result.errors.length ||
+                  !result.quarantined.some((entry) =>
+                    entry.type === "proxy_host" && entry.id === 999991)) {
+                throw new Error("Orphan reconciliation failed: " + JSON.stringify(result));
+              }
+              console.log("PASS: orphan #999991 safely quarantined.");
+            } finally {
+              // A standalone CI process must close its Knex/SQLite pool.
+              // The real NPMi backend process remains running during boot.
+              await getDb().destroy();
             }
-            console.log("PASS: orphan #999991 safely quarantined.");
           '
           POST_CODE="$(curl -sS --max-time 10 \
             -H "Host: acme-orphan-ci.example.invalid" \
