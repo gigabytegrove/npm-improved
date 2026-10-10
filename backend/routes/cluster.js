@@ -105,6 +105,19 @@ router.post("/npmx/heartbeat", internalInstanceSync.requireNpmxAuth, async (req,
 	}
 });
 
+// Signed, replay-protected NPMX operation relay. Only an enabled primary
+// accepts mutations. The actor's identity is revalidated on the primary and
+// normal endpoint permissions are enforced before any database writes.
+router.post("/npmx/write", internalInstanceSync.requireNpmxAuth, async (req, res, next) => {
+	try {
+		const response = await internalInstanceSync.applyPeerMutation(req);
+		res.status(200).send(response);
+	} catch (err) {
+		debug(logger, "POST /cluster/npmx/write: " + err);
+		next(err);
+	}
+});
+
 // Node-to-node endpoints use the dedicated cluster secret rather than a user JWT.
 router.get("/peer/status", internalInstanceSync.requirePeerAuth, async (_req, res, next) => {
 	try {
