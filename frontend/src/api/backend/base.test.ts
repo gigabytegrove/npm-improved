@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AuthStore from "src/modules/AuthStore";
+import { getBackendNodeSnapshot, observeBackendNode } from "src/modules/BackendNode";
 import { get, post, downloadPost } from "./base";
 
 const valid = () => AuthStore.set({
@@ -18,6 +19,18 @@ describe("API session expiration", () => {
 		valid();
 	});
 	afterEach(() => vi.unstubAllGlobals());
+
+	it("identifies the responding node without altering the API payload", async () => {
+		observeBackendNode(null);
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+			status: 200,
+			ok: true,
+			headers: new Headers({ "X-NPMi-Node-Hostname": "proxy2" }),
+			json: async () => ({ status: "OK" }),
+		}));
+		expect(await get({ url: "/" })).toEqual({ status: "OK" });
+		expect(getBackendNodeSnapshot().hostname).toBe("proxy2");
+	});
 
 	it("immediately expires credentials for non-JSON HTTP 401 responses", async () => {
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(unauthorized(async () => {

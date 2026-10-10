@@ -54,7 +54,7 @@ export function expireUnauthorizedResponse(response: Pick<Response, "status">, a
 }
 
 async function processResponse(response: Response, authenticatedRequest = true) {
-	observeBackendNode(response.headers.get("X-NPMi-Node-Hostname"));
+	observeBackendNode(response.headers?.get("X-NPMi-Node-Hostname") ?? null);
 	expireUnauthorizedResponse(response, authenticatedRequest);
 	let payload: any;
 	try {
@@ -92,7 +92,7 @@ export async function get(args: GetArgs, abortController?: AbortController) {
 export async function download({ url, params }: GetArgs, filename = "download.file") {
 	const headers = buildAuthHeader();
 	const res = await fetch(buildUrl({ url, params }), { headers });
-	observeBackendNode(res.headers.get("X-NPMi-Node-Hostname"));
+	observeBackendNode(res.headers?.get("X-NPMi-Node-Hostname") ?? null);
 	if (!res.ok) return processResponse(res);
 	const bl = await res.blob();
 	const u = window.URL.createObjectURL(bl);
@@ -154,7 +154,7 @@ export async function downloadPost(
 		body: buildBody(data),
 	});
 
-	observeBackendNode(response.headers.get("X-NPMi-Node-Hostname"));
+	observeBackendNode(response.headers?.get("X-NPMi-Node-Hostname") ?? null);
 	if (!response.ok) {
 		expireUnauthorizedResponse(response);
 		let message = "Download failed";

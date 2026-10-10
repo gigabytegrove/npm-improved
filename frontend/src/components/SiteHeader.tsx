@@ -98,7 +98,7 @@ export function SiteHeader() {
 						: "Physical hostname of the NPM Improved node that answered the latest API response. A shared proxy URL may route later requests to another node."}
 				>
 					<IconServer2 size={16} aria-hidden="true" />
-					<span className={styles.nodeLabel}>Node</span>
+					<span className={styles.nodeLabel}>Node:</span>
 					<strong className={styles.nodeHostname}>{node.hostname || "Unidentified"}</strong>
 					{node.switched ? <IconArrowsExchange size={15} className={styles.nodeSwitched} aria-label="Node changed" /> : null}
 				</div>
