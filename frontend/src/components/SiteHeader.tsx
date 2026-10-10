@@ -66,6 +66,9 @@ export function SiteHeader() {
 	const { logout } = useAuthState();
 	const [, title, subtitle] = resolveTitle(location.pathname, location.search);
 	const version = health.data?.version?.display || "";
+	const logicalNodeName = health.data?.node?.name || null;
+	const physicalHostname = node.hostname;
+	const displayNode = physicalHostname || logicalNodeName || "Unidentified";
 
 	return (
 		<header className={`${styles.header} npm-improved-header`}>
@@ -93,13 +96,17 @@ export function SiteHeader() {
 					className={styles.nodePill}
 					role="status"
 					aria-live="polite"
-					title={node.switched
-						? `API backend changed from ${node.previousHostname} to ${node.hostname}. A shared hostname may distribute each request to a different node.`
-						: "Physical hostname of the NPM Improved node that answered the latest API response. A shared proxy URL may route later requests to another node."}
+					title={physicalHostname
+						? node.switched
+							? `API backend changed from ${node.previousHostname} to ${physicalHostname}. A shared hostname may distribute requests to different nodes.`
+							: "Physical Linux hostname of the most recent identified NPM Improved API responder."
+						: logicalNodeName
+							? "NPMX configured node name from the latest health response. Physical Linux hostname is unavailable until the native host updater or host-name mount is installed."
+							: "Physical Linux hostname and NPMX node name are not available. Check host updater identity provisioning."}
 				>
 					<IconServer2 size={16} aria-hidden="true" />
-					<span className={styles.nodeLabel}>Node:</span>
-					<strong className={styles.nodeHostname}>{node.hostname || "Unidentified"}</strong>
+					<span className={styles.nodeLabel}>{physicalHostname ? "Host:" : logicalNodeName ? "NPMX:" : "Node:"}</span>
+					<strong className={styles.nodeHostname}>{displayNode}</strong>
 					{node.switched ? <IconArrowsExchange size={15} className={styles.nodeSwitched} aria-label="Node changed" /> : null}
 				</div>
 				<div className={styles.statusPill} title="NPM Improved control plane is responding">
