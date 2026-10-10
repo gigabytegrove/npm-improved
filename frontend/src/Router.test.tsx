@@ -24,6 +24,25 @@ vi.mock("src/pages/Dashboard", () => ({ default: () => <h1>Dashboard</h1> }));
 vi.mock("src/pages/Login", () => ({ default: () => <h1>Login</h1> }));
 vi.mock("src/pages/Nginx/ProxyHosts", () => ({ default: () => <h1>Proxy hosts</h1> }));
 
+vi.mock("src/pages/Nginx/ProxyHosts/HostAnalytics", () => ({ default: () => <h1>Proxy Host Analytics</h1> }));
+vi.mock("src/pages/AnalyticsCenter", async () => {
+  const { Outlet } = await import("react-router-dom");
+  return { default: () => <div><Outlet /></div> };
+});
+vi.mock("src/pages/AnalyticsCenter/Overview", () => ({ default: () => <h1>Overview</h1> }));
+vi.mock("src/pages/AnalyticsCenter/Trends", () => ({ default: () => <h1>Trends</h1> }));
+vi.mock("src/pages/AnalyticsCenter/Traffic", () => ({ default: () => <h1>Traffic Breakdown</h1> }));
+vi.mock("src/pages/AnalyticsCenter/Hosts", () => ({ default: () => <h1>HTTP Routes</h1> }));
+vi.mock("src/pages/AnalyticsCenter/Streams", () => ({ default: () => <h1>TCP UDP Streams</h1> }));
+vi.mock("src/pages/AnalyticsCenter/Requests", () => ({ default: () => <h1>Request History</h1> }));
+vi.mock("src/pages/AnalyticsCenter/Connections", () => ({ default: () => <h1>Connection History</h1> }));
+vi.mock("src/pages/AnalyticsCenter/Clients", () => ({ default: () => <h1>IP Addresses</h1> }));
+vi.mock("src/pages/AnalyticsCenter/UserAgents", () => ({ default: () => <h1>User Agents & Bots</h1> }));
+vi.mock("src/pages/AnalyticsCenter/Security", () => ({ default: () => <h1>Errors & Security</h1> }));
+vi.mock("src/pages/AnalyticsCenter/Blocking", () => ({ default: () => <h1>Blocking & Enforcement</h1> }));
+vi.mock("src/pages/AnalyticsCenter/Performance", () => ({ default: () => <h1>Performance</h1> }));
+
+
 describe("Router", () => {
 	beforeEach(() => {
 		authState.authenticated = true;
@@ -66,6 +85,20 @@ describe("Router", () => {
 	});
 
 	it.each([
+    ["/analytics", "Overview"],
+    ["/analytics/trends", "Trends"],
+    ["/analytics/traffic", "Traffic Breakdown"],
+    ["/analytics/hosts", "HTTP Routes"],
+    ["/analytics/streams", "TCP UDP Streams"],
+    ["/analytics/requests", "Request History"],
+    ["/analytics/requests?ip=203.0.113.50", "Request History"],
+    ["/analytics/connections", "Connection History"],
+    ["/analytics/ips", "IP Addresses"],
+    ["/analytics/user-agents", "User Agents & Bots"],
+    ["/analytics/security", "Errors & Security"],
+    ["/analytics/blocking", "Blocking & Enforcement"],
+    ["/analytics/performance", "Performance"],
+    ["/nginx/proxy/9/analytics", "Proxy Host Analytics"],
 		["/", "Dashboard"],
 		["/nginx/proxy", "Proxy hosts"],
 		["/unknown", "Not found"],
