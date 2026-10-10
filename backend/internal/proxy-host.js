@@ -15,6 +15,22 @@ const omissions = () => {
 	return ["is_deleted", "owner.is_deleted"];
 };
 
+// Tag operation failures without leaking raw backend errors to the browser.
+const runProxyStage = async (stage, operation) => {
+	try {
+		return await operation();
+	} catch (err) {
+		logger.error(`Proxy host ${stage} failed:`, err);
+		if (err?.public) {
+			throw err;
+		}
+		throw new errs.ConfigurationError(
+			`Proxy host ${stage} failed. Check NPM Improved server logs for details.`,
+			err,
+		);
+	}
+};
+
 const internalProxyHost = {
 	/**
 	 * @param   {Access}  access
@@ -54,7 +70,7 @@ const internalProxyHost = {
 
 		try {
 			if (createCertificate) {
-				const cert = await internalCertificate.createQuickCertificate(access, thisData);
+				const cert = await runProxyStage("SSL certificate request", () => internalCertificate.createQuickCertificate(access, thisData));
 				thisData.certificate_id = cert.id;
 				await proxyHostModel.query().where("id", row.id).patch({ certificate_id: cert.id });
 			}
@@ -65,10 +81,10 @@ const internalProxyHost = {
 			});
 
 			if (freshRow.enabled) {
-				const newMeta = await internalNginx.configure(proxyHostModel, "proxy_host", freshRow, {
+				const newMeta = await runProxyStage("Nginx configuration", () => internalNginx.configure(proxyHostModel, "proxy_host", freshRow, {
 					userId: access.token.getUserId(1),
 					operation: "create",
-				});
+				}));
 				freshRow.meta = newMeta;
 			}
 		} catch (err) {
@@ -130,10 +146,10 @@ const internalProxyHost = {
 		const previousState = await snapshotModelRow(proxyHostModel, currentRow.id);
 
 		if (createCertificate) {
-			const cert = await internalCertificate.createQuickCertificate(access, {
+			const cert = await runProxyStage("SSL certificate request", () => internalCertificate.createQuickCertificate(access, {
 				domain_names: thisData.domain_names || currentRow.domain_names,
 				meta: _.assign({}, currentRow.meta, thisData.meta),
-			});
+			}));
 			thisData.certificate_id = cert.id;
 		}
 
@@ -151,11 +167,11 @@ const internalProxyHost = {
 			});
 
 			if (updatedRow.enabled) {
-				const newMeta = await internalNginx.configure(proxyHostModel, "proxy_host", updatedRow, {
+				const newMeta = await runProxyStage("Nginx configuration", () => internalNginx.configure(proxyHostModel, "proxy_host", updatedRow, {
 					userId: access.token.getUserId(1),
 					operation: "update",
 					previousSnapshot: previousState,
-				});
+				}));
 				updatedRow.meta = newMeta;
 			}
 		} catch (err) {
