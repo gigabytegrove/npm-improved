@@ -65,7 +65,7 @@ export async function validateLocalActor(token) {
 		claim.iat < auth.meta.password_changed_at) {
 		throw new errs.TokenRevokedError("The user session was revoked.");
 	}
-	return userId;
+	return { id: userId, issuedAt: claim.iat };
 }
 
 export function validateMutationPayload(value) {
@@ -82,6 +82,9 @@ export function validateMutationPayload(value) {
 	}
 	const actor = Number(value.actor_id);
 	if (!Number.isSafeInteger(actor) || actor < 1) throw new errs.ValidationError("Invalid NPMX actor");
+	const issuedAt = Number(value.actor_iat);
+	if (!Number.isSafeInteger(issuedAt) || issuedAt < 1 || issuedAt > Math.ceil(Date.now()/1000)+60)
+		throw new errs.ValidationError("Invalid initiating session timestamp");
 	const query = String(value.query || "");
 	if (query && (!query.startsWith("?") || query.length > 2048 || /[#\r\n]/.test(query))) {
 		throw new errs.ValidationError("Invalid NPMX query");
@@ -93,7 +96,7 @@ export function validateMutationPayload(value) {
 	if (Buffer.byteLength(JSON.stringify(body)) > MAX_REQUEST_BYTES) {
 		throw new errs.ValidationError("NPMX write exceeds the safe size limit");
 	}
-	return { method, path, query, body, descriptor, actor, baseline: value.expected_fingerprint };
+	return { method, path, query, body, descriptor, actor, issuedAt, baseline: value.expected_fingerprint };
 }
 
 export async function applyAuthorizedWrite(value) {
@@ -104,6 +107,10 @@ export async function applyAuthorizedWrite(value) {
 	}
 	// The primary reissues a short-lived credential for the authenticated
 	// actor. Standard primary-side handlers enforce access and ownership.
+	const password = await authModel.query().where("user_id", checked.actor).where("type", "password").first();
+	if (password?.meta?.password_changed_at && checked.issuedAt < password.meta.password_changed_at) {
+		throw new errs.TokenRevokedError("The initiating user session was revoked on the primary.");
+	}
 	const credential = await Token().create({
 		attrs: { id: checked.actor },
 		scope: ["user"],

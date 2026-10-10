@@ -742,7 +742,7 @@ const internalInstanceSync = {
 		const data = validateMutationPayload(req.body);
 		return applyAuthorizedWrite({
 			method: data.method, path: data.path, query: data.query, body: data.body,
-			actor_id: data.actor, expected_fingerprint: data.baseline,
+			actor_id: data.actor, actor_iat: data.issuedAt, expected_fingerprint: data.baseline,
 		});
 	},
 
@@ -985,7 +985,8 @@ const internalInstanceSync = {
 				path: req.path,
 				query: queryAt === -1 ? "" : req.originalUrl.slice(queryAt),
 				body: req.body ?? {},
-				actor_id: authUserId,
+				actor_id: authUserId.id,
+				actor_iat: authUserId.issuedAt,
 				...(descriptor.key !== null ? { expected_fingerprint: baseline } : {}),
 			};
 			// Only the primary executes writes and assigns new database IDs.
