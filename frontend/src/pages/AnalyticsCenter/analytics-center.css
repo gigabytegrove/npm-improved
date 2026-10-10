@@ -15,3 +15,75 @@
 .npmi-center-host-bar { min-width: 88px; width: 16%; }
 .npmi-center table td { vertical-align: middle; }
 @media (max-width: 767px) { .npmi-center .table { min-width: 580px; } }
+/* Full analytics workspace: persistent section navigation and discrete pages. */
+.npmi-analytics-layout {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
+  margin-top: 18px;
+}
+.npmi-analytics-nav {
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  border: 1px solid var(--tblr-border-color, #d9dee5);
+  background: var(--tblr-bg-surface, transparent);
+  border-radius: 10px;
+  padding: 14px 10px;
+}
+.npmi-analytics-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.npmi-analytics-nav-label {
+  padding: 4px 10px 8px;
+  text-transform: uppercase;
+  letter-spacing: .075em;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--tblr-secondary, #64748b);
+}
+.npmi-analytics-nav-link {
+  display: block;
+  padding: 9px 10px;
+  border-radius: 6px;
+  color: inherit;
+  text-decoration: none;
+  line-height: 1.35;
+}
+.npmi-analytics-nav-link:hover {
+  color: var(--tblr-primary, #238cce);
+  background: var(--tblr-bg-surface-secondary, rgba(127,127,127,.09));
+}
+.npmi-analytics-nav-link.active {
+  font-weight: 650;
+  color: var(--tblr-primary, #238cce);
+  background: var(--tblr-primary-lt, rgba(35,140,206,.1));
+}
+.npmi-analytics-nav-link:focus-visible {
+  outline: 2px solid var(--tblr-primary, #238cce);
+  outline-offset: -2px;
+}
+.npmi-analytics-content { min-width: 0; }
+.npmi-analytics-heading {
+  border-bottom: 1px solid var(--tblr-border-color, #d9dee5);
+  margin-bottom: 18px;
+  padding: 4px 0 14px;
+}
+.npmi-center-page { min-width: 0; }
+.npmi-center-page .card { min-width: 0; }
+@media (max-width: 991px) {
+  .npmi-analytics-layout { grid-template-columns: 1fr; gap: 14px; }
+  .npmi-analytics-nav { position: static; flex-direction: row; overflow-x: auto; gap: 16px; padding: 10px; }
+  .npmi-analytics-nav-group { flex: 0 0 auto; }
+  .npmi-analytics-nav-label { padding-bottom: 3px; }
+  .npmi-analytics-nav-link { white-space: nowrap; }
+}
+@media (max-width: 575px) {
+  .npmi-analytics-nav { flex-wrap: nowrap; }
+  .npmi-analytics-nav-link { font-size: 13px; }
+}

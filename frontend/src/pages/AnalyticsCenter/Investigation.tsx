@@ -11,18 +11,19 @@ const when = (date: string) => new Date(date).toLocaleString();
 export type InvestigationTab = "clients" | "agents" | "blocks";
 
 export default function NodeInvestigation({
-  tab, report, onFilterIp, onFilterAgent, onFilterBot, onGoToRequests, onGoToBlocks,
+  tab, report, onFilterIp, onFilterAgent, onFilterBot, onGoToBlocks, initialTarget = "", initialBlockType = "ip",
 }: {
   tab: InvestigationTab;
   report: NodeReport;
   onFilterIp: (ip: string) => void;
   onFilterAgent: (agent: string) => void;
   onFilterBot: (bot: string) => void;
-  onGoToRequests: () => void;
-  onGoToBlocks: () => void;
+  onGoToBlocks: (type: NodeBlockRule["type"], target: string) => void;
+  initialTarget?: string;
+  initialBlockType?: NodeBlockRule["type"];
 }) {
-  const [blockType, setBlockType] = useState<NodeBlockRule["type"]>("ip");
-  const [target, setTarget] = useState("");
+  const [blockType, setBlockType] = useState<NodeBlockRule["type"]>(initialBlockType);
+  const [target, setTarget] = useState(initialTarget);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -36,7 +37,7 @@ export default function NodeInvestigation({
   const prepare = (type: NodeBlockRule["type"], input: string) => {
     setBlockType(type);
     setTarget(input);
-    onGoToBlocks();
+    onGoToBlocks(type, input);
     setMessage("");
     setError("");
   };
@@ -96,7 +97,7 @@ export default function NodeInvestigation({
         <tbody>
           {report.ips.map((row) => <tr key={row.ip}>
             <td className="text-break"><button type="button" className="btn btn-link p-0" onClick={() => {
-              onFilterIp(row.ip); onGoToRequests();
+              onFilterIp(row.ip);
             }}>{row.ip}</button></td>
             <td className="text-end">{count(row.requests)}</td><td className="text-end">{count(row.errors)}</td>
             <td>{when(row.firstSeen)}</td><td>{when(row.lastSeen)}</td>
@@ -123,7 +124,7 @@ export default function NodeInvestigation({
         <tbody>{report.bots.map((row) => <tr key={row.label}>
           <td>{row.label}</td><td className="text-end">{count(row.requests)}</td>
           <td><button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => {
-            onFilterBot(row.label); onGoToRequests();
+            onFilterBot(row.label);
           }}>View requests</button></td>
         </tr>)}
           {!report.bots.length ? <tr><td colSpan={3} className="text-secondary">No retained bot classification yet.</td></tr> : null}
@@ -137,7 +138,7 @@ export default function NodeInvestigation({
           <td className="text-break">{row.label}</td><td className="text-end">{count(row.requests)}</td>
           <td><div className="d-flex flex-wrap gap-1">
             <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => {
-              onFilterAgent(row.label); onGoToRequests();
+              onFilterAgent(row.label);
             }}>History</button>
             <button type="button" className="btn btn-sm btn-outline-danger" onClick={() =>
               prepare("user_agent", row.label.slice(0, 160))}>Prepare block</button>

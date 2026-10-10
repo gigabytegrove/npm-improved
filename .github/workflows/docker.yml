@@ -129,10 +129,12 @@ jobs:
           HASH="$(printf %s "$GITHUB_WORKSPACE" | sha256sum | cut -c1-12)"
           systemctl is-active --quiet "npm-improved-update-$HASH.path"
           systemctl is-active --quiet "npm-improved-update-$HASH-maintenance.timer"
-          jq -e '.component_version == "1.5.0" and .maintenance == "automatic"' \
+          EXPECTED_VERSION="$(tr -d '[:space:]' < .version)"
+          jq -e --arg expected "$EXPECTED_VERSION" \
+            '.component_version == $expected and .maintenance == "automatic"' \
             data/host-updater-ready.json
 
-          NPM_BUILD_VERSION=1.4.1-ci \
+          NPM_BUILD_VERSION="$EXPECTED_VERSION-ci" \
           NPM_BUILD_COMMIT="$GITHUB_SHA" \
           NPM_BUILD_DATE="$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
             docker compose -f compose.yaml --env-file .env up -d --no-build app
