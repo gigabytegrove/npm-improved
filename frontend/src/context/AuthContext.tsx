@@ -52,7 +52,7 @@ function AuthProvider({ children, tokenRefreshInterval = 5 * 60 * 1000 }: Props)
 				queryClient.clear();
 				setTwoFactorChallenge(null);
 				if (window.location.pathname !== "/login") {
-					window.history.replaceState(null, "", "/login");
+					window.location.replace("/login");
 				}
 			}
 		};
