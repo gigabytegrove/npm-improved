@@ -46,7 +46,7 @@ function MetricCard({ title, value, icon, to, accent }: MetricCardProps) {
 }
 
 const Dashboard = () => {
-	const { data: hostReport } = useHostReport();
+	const { data: hostReport, isPending, isError, refetch } = useHostReport();
 	const navigate = useNavigate();
 
 	const totalRoutes =
@@ -54,6 +54,15 @@ const Dashboard = () => {
 		(hostReport?.redirection || 0) +
 		(hostReport?.stream || 0) +
 		(hostReport?.dead || 0);
+
+	if (isPending) return <div className="p-4 text-secondary" role="status">Loading routing summary…</div>;
+	if (isError || !hostReport) {
+		return <div className="p-4" role="alert">
+			<h1 className="h3">Routing summary unavailable</h1>
+			<p>Unable to load current routing counts. This does not mean your hosts were removed.</p>
+			<button type="button" className="btn btn-primary" onClick={() => void refetch()}>Retry</button>
+		</div>;
+	}
 
 	return (
 		<div className={styles.dashboard}>

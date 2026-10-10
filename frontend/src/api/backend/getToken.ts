@@ -11,6 +11,7 @@ export async function getToken(identity: string, secret: string): Promise<LoginR
 	return await api.post({
 		url: "/tokens",
 		data: { identity, secret },
+		noAuth: true,
 	});
 }
 
@@ -18,5 +19,6 @@ export async function verify2FA(challengeToken: string, code: string): Promise<T
 	return await api.post({
 		url: "/tokens/2fa",
 		data: { challengeToken, code },
+		noAuth: true,
 	});
 }
