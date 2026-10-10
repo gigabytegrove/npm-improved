@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import bodyParser from "body-parser";
 import compression from "compression";
 import express from "express";
@@ -60,10 +61,18 @@ app.use("/", mainRoutes);
 // production error handler
 // no stacktraces leaked to user
 app.use((err, req, res, _) => {
+	const requestId = randomUUID();
+	const isProxyHostRequest = /(?:^|\/)nginx\/proxy-hosts(?:\/|$)/.test(req.originalUrl?.split("?")[0] || "");
+	const safeMessage = err.public
+		? err.message
+		: isProxyHostRequest
+			? `Proxy host operation failed on the server. Check the application logs using reference ${requestId}.`
+			: "Internal Error";
 	const payload = {
 		error: {
 			code: err.status || 500,
-			message: err.public ? err.message : "Internal Error",
+			message: safeMessage,
+			request_id: requestId,
 		},
 	};
 
@@ -76,6 +85,10 @@ app.use((err, req, res, _) => {
 			stack: typeof err.stack !== "undefined" && err.stack ? err.stack.split("\n") : null,
 			previous: err.previous,
 		};
+	}
+
+	if (isProxyHostRequest) {
+		logger.warn(`Proxy host API error [${requestId}] ${req.method} ${req.originalUrl?.split("?")[0] || req.path}: ${err.message}`);
 	}
 
 	// Not every error is worth logging - but this is good for now until it gets annoying.
