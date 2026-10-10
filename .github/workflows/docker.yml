@@ -382,16 +382,27 @@ jobs:
           # proxy-host .conf (no database row) shadows the legitimate NPMi
           # ACME responder. Reconciliation must quarantine it with a
           # validated Nginx reload and restore the HTTP-01 response.
+          # Establish a known-good ACME route on this exact hostname before
+          # installing a shadow vhost. Never accept a false-positive 404.
+          BASELINE_CODE="$(curl -sS --max-time 10 \
+            -H "Host: acme-ci.example.invalid" \
+            -o /tmp/npmx-orphan-baseline -w '%{http_code}' \
+            "http://127.0.0.1:19280/.well-known/acme-challenge/$ACME_TOKEN")"
+          test "$BASELINE_CODE" = "200" &&
+            test "$(cat /tmp/npmx-orphan-baseline)" = "$ACME_VALUE" || {
+              echo "Missing known-good ACME baseline: HTTP $BASELINE_CODE" >&2
+              exit 1
+            }
           docker exec npmi-npmx-primary sh -c '
             set -eu
             mkdir -p /data/nginx/proxy_host
-            printf "%s\\n" "server {" "  listen 80;" "  server_name acme-orphan-ci.example.invalid;" "  location / { return 404; }" "}" > /data/nginx/proxy_host/999991.conf
+            printf "%s\\n" "server {" "  listen 80;" "  server_name acme-ci.example.invalid;" "  location / { return 404; }" "}" > /data/nginx/proxy_host/999991.conf
             nginx -t
             nginx -s reload
           '
           sleep 1
           PRE_CODE="$(curl -sS --max-time 10 \
-            -H "Host: acme-orphan-ci.example.invalid" \
+            -H "Host: acme-ci.example.invalid" \
             -o /tmp/npmx-orphan-before -w '%{http_code}' \
             "http://127.0.0.1:19280/.well-known/acme-challenge/$ACME_TOKEN")"
           test "$PRE_CODE" = "404" || {
@@ -415,13 +426,24 @@ jobs:
               await getDb().destroy();
             }
           '
-          POST_CODE="$(curl -sS --max-time 10 \
-            -H "Host: acme-orphan-ci.example.invalid" \
-            -o /tmp/npmx-orphan-after -w '%{http_code}' \
-            "http://127.0.0.1:19280/.well-known/acme-challenge/$ACME_TOKEN")"
+          # Nginx reload is asynchronous; an old worker may answer the
+          # first few requests. Require eventual recovery within six seconds.
+          POST_CODE=000
+          for attempt in $(seq 1 12); do
+            POST_CODE="$(curl -sS --max-time 10 \
+              -H "Host: acme-ci.example.invalid" \
+              -o /tmp/npmx-orphan-after -w '%{http_code}' \
+              "http://127.0.0.1:19280/.well-known/acme-challenge/$ACME_TOKEN")"
+            if [ "$POST_CODE" = "200" ] && [ "$(cat /tmp/npmx-orphan-after)" = "$ACME_VALUE" ]; then
+              break
+            fi
+            sleep 0.5
+          done
           test "$POST_CODE" = "200" &&
             test "$(cat /tmp/npmx-orphan-after)" = "$ACME_VALUE" || {
-              echo "NPMX ACME still failed after orphan cleanup: HTTP $POST_CODE" >&2
+              echo "NPMX ACME did not recover after orphan cleanup: HTTP $POST_CODE" >&2
+              docker exec npmi-npmx-primary nginx -T 2>&1 |
+                grep -A 12 -B 3 'acme-ci.example.invalid' | head -n 60 || true
               exit 1
             }
           docker exec npmi-npmx-primary sh -c '
