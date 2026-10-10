@@ -11,10 +11,13 @@ import json
 import os
 from pathlib import Path
 import re
+import socket
 import subprocess
 import sys
 import tarfile
 import tempfile
+import time
+from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
 PROGRAMS = (
@@ -30,11 +33,48 @@ MAX_PACKAGE_BYTES = 1024 * 1024
 
 
 def fetch(url):
-    with urlopen(url, timeout=20) as response:
-        result = response.read(MAX_PACKAGE_BYTES + 1)
-    if len(result) > MAX_PACKAGE_BYTES:
-        raise ValueError("Native updater asset exceeds the size limit")
-    return result
+    """Retry temporary host-side resolver/network failures without hiding them."""
+    for attempt in range(3):
+        try:
+            with urlopen(url, timeout=20) as response:
+                result = response.read(MAX_PACKAGE_BYTES + 1)
+            if len(result) > MAX_PACKAGE_BYTES:
+                raise ValueError("Native updater asset exceeds the size limit")
+            return result
+        except HTTPError as error:
+            if attempt == 2 or error.code not in (429, 500, 502, 503, 504):
+                raise
+        except (URLError, TimeoutError):
+            if attempt == 2:
+                raise
+        time.sleep((2, 5)[attempt])
+
+
+def explain_maintenance_error(error):
+    """Provide actionable operator status without exposing raw download URLs."""
+    reason = error.reason if isinstance(error, URLError) else error
+    if isinstance(reason, socket.gaierror) or (
+        isinstance(error, URLError) and
+        ("name resolution" in str(reason).lower() or
+         "temporary failure in name resolution" in str(reason).lower())
+    ):
+        return (
+            "The Docker host cannot resolve GitHub or its configured proxy through DNS. "
+            "The NPMi application keeps running, but native host updater maintenance "
+            "will retry after host DNS recovers. Check DNS on the Docker host."
+        )
+    if isinstance(error, HTTPError):
+        return (
+            f"GitHub release download returned HTTP {error.code}. "
+            "The NPMi application keeps running; native updater maintenance "
+            "will retry on its next scheduled run."
+        )
+    if isinstance(error, (URLError, TimeoutError)):
+        return (
+            "The Docker host could not reach the GitHub release downloads. "
+            "The NPMi application keeps running; check host networking and try again."
+        )
+    return str(error)
 
 
 def verify_and_extract(version, checksum_text, package, dest):
@@ -155,7 +195,7 @@ def main():
     try:
         changed = maintain(root, version)
     except Exception as error:
-        message = f"Host updater maintenance: {error}"
+        message = f"Host updater maintenance: {explain_maintenance_error(error)}"
         print(message, file=sys.stderr)
         status = root / "data/host-updater-maintenance.json"
         if status.parent.is_dir():
@@ -163,7 +203,7 @@ def main():
                 mode="w", dir=status.parent, prefix=".maintenance-", delete=False
             ) as handle:
                 json.dump({"status": "failed", "target_version": version,
-                           "error": str(error)}, handle)
+                           "error": explain_maintenance_error(error)}, handle)
                 handle.write("\n")
                 temporary = Path(handle.name)
             temporary.chmod(0o644)
