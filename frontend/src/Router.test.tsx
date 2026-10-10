@@ -107,6 +107,8 @@ describe("Router", () => {
 		render(<Router />);
 
 		expect(await screen.findByRole("heading", { name: heading })).toBeVisible();
-		expect(window.location.pathname).toBe(path);
+		const expectedUrl = new URL(path, window.location.origin);
+    expect(window.location.pathname).toBe(expectedUrl.pathname);
+    expect(window.location.search).toBe(expectedUrl.search);
 	});
 });
