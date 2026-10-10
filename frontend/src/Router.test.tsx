@@ -4,11 +4,15 @@ import type { ReactNode } from "react";
 import Router from "src/Router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { authState } = vi.hoisted(() => ({ authState: { authenticated: true } }));
+const { authState, sessionState } = vi.hoisted(() => ({
+	authState: { authenticated: true, logout: vi.fn() },
+	sessionState: { isPending: false, isError: false, refetch: vi.fn() },
+}));
 
 vi.mock("src/context", () => ({ useAuthState: () => authState }));
 vi.mock("src/hooks", () => ({
 	useHealth: () => ({ data: { status: "OK", setup: true }, isLoading: false, isError: false }),
+	useUser: () => sessionState,
 }));
 vi.mock("src/components", () => ({
 	Page: ({ children }: { children: ReactNode }) => children,
@@ -46,12 +50,28 @@ vi.mock("src/pages/AnalyticsCenter/Performance", () => ({ default: () => <h1>Per
 describe("Router", () => {
 	beforeEach(() => {
 		authState.authenticated = true;
+		sessionState.isPending = false;
+		sessionState.isError = false;
 		window.history.replaceState(null, "", "/");
 	});
 
 	afterEach(() => {
 		cleanup();
 		vi.restoreAllMocks();
+	});
+
+	it("holds protected pages until the current account has been verified", async () => {
+		sessionState.isPending = true;
+		render(<Router />);
+		expect(await screen.findByText("Loading")).toBeVisible();
+		expect(screen.queryByRole("heading", { name: "Dashboard" })).not.toBeInTheDocument();
+	});
+
+	it("does not mistake a failed session check for an empty dashboard", async () => {
+		sessionState.isError = true;
+		render(<Router />);
+		expect(await screen.findByText("Unable to verify your session")).toBeVisible();
+		expect(screen.queryByRole("heading", { name: "Dashboard" })).not.toBeInTheDocument();
 	});
 
 	it.each(["/login", "/login/", "/login?next=/users#form"])(
