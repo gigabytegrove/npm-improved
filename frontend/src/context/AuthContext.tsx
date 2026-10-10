@@ -40,14 +40,14 @@ function AuthProvider({ children, tokenRefreshInterval = 5 * 60 * 1000 }: Props)
 	const queryClient = useQueryClient();
 	const [authenticated, setAuthenticated] = useState(AuthStore.hasActiveToken());
 	const [twoFactorChallenge, setTwoFactorChallenge] = useState<TwoFactorChallenge | null>(null);
-	const [tokenRevision, setTokenRevision] = useState(0);
+	const [sessionExpiry, setSessionExpiry] = useState(AuthStore.expires);
 
 	// API 401, cross-tab logout and browser focus all synchronize React auth state.
 	useEffect(() => {
 		const sync = () => {
 			const valid = AuthStore.hasActiveToken();
 			setAuthenticated(valid);
-			setTokenRevision((revision) => revision + 1);
+			setSessionExpiry(AuthStore.expires);
 			if (!valid) {
 				queryClient.clear();
 				setTwoFactorChallenge(null);
@@ -76,10 +76,10 @@ function AuthProvider({ children, tokenRefreshInterval = 5 * 60 * 1000 }: Props)
 	}, [queryClient]);
 
 	// Expiry is enforced even when the page makes no further requests.
-	// A successful token refresh resets this timer via tokenRevision.
+	// A successful token refresh supplies a new sessionExpiry and resets this timer.
 	useEffect(() => {
 		if (!authenticated) return;
-		const remainingMs = (AuthStore.expires ?? 0) * 1000 - Date.now();
+		const remainingMs = (sessionExpiry ?? 0) * 1000 - Date.now();
 		if (remainingMs <= 0) {
 			AuthStore.clear();
 			return;
@@ -88,7 +88,7 @@ function AuthProvider({ children, tokenRefreshInterval = 5 * 60 * 1000 }: Props)
 			if (!AuthStore.hasActiveToken()) AuthStore.clear();
 		}, remainingMs + 100);
 		return () => window.clearTimeout(timer);
-	}, [authenticated, tokenRevision]);
+	}, [authenticated, sessionExpiry]);
 
 	const handleTokenUpdate = (response: TokenResponse) => {
 		AuthStore.set(response);
