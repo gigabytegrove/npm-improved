@@ -25,7 +25,9 @@ The original per-proxy-host detailed Analytics page at `/nginx/proxy/:id/analyti
 
 ## Scope, collection and limitations
 
-NPMi collects local structured Nginx HTTP events. The request explorer can filter by IP, full user agent, bot classification and Nginx connection identifier. Filters apply to retained raw events, not aggregate rollups. Old requests or IPs that weren't recorded cannot be backfilled.
+NPMi collects local structured Nginx HTTP events. The request explorer can filter by IP, full user agent, bot classification and Nginx connection identifier.
+
+The IP Addresses and User Agents & Bots pages each have a **server-paginated directory** over the complete retained raw-event data set. They include substring search, 50-row pages, per-value request/error/blocked counts, bytes, first/last seen, request-history drill-down and links to prepare local blocking rules. These directories are **not** capped by the Overview report's top-100/top-60 summaries. Filters apply to retained raw events, not aggregate rollups. Old requests or IPs that weren't recorded cannot be backfilled.
 
 **Connection History is an HTTP log-based reconstruction.** A row indicates first and last observed completed *requests* for a connection identifier in the displayed page of events. It is not an OS-level socket/session monitor, not SYN/FIN timestamps, and cannot guarantee a complete connection session across log rotation or pagination. TCP/UDP Nginx Stream data is a separate page.
 

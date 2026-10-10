@@ -12,6 +12,7 @@ import {
   exportNodeAnalyticsCsv,
   getNodeAnalytics,
   getNodeAnalyticsRequests,
+  getNodeDimension,
   parseNodeFilters,
 } from "../internal/node-analytics.js";
 
@@ -101,6 +102,17 @@ router.get("/node/requests", async (req, res, next) => {
     const limit = req.query.limit === undefined ? 50 : Number(req.query.limit);
     const offset = req.query.offset === undefined ? 0 : Number(req.query.offset);
     res.status(200).send(getNodeAnalyticsRequests(filters, limit, offset));
+  } catch (err) { next(err); }
+});
+
+router.get("/node/dimensions/:kind", async (req, res, next) => {
+  try {
+    await authorize(res);
+    res.status(200).send(getNodeDimension(req.params.kind, reportFilters(req.query), {
+      search: req.query.search || "",
+      limit: req.query.limit === undefined ? 50 : Number(req.query.limit),
+      offset: req.query.offset === undefined ? 0 : Number(req.query.offset),
+    }));
   } catch (err) { next(err); }
 });
 

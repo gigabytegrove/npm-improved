@@ -1,3 +1,4 @@
+import { IconArrowUpRight } from "@tabler/icons-react";
 import { Link } from "react-router-dom";
 import type { HttpStatusClass, NodeHost, NodeReport, NodeBreakdown, NodeFilters, NodeHours } from "src/api/backend";
 import { useOutletContext } from "react-router-dom";
