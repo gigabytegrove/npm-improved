@@ -11,7 +11,7 @@ import {
 	Unhealthy,
 } from "src/components";
 import { useAuthState } from "src/context";
-import { useHealth } from "src/hooks";
+import { useHealth, useUser } from "src/hooks";
 
 const Setup = lazy(() => import("src/pages/Setup"));
 const Login = lazy(() => import("src/pages/Login"));
@@ -45,7 +45,8 @@ const Streams = lazy(() => import("src/pages/Nginx/Streams"));
 
 function Router() {
 	const health = useHealth();
-	const { authenticated } = useAuthState();
+	const { authenticated, logout } = useAuthState();
+	const session = useUser("me", { enabled: authenticated, retry: false });
 
 	if (health.isLoading) {
 		return <LoadingPage />;
@@ -64,6 +65,24 @@ function Router() {
 			<Suspense fallback={<LoadingPage />}>
 				<Login />
 			</Suspense>
+		);
+	}
+
+	// Never display protected data before the server has verified /users/me.
+	// This prevents authentication failures from looking like empty installations.
+	if (session.isPending) return <LoadingPage />;
+	if (session.isError) {
+		return (
+			<Page>
+				<main className="container py-5" role="alert">
+					<h1 className="h3">Unable to verify your session</h1>
+					<p>Routing configuration is unavailable. No hosts have been removed.</p>
+					<div className="d-flex gap-2">
+						<button type="button" className="btn btn-primary" onClick={() => void session.refetch()}>Retry</button>
+						<button type="button" className="btn btn-outline-secondary" onClick={logout}>Sign in again</button>
+					</div>
+				</main>
+			</Page>
 		);
 	}
 

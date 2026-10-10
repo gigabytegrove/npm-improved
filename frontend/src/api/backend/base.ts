@@ -1,9 +1,7 @@
-import { QueryClient } from "@tanstack/react-query";
 import { camelizeKeys, decamelize, decamelizeKeys } from "humps";
 import queryString, { type StringifiableRecord } from "query-string";
 import AuthStore from "src/modules/AuthStore";
 
-const queryClient = new QueryClient();
 const contentTypeHeader = "Content-Type";
 
 interface BuildUrlArgs {
@@ -46,19 +44,28 @@ function buildBody(data?: Record<string, any>): string | undefined {
 	}
 }
 
-async function processResponse(response: Response) {
-	const payload = await response.json();
-	if (!response.ok) {
-		if (response.status === 401) {
-			// Force logout user and reload the page if Unauthorized
-			AuthStore.clear();
-			queryClient.clear();
-			window.location.reload();
-		}
-		throw new Error(
-			typeof payload.error.messageI18n !== "undefined" ? payload.error.messageI18n : payload.error.message,
-		);
+// Handle authentication loss *before* attempting to decode an error body.
+// nginx, proxies and some API errors may return non-JSON 401 responses.
+export function expireUnauthorizedResponse(response: Pick<Response, "status">, authenticatedRequest = true) {
+	if (response.status === 401 && authenticatedRequest && AuthStore.token) {
+		AuthStore.clear(); // AuthProvider reacts immediately; no page reload required.
 	}
+}
+
+async function processResponse(response: Response, authenticatedRequest = true) {
+	expireUnauthorizedResponse(response, authenticatedRequest);
+	let payload: any;
+	try {
+		payload = await response.json();
+	} catch {
+		payload = null;
+	}
+	if (!response.ok) {
+		throw new Error(payload?.error?.messageI18n || payload?.error?.message ||
+			(response.status === 401 ? "Your session has expired. Please sign in again." :
+				`Request failed (HTTP ${response.status})`));
+	}
+	if (payload === null) throw new Error("The server returned an invalid response.");
 	return camelizeKeys(payload) as any;
 }
 
@@ -83,13 +90,14 @@ export async function get(args: GetArgs, abortController?: AbortController) {
 export async function download({ url, params }: GetArgs, filename = "download.file") {
 	const headers = buildAuthHeader();
 	const res = await fetch(buildUrl({ url, params }), { headers });
+	if (!res.ok) return processResponse(res);
 	const bl = await res.blob();
 	const u = window.URL.createObjectURL(bl);
 	const a = document.createElement("a");
 	a.href = u;
 	a.download = filename;
 	a.click();
-	window.URL.revokeObjectURL(url);
+	window.URL.revokeObjectURL(u);
 }
 
 interface PostArgs {
@@ -126,7 +134,7 @@ export async function post({ url, params, data, noAuth }: PostArgs, abortControl
 
 	const signal = abortController?.signal;
 	const response = await fetch(apiUrl, { method, headers, body, signal });
-	return processResponse(response);
+	return processResponse(response, !noAuth);
 }
 
 export async function downloadPost(
@@ -144,6 +152,7 @@ export async function downloadPost(
 	});
 
 	if (!response.ok) {
+		expireUnauthorizedResponse(response);
 		let message = "Download failed";
 		try {
 			const payload = await response.json();

@@ -1,7 +1,18 @@
-import { getUnixTime, parseISO } from "date-fns";
 import type { TokenResponse } from "src/api/backend";
 
 export const TOKEN_KEY = "authentications";
+export const AUTH_CHANGED_EVENT = "npmi:authentication-changed";
+
+// API token expiry is an ISO date. Older installs may have stored a Unix timestamp.
+export const tokenExpirySeconds = (value: unknown): number | null => {
+	if (typeof value === "number" && Number.isFinite(value)) {
+		return value > 1e12 ? Math.floor(value / 1000) : Math.floor(value);
+	}
+	if (typeof value !== "string" || !value.trim()) return null;
+	if (/^\d+$/.test(value)) return tokenExpirySeconds(Number(value));
+	const parsed = Date.parse(value);
+	return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : null;
+};
 
 export class AuthStore {
 	// Get all tokens from stack
@@ -15,7 +26,7 @@ export class AuthStore {
 				console.error("Failed to parse tokens from localStorage", e);
 			}
 		}
-		return tokens;
+		return Array.isArray(tokens) ? tokens : [];
 	}
 
 	// Get last token from stack
@@ -27,36 +38,17 @@ export class AuthStore {
 		return null;
 	}
 
-	// Get expires from last token
+	// Convert the stored ISO or numeric token expiry to Unix seconds.
 	get expires() {
-		const t = this.token;
-		if (t && typeof t.expires !== "undefined") {
-			const expires = Number(t.expires);
-			if (expires && !Number.isNaN(expires)) {
-				return expires;
-			}
-		}
-		return null;
+		return tokenExpirySeconds(this.token?.expires);
 	}
 
-	// Filter out invalid tokens and return true if we find one that is valid
-	// hasActiveToken() {
-	// 	const t = this.tokens;
-	// 	return t.length > 0;
-	// }
-	// Start from the END of the stack and work backwards
+	// Remove expired impersonation tokens, but do not treat missing/invalid
+	// credentials as an authenticated session.
 	hasActiveToken() {
-		const t = this.tokens;
-		if (!t.length) {
-			return false;
-		}
-
-		const now = Math.round(Date.now() / 1000);
-		const oneMinuteBuffer = 60;
-		for (let i = t.length - 1; i >= 0; i--) {
-			const dte = getUnixTime(parseISO(t[i].expires));
-			const valid = dte - oneMinuteBuffer > now;
-			if (valid) {
+		while (this.tokens.length) {
+			if (typeof this.token?.token === "string" && this.token.token.length > 0 &&
+				this.expires !== null && this.expires > Math.floor(Date.now() / 1000)) {
 				return true;
 			}
 			this.drop();
@@ -64,9 +56,14 @@ export class AuthStore {
 		return false;
 	}
 
+	private notify() {
+		if (typeof window !== "undefined") window.dispatchEvent(new Event(AUTH_CHANGED_EVENT));
+	}
+
 	// Set a single token on the stack
 	set({ token, expires }: TokenResponse) {
 		localStorage.setItem(TOKEN_KEY, JSON.stringify([{ token, expires }]));
+		this.notify();
 	}
 
 	// Add a token to the END of the stack
@@ -74,6 +71,7 @@ export class AuthStore {
 		const t = this.tokens;
 		t.push({ token, expires });
 		localStorage.setItem(TOKEN_KEY, JSON.stringify(t));
+		this.notify();
 	}
 
 	// Drop a token from the END of the stack
@@ -81,10 +79,14 @@ export class AuthStore {
 		const t = this.tokens;
 		t.splice(-1, 1);
 		localStorage.setItem(TOKEN_KEY, JSON.stringify(t));
+		this.notify();
 	}
 
 	clear() {
-		localStorage.removeItem(TOKEN_KEY);
+		if (localStorage.getItem(TOKEN_KEY) !== null) {
+			localStorage.removeItem(TOKEN_KEY);
+			this.notify();
+		}
 	}
 
 	count() {

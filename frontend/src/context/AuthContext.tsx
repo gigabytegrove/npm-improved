@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { createContext, type ReactNode, useContext, useState } from "react";
+import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 import { useIntervalWhen } from "rooks";
 import {
 	getToken,
@@ -9,7 +9,7 @@ import {
 	verify2FA,
 	type TokenResponse,
 } from "src/api/backend";
-import AuthStore from "src/modules/AuthStore";
+import AuthStore, { AUTH_CHANGED_EVENT, TOKEN_KEY } from "src/modules/AuthStore";
 
 // 2FA challenge state
 export interface TwoFactorChallenge {
@@ -40,6 +40,55 @@ function AuthProvider({ children, tokenRefreshInterval = 5 * 60 * 1000 }: Props)
 	const queryClient = useQueryClient();
 	const [authenticated, setAuthenticated] = useState(AuthStore.hasActiveToken());
 	const [twoFactorChallenge, setTwoFactorChallenge] = useState<TwoFactorChallenge | null>(null);
+	const [tokenRevision, setTokenRevision] = useState(0);
+
+	// API 401, cross-tab logout and browser focus all synchronize React auth state.
+	useEffect(() => {
+		const sync = () => {
+			const valid = AuthStore.hasActiveToken();
+			setAuthenticated(valid);
+			setTokenRevision((revision) => revision + 1);
+			if (!valid) {
+				queryClient.clear();
+				setTwoFactorChallenge(null);
+				if (window.location.pathname !== "/login") {
+					window.history.replaceState(null, "", "/login");
+				}
+			}
+		};
+		const onStorage = (event: StorageEvent) => {
+			if (event.key === TOKEN_KEY || event.key === null) sync();
+		};
+		const onVisibility = () => {
+			if (document.visibilityState === "visible") sync();
+		};
+		window.addEventListener(AUTH_CHANGED_EVENT, sync);
+		window.addEventListener("storage", onStorage);
+		window.addEventListener("focus", sync);
+		document.addEventListener("visibilitychange", onVisibility);
+		if (!AuthStore.hasActiveToken()) sync();
+		return () => {
+			window.removeEventListener(AUTH_CHANGED_EVENT, sync);
+			window.removeEventListener("storage", onStorage);
+			window.removeEventListener("focus", sync);
+			document.removeEventListener("visibilitychange", onVisibility);
+		};
+	}, [queryClient]);
+
+	// Expiry is enforced even when the page makes no further requests.
+	// A successful token refresh resets this timer via tokenRevision.
+	useEffect(() => {
+		if (!authenticated) return;
+		const remainingMs = (AuthStore.expires ?? 0) * 1000 - Date.now();
+		if (remainingMs <= 0) {
+			AuthStore.clear();
+			return;
+		}
+		const timer = window.setTimeout(() => {
+			if (!AuthStore.hasActiveToken()) AuthStore.clear();
+		}, remainingMs + 100);
+		return () => window.clearTimeout(timer);
+	}, [authenticated, tokenRevision]);
 
 	const handleTokenUpdate = (response: TokenResponse) => {
 		AuthStore.set(response);
@@ -88,14 +137,23 @@ function AuthProvider({ children, tokenRefreshInterval = 5 * 60 * 1000 }: Props)
 	};
 
 	const refresh = async () => {
-		const response = await refreshToken();
-		handleTokenUpdate(response);
+		if (!AuthStore.hasActiveToken()) {
+			AuthStore.clear();
+			return;
+		}
+		try {
+			const response = await refreshToken();
+			handleTokenUpdate(response);
+		} catch {
+			// 401 invalidates centrally. Transient network errors do not sign out.
+			if (!AuthStore.hasActiveToken()) AuthStore.clear();
+		}
 	};
 
 	useIntervalWhen(
 		() => {
 			if (authenticated) {
-				refresh();
+				void refresh();
 			}
 		},
 		tokenRefreshInterval,
