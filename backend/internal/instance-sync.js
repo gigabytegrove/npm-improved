@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
+import { latestPeerCheckin, latestSuccessfulPeerSync } from "../lib/npmx-sync-status.js";
 import path from "node:path";
 import { getDatabaseRuntime, isMysql } from "../lib/config.js";
 import {
@@ -237,6 +238,8 @@ const sanitizedStatus = async () => {
 	const row = await getRow();
 	const meta = row.meta || {};
 	const sharedDatabase = sharedDatabaseMode();
+	const peers = Array.isArray(meta.peers) ? meta.peers : [];
+	const primary = meta.role === "primary";
 	return {
 		enabled: sharedDatabase ? false : row.value === "enabled",
 		blockedBySharedDatabase: sharedDatabase,
@@ -247,11 +250,15 @@ const sanitizedStatus = async () => {
 		primaryUrl: meta.primary_url || "",
 		intervalSeconds: meta.interval_seconds || 30,
 		secretConfigured: Boolean(readSecret()),
-		lastSync: meta.last_sync || null,
-		lastAttempt: meta.last_attempt || null,
+		// A primary never pulls. Its successful sync timestamp is reported by
+		// secondaries after the snapshot has been applied, NOT on pairing.
+		lastSync: primary ? latestSuccessfulPeerSync(peers) : (meta.last_sync || null),
+		lastAttempt: primary ? null : (meta.last_attempt || null),
+		lastPeerCheckin: primary ? latestPeerCheckin(peers) : null,
 		lastError: meta.last_error || null,
+		lastHeartbeatError: meta.last_heartbeat_error || null,
 		primaryStatus: meta.primary_status || null,
-		peers: Array.isArray(meta.peers) ? meta.peers : [],
+		peers,
 		version: currentVersion(),
 		buildCommit: process.env.NPM_BUILD_COMMIT || null,
 		buildDate: process.env.NPM_BUILD_DATE || null,
@@ -893,19 +900,31 @@ const internalInstanceSync = {
 				protocol: NPMX_PROTOCOL,
 				protocol_version: NPMX_VERSION,
 			};
-			await npmxRequest(
-				primaryUrl,
-				secret,
-				refreshed.nodeId,
-				"/heartbeat",
-				{ method: "POST", body: heartbeatBody },
-			).catch((err) => {
-				logger.warn(`NPMX heartbeat failed: ${err instanceof Error ? err.message : String(err)}`);
-			});
+			// A successful snapshot apply is not reversed by a heartbeat failure,
+			// but we must surface that telemetry failure (including HTTP errors)
+			// rather than telling the operator both nodes were updated.
+			let heartbeatWarning = null;
+			try {
+				const heartbeat = await npmxRequest(
+					primaryUrl,
+					secret,
+					refreshed.nodeId,
+					"/heartbeat",
+					{ method: "POST", body: heartbeatBody },
+				);
+				if (!heartbeat.ok) {
+					throw new Error(`Primary NPMX heartbeat rejected with HTTP ${heartbeat.status}`);
+				}
+			} catch (err) {
+				heartbeatWarning = err instanceof Error ? err.message : String(err);
+				logger.warn(`NPMX heartbeat failed after successful snapshot: ${heartbeatWarning}`);
+			}
+			await updateMeta({ last_heartbeat_error: heartbeatWarning });
 
 			return {
 				ok: true,
 				syncedAt: completed,
+				heartbeatWarning,
 				primary: peer,
 				summary: result.summary,
 			};

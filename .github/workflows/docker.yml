@@ -325,6 +325,18 @@ jobs:
           echo "$SYNC_RESULT"
           jq -e '.ok == true and .primary.protocol == "npmx"' <<<"$SYNC_RESULT"
 
+          # A successful pull is recorded on the secondary AND surfaced on
+          # the primary via an authenticated NPMX heartbeat, not confused
+          # with the original pairing-only heartbeat.
+          EXPECTED_SYNC="$(jq -r '.syncedAt' <<<"$SYNC_RESULT")"
+          curl -fsS -H "Authorization: Bearer $SECONDARY_TOKEN" \
+            http://127.0.0.1:19381/api/cluster/status \
+            | jq -e --arg expected "$EXPECTED_SYNC" '.lastSync == $expected and .lastError == null'
+          curl -fsS -H "Authorization: Bearer $PRIMARY_TOKEN" \
+            http://127.0.0.1:19281/api/cluster/status \
+            | jq -e --arg expected "$EXPECTED_SYNC" '.lastSync == $expected and any(.peers[]; .last_sync == $expected)'
+
+
           # Pre-pairing JWTs must not be allowed to impersonate primary
           # account IDs after the synchronized user table was replaced.
           OLD_AUTH_STATUS="$(curl -sS -o /tmp/npmx-old-session.json -w '%{http_code}' \
