@@ -325,7 +325,12 @@ const internalCertificate = {
 				const inUseResult = await internalHost.getHostsWithDomains(certificate.domain_names);
 
 				// 2. Disable them in nginx temporarily
-				await internalCertificate.disableInUseHosts(inUseResult);
+				// DNS-01 retains the legacy host suspension behavior. HTTP-01 no
+				// longer needs it: every host (including a private access-list host)
+				// has a dedicated ACME location, as does the default server.
+				if (certificate.meta?.dns_challenge) {
+					await internalCertificate.disableInUseHosts(inUseResult);
+				}
 
 				const user = await userModel.query().where("is_deleted", 0).andWhere("id", data.owner_user_id).first();
 				if (!user?.email) {
@@ -350,25 +355,13 @@ const internalCertificate = {
 						throw err;
 					}
 				} else {
-					// 3. Generate the LE config
-					try {
-						await internalNginx.generateLetsEncryptRequestConfig(certificate);
-						await internalNginx.reload();
-						setTimeout(() => {}, 5000);
-						// 4. Request cert
-						await internalCertificate.requestLetsEncryptSsl(certificate, user.email);
-						// 5. Remove LE config
-						await internalNginx.deleteLetsEncryptRequestConfig(certificate);
-						await internalNginx.reload();
-						// 6. Re-instate previously disabled hosts
-						await internalCertificate.enableInUseHosts(inUseResult);
-					} catch (err) {
-						// In the event of failure, revert things and throw err back
-						await internalNginx.deleteLetsEncryptRequestConfig(certificate);
-						await internalCertificate.enableInUseHosts(inUseResult);
-						await internalNginx.reload();
-						throw err;
-					}
+					// HTTP-01 now uses the NPMX-aware ACME location on the
+					// existing host (or the fallback/default host). Creating a
+					// second server_name used to cause conflicting virtual hosts
+					// and could route validation into a private access list.
+					// Never disable the real proxy to issue a certificate.
+					await internalNginx.test();
+					await internalCertificate.requestLetsEncryptSsl(certificate, user.email);
 				}
 
 				// At this point, the letsencrypt cert should exist on disk.
