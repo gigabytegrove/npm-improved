@@ -1,6 +1,9 @@
 import fs from "node:fs";
 
 const READY_PATH = "/data/host-updater-ready.json";
+// Mounted read-only from the real Linux Docker host by every supported Compose
+// deployment. Docker's os.hostname() identifies the container, not its host.
+const HOSTNAME_PATH = "/run/npm-improved/host-hostname";
 
 export function isValidHostName(value) {
   return typeof value === "string" && value.length > 0 && value.length <= 253 &&
@@ -8,16 +11,29 @@ export function isValidHostName(value) {
     !/[.]{2}/.test(value);
 }
 
+function readHostFile(filename) {
+  try {
+    const value = fs.readFileSync(filename, "utf8").trim();
+    return isValidHostName(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * The NPMX display name may be synchronized or renamed, and os.hostname()
- * inside Docker usually identifies a container, not its Linux host.
- * Read the node-local, host-generated updater readiness marker instead.
- * Explicit NPM_NODE_HOSTNAME is the fallback for custom deployments.
+ * Obtain the physical Linux host name without trusting the Docker container ID.
+ * The Compose-mounted host /etc/hostname is available on existing installs as
+ * soon as their container is recreated. Managed installations also have the
+ * trusted node-local updater marker; custom deployments may use an override.
  */
 export function getServingNodeHostname({
   env = process.env,
   markerPath = READY_PATH,
+  hostnamePath = HOSTNAME_PATH,
 } = {}) {
+  const hostFileName = readHostFile(hostnamePath);
+  if (hostFileName) return hostFileName;
+
   try {
     const marker = JSON.parse(fs.readFileSync(markerPath, "utf8"));
     const matchesProject = typeof env.NPM_HOST_PROJECT_DIR === "string" &&
@@ -28,7 +44,7 @@ export function getServingNodeHostname({
       return marker.host_hostname;
     }
   } catch {
-    // Legacy deployments can supply the physical hostname explicitly.
+    // A missing or older marker is normal on legacy deployments.
   }
   return isValidHostName(env.NPM_NODE_HOSTNAME) ? env.NPM_NODE_HOSTNAME : null;
 }
