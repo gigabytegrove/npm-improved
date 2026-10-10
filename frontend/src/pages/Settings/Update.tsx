@@ -19,6 +19,7 @@ import {
 } from "src/api/backend";
 import { Button, Loading } from "src/components";
 import styles from "./Update.module.css";
+import { hostUpdaterBootstrap } from "./hostUpdaterBootstrap";
 
 const ACTIVE_STATES = new Set([
 	"preflight",
@@ -75,33 +76,6 @@ const badgeClass = (state?: string) => {
 	return "bg-secondary-lt text-secondary";
 };
 
-
-/** Existing native host service cannot replace its own root-owned programs
- * from inside the unprivileged application container. Generate a verified,
- * copy-and-run one-time bootstrap for that precise host project instead.
- */
-const quoteShell = (value: string) => `'${value.replace(/'/g, "'\\''")}'`;
-const hostUpdaterBootstrap = (projectDir: string, version: string) => {
-	if (!/^v?\d+\.\d+\.\d+$/.test(version)) return null;
-	const release = version.startsWith("v") ? version : `v${version}`;
-	return [
-		"set -euo pipefail",
-		`NPMI_PROJECT=${quoteShell(projectDir)}`,
-		`NPMI_RELEASE=${quoteShell(release)}`,
-		'NPMI_ASSET="npm-improved-${NPMI_RELEASE}-host-updater.tar.gz"',
-		'NPMI_SUMS="npm-improved-${NPMI_RELEASE}-SHA256SUMS.txt"',
-		'NPMI_TMP="$(mktemp -d)"',
-		'trap \'rm -rf "$NPMI_TMP"\' EXIT',
-		'cd "$NPMI_TMP"',
-		'NPMI_BASE="https://github.com/gigabytegrove/npm-improved/releases/download/${NPMI_RELEASE}"',
-		'curl -fsSL "$NPMI_BASE/$NPMI_SUMS" -o "$NPMI_SUMS"',
-		'curl -fsSL "$NPMI_BASE/$NPMI_ASSET" -o "$NPMI_ASSET"',
-		'grep -F "  $NPMI_ASSET" "$NPMI_SUMS" > selected-checksum.txt',
-		'sha256sum -c selected-checksum.txt',
-		'tar -xzf "$NPMI_ASSET"',
-		'sudo bash scripts/install-host-updater "$NPMI_PROJECT"',
-	].join("\n");
-};
 
 type AuthAction = "update" | "rollback" | "restart";
 
@@ -332,6 +306,10 @@ export default function Update() {
 							</div>
 							<pre className="mt-2 p-2 border rounded overflow-auto user-select-all"><code>{bootstrapCommand}</code></pre>
 							<Button type="button" onClick={() => {
+								if (!navigator.clipboard?.writeText) {
+									setActionError("Clipboard access is unavailable here. Select and copy the command above.");
+									return;
+								}
 								void navigator.clipboard.writeText(bootstrapCommand).catch((err) =>
 									setActionError(err instanceof Error ? err.message : "Clipboard unavailable. Select and copy the command above."),
 								);
