@@ -27,6 +27,7 @@ import {
 	verifyNpmxRequestSignature,
 } from "../lib/npmx.js";
 import errs from "../lib/error.js";
+import { validAcmeToken, readLocalAcmeToken } from "../lib/acme-challenge.js";
 import settingModel from "../models/setting.js";
 import pjson from "../package.json" with { type: "json" };
 import { global as logger } from "../logger.js";
@@ -308,19 +309,6 @@ const fetchWithTimeout = async (url, options = {}, timeout = REQUEST_TIMEOUT_MS)
 
 // HTTP-01 tokens are opaque, short-lived Certbot artifacts. Never use a
 // request-supplied filesystem path; only these bounded token characters are allowed.
-const ACME_WEBROOT = "/data/letsencrypt-acme-challenge/.well-known/acme-challenge";
-const validAcmeToken = (token) => /^[A-Za-z0-9_-]{1,128}$/.test(token);
-const readLocalAcmeToken = (token) => {
-	if (!validAcmeToken(token)) return null;
-	try {
-		const value = fs.readFileSync(path.join(ACME_WEBROOT, token));
-		return value.length > 0 && value.length <= 4096 ? value.toString("utf8") : null;
-	} catch (err) {
-		if (err?.code === "ENOENT") return null;
-		throw err;
-	}
-};
-
 const internalInstanceSync = {
 	getStatus: sanitizedStatus,
 
