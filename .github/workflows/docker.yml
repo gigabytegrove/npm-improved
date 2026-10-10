@@ -342,6 +342,20 @@ jobs:
             http://127.0.0.1:19381/api/tokens | jq -r '.token')"
           test -n "$SECONDARY_TOKEN" && test "$SECONDARY_TOKEN" != "null"
 
+          # Authentication must survive request routing between NPMX peers.
+          # The hosts have separate RSA private keys, but paired users receive
+          # a purpose-derived HS256 token accepted on either trusted peer.
+          ! cmp -s /tmp/npmi-npmx/primary/data/keys.json /tmp/npmi-npmx/secondary/data/keys.json
+          PRIMARY_SHARED_TOKEN="$(curl -fsS -H 'Content-Type: application/json' \
+            -d '{"identity":"primary@example.com","secret":"primary-password-12345"}' \
+            http://127.0.0.1:19281/api/tokens | jq -r '.token')"
+          for port in 19281 19381; do
+            curl -fsS -H "Authorization: Bearer $PRIMARY_SHARED_TOKEN" \
+              "http://127.0.0.1:$port/api/users/me" | jq -e '.email == "primary@example.com"'
+            curl -fsS -H "Authorization: Bearer $SECONDARY_TOKEN" \
+              "http://127.0.0.1:$port/api/users/me" | jq -e '.email == "primary@example.com"'
+          done
+
 
           PRIMARY_PAGE=""
           SECONDARY_PAGE=""
