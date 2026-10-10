@@ -174,3 +174,27 @@
 		margin-top: 0.2rem;
 	}
 }
+
+/* Browser/Tabler anchor hover rules must never underline shell navigation.
+ * Keep the active indicator and keyboard focus treatment unchanged. */
+.navigation a.item,
+.navigation a.item:link,
+.navigation a.item:visited,
+.navigation a.item:hover,
+.navigation a.item:focus-visible,
+.navigation a.item:active,
+a.brand,
+a.brand:link,
+a.brand:visited,
+a.brand:hover,
+a.brand:focus-visible,
+a.brand:active {
+	text-decoration: none;
+	text-decoration-line: none;
+}
+
+.navigation a.item:focus-visible,
+a.brand:focus-visible {
+	outline: 2px solid #38bdf8;
+	outline-offset: 2px;
+}

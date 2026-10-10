@@ -699,3 +699,19 @@ label.row {
 		padding: 1rem;
 	}
 }
+
+/* Navigation is a control surface, not underlined body-content links.
+ * Restrict the reset to shell navigation, header dropdowns and the
+ * reusable nav-link component; leave in-page content links untouched. */
+.npmi-shell a.nav-link,
+.npmi-shell a.nav-link:link,
+.npmi-shell a.nav-link:visited,
+.npmi-shell a.nav-link:hover,
+.npmi-shell a.nav-link:focus-visible,
+.npmi-shell a.nav-link:active,
+.npmi-shell .dropdown-menu a.dropdown-item,
+.npmi-shell .dropdown-menu a.dropdown-item:hover,
+.npmi-shell .dropdown-menu a.dropdown-item:focus-visible {
+	text-decoration: none;
+	text-decoration-line: none;
+}

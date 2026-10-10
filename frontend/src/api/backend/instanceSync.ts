@@ -30,6 +30,8 @@ export interface InstanceSyncStatus {
 	intervalSeconds: number;
 	secretConfigured: boolean;
 	lastSync: string | null;
+	lastPeerCheckin: string | null;
+	lastHeartbeatError: string | null;
 	lastAttempt: string | null;
 	lastError: string | null;
 	primaryStatus: InstanceSyncPeer | null;
@@ -61,6 +63,7 @@ export interface InstanceSyncSettings {
 export interface InstanceSyncResult {
 	ok: boolean;
 	syncedAt: string;
+	heartbeatWarning?: string | null;
 	primary: InstanceSyncPeer;
 	summary: Record<string, any>;
 }
