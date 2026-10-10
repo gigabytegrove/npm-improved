@@ -1,6 +1,7 @@
 import { camelizeKeys, decamelize, decamelizeKeys } from "humps";
 import queryString, { type StringifiableRecord } from "query-string";
 import AuthStore from "src/modules/AuthStore";
+import { observeBackendNode } from "src/modules/BackendNode";
 
 const contentTypeHeader = "Content-Type";
 
@@ -53,6 +54,7 @@ export function expireUnauthorizedResponse(response: Pick<Response, "status">, a
 }
 
 async function processResponse(response: Response, authenticatedRequest = true) {
+	observeBackendNode(response.headers.get("X-NPMi-Node-Hostname"));
 	expireUnauthorizedResponse(response, authenticatedRequest);
 	let payload: any;
 	try {
@@ -90,6 +92,7 @@ export async function get(args: GetArgs, abortController?: AbortController) {
 export async function download({ url, params }: GetArgs, filename = "download.file") {
 	const headers = buildAuthHeader();
 	const res = await fetch(buildUrl({ url, params }), { headers });
+	observeBackendNode(res.headers.get("X-NPMi-Node-Hostname"));
 	if (!res.ok) return processResponse(res);
 	const bl = await res.blob();
 	const u = window.URL.createObjectURL(bl);
@@ -151,6 +154,7 @@ export async function downloadPost(
 		body: buildBody(data),
 	});
 
+	observeBackendNode(response.headers.get("X-NPMi-Node-Hostname"));
 	if (!response.ok) {
 		expireUnauthorizedResponse(response);
 		let message = "Download failed";

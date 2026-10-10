@@ -30,7 +30,7 @@ export interface NodeHost {
 }
 export interface NodeReport {
   scope: "local-node";
-  node: { name: string; id: string | null; role: string; version: string | null };
+  node: { hostname: string | null; name: string; id: string | null; role: string; version: string | null };
   hours: NodeHours;
   filters: { hostId: number | null; statusClass: HttpStatusClass | null };
   accuracy: "raw-events" | "hourly-rollup";
