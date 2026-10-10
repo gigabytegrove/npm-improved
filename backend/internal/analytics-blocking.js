@@ -40,11 +40,11 @@ export function renderBlockPolicy(rules) {
   const agents = [];
   for (const rule of rules) {
     const value = validateBlockTarget(rule.type, rule.target);
-    if (rule.type === "ip") ips.push("    " + value + " 1;");
+    if (rule.type === "ip") ips.push(`    ${value} 1;`);
     else {
       // Literal substring match, case insensitive; no arbitrary regex/code.
       const escaped = [...value].map((ch) => /[a-zA-Z0-9_-]/.test(ch)
-        ? ch : "\\" + ch).join("");
+        ? ch : `\\${ch}`).join("");
       agents.push(`    "~*${escaped.replace(/"/g, '\\"')}" 1;`);
     }
   }
@@ -176,4 +176,51 @@ export function enableKnownScannerBlocking(operator) {
       return { added: additions.length };
     })();
   } catch (error) { activate(current); throw error; }
+}
+
+/**
+ * Persistent scanner policy: enabling installs signatures as Nginx maps,
+ * so each *future* request is denied automatically without polling or
+ * running a separate protection container. No search crawlers are blocked.
+ * Disabling only removes preset-owned rules and retains manual blocks.
+ */
+export function getKnownScannerPolicy() {
+  const all = listNodeBlockRules();
+  const owned = all.filter((rule) => rule.type === "user_agent" &&
+    rule.note === "Known scanner signature (opt-in)" &&
+    SCANNER_UA_SIGNATURES.includes(rule.target));
+  return {
+    enabled: owned.length > 0,
+    active_signatures: owned.length,
+    available_signatures: SCANNER_UA_SIGNATURES.length,
+    signatures: [...SCANNER_UA_SIGNATURES],
+    enforcement: "nginx-per-request",
+  };
+}
+
+export function setKnownScannerPolicy(enabled, operator) {
+  if (typeof enabled !== "boolean") throw new RangeError("Invalid policy state");
+  if (!/^[0-9]{1,12}$/.test(String(operator || "")))
+    throw new RangeError("Invalid administrator");
+  if (enabled) return { ...enableKnownScannerBlocking(operator), ...getKnownScannerPolicy() };
+  const current = listNodeBlockRules();
+  const owned = current.filter((rule) =>
+    rule.type === "user_agent" &&
+    rule.note === "Known scanner signature (opt-in)" &&
+    SCANNER_UA_SIGNATURES.includes(rule.target));
+  if (!owned.length) return { removed: 0, ...getKnownScannerPolicy() };
+  const ids = new Set(owned.map((row) => row.id));
+  activate(current.filter((row) => !ids.has(row.id)));
+  try {
+    database().transaction(() => {
+      const now = Math.floor(Date.now() / 1000);
+      for (const row of owned) {
+        database().prepare("DELETE FROM analytics_block_rule WHERE id=?").run(row.id);
+        database().prepare(`INSERT INTO analytics_block_audit
+          (action,type,target,operator,occurred_at) VALUES ('remove',?,?,?,?)`)
+          .run(row.type, row.target, String(operator), now);
+      }
+    })();
+  } catch (error) { activate(current); throw error; }
+  return { removed: owned.length, ...getKnownScannerPolicy() };
 }

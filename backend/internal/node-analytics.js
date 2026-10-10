@@ -281,12 +281,130 @@ export function exportNodeAnalyticsCsv(filters) {
   const headers = ["route_id","timestamp_utc","source_ip","user_agent","bot_class","request_id","connection_id","hostname","method","path","protocol","status","bytes_out","bytes_in","duration_ms","upstream_ms","upstream_status","device"];
   const safe = (val) => {
     let value = String(val ?? "");
-    if (/^[=+@\t\r-]/.test(value)) value = "'" + value;
-    return '"' + value.replaceAll('"', '""') + '"';
+    if (/^[=+@\t\r-]/.test(value)) value = `'${value}`;
+    return `"${value.replaceAll('"', '""')}"`;
   };
   const csv = rows.slice(0,10000).map((row)=>[
     row.host_id,new Date(row.occurred_at_ms || row.occurred_at*1000).toISOString(),row.client_ip,row.user_agent,row.bot_class,row.request_id,row.connection_id,row.domain,row.method,row.path,row.protocol,
     row.status,row.bytes_out,row.bytes_in,row.duration_ms,row.upstream_ms,row.upstream_status,row.device,
   ].map(safe).join(","));
-  return { csv: [headers.join(","),...csv].join("\n")+"\n", truncated: rows.length > 10000 };
+  return { csv: `${[headers.join(","),...csv].join("\n")}\n`, truncated: rows.length > 10000 };
+}
+
+/**
+ * Source-IP drill-down. A client IP identifies a network endpoint, not a
+ * human. Preserve UTC timestamps, route/status mix, claimed agents and
+ * time distribution without inferring identity or reputation.
+ */
+export function getNodeClientProfile(ip, filters = {}) {
+  const { hours, hostId } = parseNodeFilters(filters);
+  if (![1, 24, 168, 720, 2160].includes(hours)) throw new RangeError("Invalid reporting period");
+  if (typeof ip !== "string" || ip.length > 45 || !/^[0-9a-fA-F:.]+$/.test(ip))
+    throw new RangeError("Invalid client IP address");
+  const db = getAnalyticsDatabase();
+  const cutoff = Math.floor(Date.now() / 1000) - hours * 3600;
+  const where = `occurred_at >= ? AND client_ip = ?${hostId === null ? "" : " AND host_id = ?"}`;
+  const args = hostId === null ? [cutoff, ip] : [cutoff, ip, hostId];
+  const summary = db.prepare(`SELECT COUNT(*) AS requests,
+    MIN(occurred_at_ms) AS first_ms, MAX(occurred_at_ms) AS last_ms,
+    COUNT(DISTINCT host_id) AS routes,COUNT(DISTINCT user_agent) AS user_agents,
+    SUM(bytes_out) AS bytes_out,
+    SUM(CASE WHEN status BETWEEN 400 AND 499 THEN 1 ELSE 0 END) AS client_errors,
+    SUM(CASE WHEN status >= 500 THEN 1 ELSE 0 END) AS server_errors,
+    SUM(CASE WHEN block_reason IS NOT NULL THEN 1 ELSE 0 END) AS denied,
+    MIN(occurred_at) AS first_sec, MAX(occurred_at) AS last_sec
+    FROM analytics_event WHERE ${where}`).get(...args);
+  const stride = hours === 1 ? 60 : hours <= 24 ? 3600 : 86400;
+  const trend = db.prepare(`SELECT CAST(occurred_at / ? AS INTEGER) * ? AS bucket,
+    COUNT(*) AS requests,
+    SUM(CASE WHEN status >= 400 THEN 1 ELSE 0 END) AS errors,
+    SUM(CASE WHEN block_reason IS NOT NULL THEN 1 ELSE 0 END) AS blocked
+    FROM analytics_event WHERE ${where} GROUP BY bucket ORDER BY bucket`)
+    .all(stride,stride,...args).map(row => ({
+      at: new Date(row.bucket*1000).toISOString(),
+      requests: Number(row.requests),
+      errors: Number(row.errors),
+      blocked: Number(row.blocked),
+    }));
+  const dimensions = {
+    routes: ["host_id",50],
+    user_agents: ["user_agent",30],
+    bot_classes: ["bot_class",20],
+    methods: ["method",20],
+    status_codes: ["status",30],
+    paths: ["path",30],
+  };
+  const breakdowns = {};
+  for (const [key, [field, limit]] of Object.entries(dimensions)) {
+    breakdowns[key] = db.prepare(`SELECT ${field} AS value,COUNT(*) AS requests,
+      MIN(occurred_at) AS first_seen,MAX(occurred_at) AS last_seen
+      FROM analytics_event WHERE ${where}
+      GROUP BY ${field} ORDER BY requests DESC LIMIT ?`)
+      .all(...args,limit).map(row=>({
+        value: row.value, requests:Number(row.requests),
+        first_seen:new Date(row.first_seen*1000).toISOString(),
+        last_seen:new Date(row.last_seen*1000).toISOString(),
+      }));
+  }
+  return {
+    ip,scope:"local-node",hours,requests:Number(summary.requests || 0),
+    first_seen:summary.first_sec===null?null:new Date((summary.first_ms||summary.first_sec*1000)).toISOString(),
+    last_seen:summary.last_sec===null?null:new Date((summary.last_ms||summary.last_sec*1000)).toISOString(),
+    active_routes:Number(summary.routes||0),distinct_user_agents:Number(summary.user_agents||0),
+    bytes_out:Number(summary.bytes_out||0),
+    client_errors:Number(summary.client_errors||0),
+    server_errors:Number(summary.server_errors||0),
+    denied:Number(summary.denied||0),
+    trend,...breakdowns,
+    limitations:"IP addresses can represent NAT, proxies and shared networks; bot classes are inferred from self-declared user agents.",
+  };
+}
+
+/**
+ * One user-agent's traffic, grouped by source IP, host, bot label and time.
+ * Claims about the client software are not cryptographic proof.
+ */
+export function getNodeAgentProfile(userAgent, filters = {}) {
+  const { hours, hostId } = parseNodeFilters(filters);
+  if (typeof userAgent !== "string" || !userAgent || userAgent.length > 1024)
+    throw new RangeError("Invalid user-agent string");
+  const cutoff = Math.floor(Date.now()/1000) - hours*3600;
+  const where = `occurred_at >= ? AND user_agent = ?${hostId === null ? "" : " AND host_id = ?"}`;
+  const args = hostId === null ? [cutoff, userAgent] : [cutoff,userAgent,hostId];
+  const db = getAnalyticsDatabase();
+  const summary = db.prepare(`SELECT COUNT(*) AS requests,
+    COUNT(DISTINCT client_ip) AS unique_ips,
+    COUNT(DISTINCT host_id) AS routes,
+    SUM(CASE WHEN status >= 400 THEN 1 ELSE 0 END) AS errors,
+    SUM(CASE WHEN block_reason IS NOT NULL THEN 1 ELSE 0 END) AS blocked,
+    MIN(occurred_at) AS first_seen,MAX(occurred_at) AS last_seen
+    FROM analytics_event WHERE ${where}`).get(...args);
+  const stride = hours === 1 ? 60 : hours <= 24 ? 3600 : 86400;
+  const timeline = db.prepare(`SELECT CAST(occurred_at/? AS INTEGER)*? AS bucket,
+    COUNT(*) AS requests,SUM(CASE WHEN status>=400 THEN 1 ELSE 0 END) AS errors,
+    SUM(CASE WHEN block_reason IS NOT NULL THEN 1 ELSE 0 END) AS blocked
+    FROM analytics_event WHERE ${where} GROUP BY bucket ORDER BY bucket`)
+    .all(stride,stride,...args).map(row=>({
+      at:new Date(row.bucket*1000).toISOString(),requests:Number(row.requests),
+      errors:Number(row.errors),blocked:Number(row.blocked),
+    }));
+  const breakdown=(field,limit)=>db.prepare(`SELECT ${field} AS value,
+    COUNT(*) AS requests,MIN(occurred_at) AS first_seen,MAX(occurred_at) AS last_seen
+    FROM analytics_event WHERE ${where} GROUP BY ${field}
+    ORDER BY requests DESC LIMIT ?`).all(...args,limit).map(row=>({
+      value:row.value,requests:Number(row.requests),
+      first_seen:new Date(row.first_seen*1000).toISOString(),
+      last_seen:new Date(row.last_seen*1000).toISOString(),
+    }));
+  return {
+    user_agent:userAgent,scope:"local-node",hours,requests:Number(summary.requests),
+    unique_ips:Number(summary.unique_ips||0),routes:Number(summary.routes||0),
+    errors:Number(summary.errors||0),blocked:Number(summary.blocked||0),
+    first_seen:summary.first_seen===null?null:new Date(summary.first_seen*1000).toISOString(),
+    last_seen:summary.last_seen===null?null:new Date(summary.last_seen*1000).toISOString(),
+    timeline,ips:breakdown("client_ip",100),route_breakdown:breakdown("host_id",50),
+    paths:breakdown("path",30),bot_classes:breakdown("bot_class",15),
+    status_codes:breakdown("status",30),
+    limitations:"User-agent strings are supplied by clients and may be forged. A shared user agent is not proof that requests originate from one device.",
+  };
 }

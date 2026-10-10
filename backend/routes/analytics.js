@@ -1,17 +1,19 @@
 import express from "express";
 import os from "node:os";
 import jwtdecode from "../lib/express/jwt-decode.js";
-import { addNodeBlockRule, deleteNodeBlockRule, listNodeBlockRules, getNodeBlockAudit, enableKnownScannerBlocking } from "../internal/analytics-blocking.js";
+import { addNodeBlockRule, deleteNodeBlockRule, listNodeBlockRules, getNodeBlockAudit, enableKnownScannerBlocking, getKnownScannerPolicy, setKnownScannerPolicy } from "../internal/analytics-blocking.js";
 import internalProxyHost from "../internal/proxy-host.js";
 import internalRedirectionHost from "../internal/redirection-host.js";
 import internalDeadHost from "../internal/dead-host.js";
 import internalStream from "../internal/stream.js";
-import { getNodeStreamAnalytics } from "../internal/stream-analytics.js";
+import { getNodeStreamAnalytics, getNodeStreamSessions } from "../internal/stream-analytics.js";
 import internalInstanceSync from "../internal/instance-sync.js";
 import {
   exportNodeAnalyticsCsv,
   getNodeAnalytics,
   getNodeAnalyticsRequests,
+  getNodeClientProfile,
+  getNodeAgentProfile,
   parseNodeFilters,
 } from "../internal/node-analytics.js";
 
@@ -94,6 +96,34 @@ router.get("/node", async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+router.get("/node/agent", async (req, res, next) => {
+  try {
+    await authorize(res);
+    res.status(200).send(getNodeAgentProfile(req.query.user_agent, reportFilters(req.query)));
+  } catch (err) { next(err); }
+});
+
+router.get("/node/streams/sessions", async (req, res, next) => {
+  try {
+    await authorize(res);
+    res.status(200).send(getNodeStreamSessions({
+      hours:req.query.hours === undefined ? 24 : Number(req.query.hours),
+      streamId:req.query.stream_id === undefined ? null : Number(req.query.stream_id),
+      clientIp:req.query.ip || null,
+      limit:req.query.limit === undefined ? 50 : Number(req.query.limit),
+      offset:req.query.offset === undefined ? 0 : Number(req.query.offset),
+    }));
+  } catch(err) {next(err);}
+});
+
+router.get("/node/client", async (req, res, next) => {
+  try {
+    await authorize(res);
+    const report = getNodeClientProfile(req.query.ip, reportFilters(req.query));
+    res.status(200).send(report);
+  } catch (err) { next(err); }
+});
+
 router.get("/node/requests", async (req, res, next) => {
   try {
     await authorize(res);
@@ -152,6 +182,20 @@ router.delete("/blocks/:id", async (req, res, next) => {
     res.status(200).send(deleteNodeBlockRule(id, operator));
   } catch (err) { next(err); }
 });
+router.get("/blocks/scanner-policy", async (_req, res, next) => {
+  try {
+    await authorize(res);
+    res.status(200).send(getKnownScannerPolicy());
+  } catch (err) { next(err); }
+});
+router.put("/blocks/scanner-policy", async (req, res, next) => {
+  try {
+    await authorizeWrite(res);
+    const operator = res.locals.access.token.getUserId(1);
+    res.status(200).send(setKnownScannerPolicy(req.body?.enabled, operator));
+  } catch (err) { next(err); }
+});
+
 router.post("/blocks/scanner-presets", async (_req, res, next) => {
   try {
     await authorizeWrite(res);

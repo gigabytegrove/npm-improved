@@ -12,7 +12,7 @@ test("Node Analytics Center aggregates local hosts, filters, timestamps and safe
   const collector = await import("../internal/proxy-analytics.js?node-center=" + Date.now());
   // The analytics module resolves the common collector connection in this process.
   // Tests run in isolated Node test workers.
-  const { getNodeAnalytics, getNodeAnalyticsRequests, parseNodeFilters, exportNodeAnalyticsCsv } =
+  const { getNodeAnalytics, getNodeAnalyticsRequests, getNodeClientProfile, getNodeAgentProfile, parseNodeFilters, exportNodeAnalyticsCsv } =
     await import("../internal/node-analytics.js");
 
   const now = new Date(Date.now() - 15000).toISOString();
@@ -60,11 +60,34 @@ test("Node Analytics Center aggregates local hosts, filters, timestamps and safe
     assert.equal(getNodeAnalyticsRequests({ hours: 24, ip: "203.0.113.27" }).total, 3);
     assert.equal(getNodeAnalyticsRequests({ hours: 24, userAgent: "Not a UA" }).total, 0);
     assert.equal(getNodeAnalyticsRequests({ hours: 24, connection_id: "87" }).total, 3);
+    const profile = getNodeClientProfile("203.0.113.27", {hours:24});
+    assert.equal(profile.requests, 3);
+    assert.equal(profile.active_routes, 2);
+    assert.equal(profile.distinct_user_agents, 1);
+    assert.equal(profile.client_errors, 1);
+    assert.equal(profile.server_errors, 1);
+    assert.equal(profile.trend.reduce((sum,point)=>sum+point.requests,0),3);
+    assert.equal(profile.paths.find(row=>row.value==="/a")?.requests,1);
+    assert.equal(profile.user_agents[0].value, "Mozilla/5.0");
+    assert.equal(getNodeClientProfile("203.0.113.27",{hours:24,hostId:1}).requests,2);
+    assert.equal(getNodeClientProfile("192.0.2.200",{hours:24}).requests,0);
+    assert.throws(()=>getNodeClientProfile("not-an-ip",{hours:24}),RangeError);
+    const agent = getNodeAgentProfile("Mozilla/5.0",{hours:24});
+    assert.equal(agent.requests,3);
+    assert.equal(agent.unique_ips,1);
+    assert.equal(agent.routes,2);
+    assert.equal(agent.errors,2);
+    assert.equal(agent.ips[0].value,"203.0.113.27");
+    assert.equal(agent.timeline.reduce((sum,row)=>sum+row.requests,0),3);
+    assert.equal(getNodeAgentProfile("Mozilla/5.0",{hours:24,hostId:1}).requests,2);
+    assert.equal(getNodeAgentProfile("OtherBrowser",{hours:24}).requests,0);
+    assert.throws(()=>getNodeAgentProfile("",{hours:24}),RangeError);
     const csv = exportNodeAnalyticsCsv({ hours: 24 }).csv;
     assert.ok(csv.includes("/a"));
     assert.ok(csv.includes("203.0.113.27"));
     assert.ok(csv.includes("Mozilla/5.0"));
     assert.ok(!csv.includes("password=secret"));
+    assert.equal(exportNodeAnalyticsCsv({hours:24,ip:"192.0.2.200"}).csv.trim().split("\\n").length,1);
     assert.deepEqual(parseNodeFilters({ hours: "24", host_id: "2", status_class:"4xx" }), {
       hours: 24,hostId: 2,statusClass:"4xx",
     });
