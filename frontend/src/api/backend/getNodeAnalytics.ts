@@ -228,3 +228,17 @@ export async function getNodeStreamSessions(args:{
     ...(args.ip?{ip:args.ip}:{}),
   }});
 }
+
+export interface ScannerPolicy {
+  enabled: boolean;
+  activeSignatures: number;
+  availableSignatures: number;
+  signatures: string[];
+  enforcement: "nginx-per-request";
+}
+export async function getScannerPolicy(): Promise<ScannerPolicy> {
+  return api.get({url:"/analytics/blocks/scanner-policy"});
+}
+export async function setScannerPolicy(enabled:boolean): Promise<ScannerPolicy> {
+  return api.put({url:"/analytics/blocks/scanner-policy",data:{enabled}});
+}

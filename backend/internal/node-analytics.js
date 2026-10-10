@@ -281,14 +281,14 @@ export function exportNodeAnalyticsCsv(filters) {
   const headers = ["route_id","timestamp_utc","source_ip","user_agent","bot_class","request_id","connection_id","hostname","method","path","protocol","status","bytes_out","bytes_in","duration_ms","upstream_ms","upstream_status","device"];
   const safe = (val) => {
     let value = String(val ?? "");
-    if (/^[=+@\t\r-]/.test(value)) value = "'" + value;
-    return '"' + value.replaceAll('"', '""') + '"';
+    if (/^[=+@\t\r-]/.test(value)) value = `'${value}`;
+    return `"${value.replaceAll('"', '""')}"`;
   };
   const csv = rows.slice(0,10000).map((row)=>[
     row.host_id,new Date(row.occurred_at_ms || row.occurred_at*1000).toISOString(),row.client_ip,row.user_agent,row.bot_class,row.request_id,row.connection_id,row.domain,row.method,row.path,row.protocol,
     row.status,row.bytes_out,row.bytes_in,row.duration_ms,row.upstream_ms,row.upstream_status,row.device,
   ].map(safe).join(","));
-  return { csv: [headers.join(","),...csv].join("\n")+"\n", truncated: rows.length > 10000 };
+  return { csv: `${[headers.join(","),...csv].join("\n")}\n`, truncated: rows.length > 10000 };
 }
 
 /**
@@ -303,7 +303,7 @@ export function getNodeClientProfile(ip, filters = {}) {
     throw new RangeError("Invalid client IP address");
   const db = getAnalyticsDatabase();
   const cutoff = Math.floor(Date.now() / 1000) - hours * 3600;
-  const where = "occurred_at >= ? AND client_ip = ?" + (hostId === null ? "" : " AND host_id = ?");
+  const where = `occurred_at >= ? AND client_ip = ?${hostId === null ? "" : " AND host_id = ?"}`;
   const args = hostId === null ? [cutoff, ip] : [cutoff, ip, hostId];
   const summary = db.prepare(`SELECT COUNT(*) AS requests,
     MIN(occurred_at_ms) AS first_ms, MAX(occurred_at_ms) AS last_ms,
@@ -369,8 +369,7 @@ export function getNodeAgentProfile(userAgent, filters = {}) {
   if (typeof userAgent !== "string" || !userAgent || userAgent.length > 1024)
     throw new RangeError("Invalid user-agent string");
   const cutoff = Math.floor(Date.now()/1000) - hours*3600;
-  const where = "occurred_at >= ? AND user_agent = ?" +
-    (hostId === null ? "" : " AND host_id = ?");
+  const where = `occurred_at >= ? AND user_agent = ?${hostId === null ? "" : " AND host_id = ?"}`;
   const args = hostId === null ? [cutoff, userAgent] : [cutoff,userAgent,hostId];
   const db = getAnalyticsDatabase();
   const summary = db.prepare(`SELECT COUNT(*) AS requests,

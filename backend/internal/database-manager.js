@@ -51,7 +51,7 @@ const getSharedNodeId = () => {
 		// Create a stable local node identity below.
 	}
 	const value = crypto.randomUUID();
-	fs.writeFileSync(SHARED_NODE_FILE, value + "\n", { mode: 0o600 });
+	fs.writeFileSync(SHARED_NODE_FILE, `${value}\n`, { mode: 0o600 });
 	fs.chmodSync(SHARED_NODE_FILE, 0o600);
 	return value;
 };
@@ -237,7 +237,7 @@ const inspectClient = async (client) => {
 const writeRuntimeConfig = (config) => {
 	fs.mkdirSync("/data", { recursive: true, mode: 0o750 });
 	const temp = `${RUNTIME_FILE}.${process.pid}.tmp`;
-	fs.writeFileSync(temp, JSON.stringify(config, null, 2) + "\n", { encoding: "utf8", mode: 0o600 });
+	fs.writeFileSync(temp, `${JSON.stringify(config, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
 	fs.chmodSync(temp, 0o600);
 	fs.renameSync(temp, RUNTIME_FILE);
 };
