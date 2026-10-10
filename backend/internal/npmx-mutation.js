@@ -126,7 +126,7 @@ export async function applyAuthorizedWrite(value) {
 		if (checked.baseline !== null && checked.baseline !== undefined)
 			headers["X-NPMX-Expected-Fingerprint"] = checked.baseline;
 		const response = await fetch(
-			"http://127.0.0.1:3000/api" + checked.path + checked.query,
+			"http://127.0.0.1:3000" + checked.path + checked.query,
 			{ method: checked.method, headers, body: JSON.stringify(checked.body), signal: controller.signal },
 		);
 		const length = Number(response.headers.get("content-length") || 0);
