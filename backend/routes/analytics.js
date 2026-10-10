@@ -6,7 +6,7 @@ import internalProxyHost from "../internal/proxy-host.js";
 import internalRedirectionHost from "../internal/redirection-host.js";
 import internalDeadHost from "../internal/dead-host.js";
 import internalStream from "../internal/stream.js";
-import { getNodeStreamAnalytics } from "../internal/stream-analytics.js";
+import { getNodeStreamAnalytics, getNodeStreamSessions } from "../internal/stream-analytics.js";
 import internalInstanceSync from "../internal/instance-sync.js";
 import {
   exportNodeAnalyticsCsv,
@@ -101,6 +101,19 @@ router.get("/node/agent", async (req, res, next) => {
     await authorize(res);
     res.status(200).send(getNodeAgentProfile(req.query.user_agent, reportFilters(req.query)));
   } catch (err) { next(err); }
+});
+
+router.get("/node/streams/sessions", async (req, res, next) => {
+  try {
+    await authorize(res);
+    res.status(200).send(getNodeStreamSessions({
+      hours:req.query.hours === undefined ? 24 : Number(req.query.hours),
+      streamId:req.query.stream_id === undefined ? null : Number(req.query.stream_id),
+      clientIp:req.query.ip || null,
+      limit:req.query.limit === undefined ? 50 : Number(req.query.limit),
+      offset:req.query.offset === undefined ? 0 : Number(req.query.offset),
+    }));
+  } catch(err) {next(err);}
 });
 
 router.get("/node/client", async (req, res, next) => {

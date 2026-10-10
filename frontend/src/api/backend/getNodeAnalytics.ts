@@ -209,3 +209,22 @@ export async function getNodeAgentProfile(userAgent:string, filters:NodeFilters)
     userAgent,hours:filters.hours,...(filters.hostId?{hostId:filters.hostId}:{}),
   }});
 }
+
+export interface StreamSession {
+  id:number;streamId:number;occurredAt:number;at:string;
+  protocol:"TCP"|"UDP";status:number;bytesSent:number;bytesReceived:number;
+  durationMs:number|null;clientIp:string|null;clientPort:number|null;
+  listenPort:number|null;upstreamAddr:string|null;
+}
+export interface NodeStreamSessions {
+  total:number;limit:number;offset:number;entries:StreamSession[];
+}
+export async function getNodeStreamSessions(args:{
+  hours:NodeHours;streamId?:number|null;ip?:string|null;offset?:number;
+}):Promise<NodeStreamSessions> {
+  return api.get({url:"/analytics/node/streams/sessions",params:{
+    hours:args.hours,limit:50,offset:args.offset||0,
+    ...(args.streamId!==null&&args.streamId!==undefined?{streamId:args.streamId}:{}),
+    ...(args.ip?{ip:args.ip}:{}),
+  }});
+}

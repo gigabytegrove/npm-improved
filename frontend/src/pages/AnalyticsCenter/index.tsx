@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  exportNodeAnalytics, getNodeAnalytics, getNodeAnalyticsRequests,
+  exportNodeAnalytics, getNodeAnalytics, getNodeAnalyticsRequests, getNodeStreamSessions,
   type HttpStatusClass, type NodeBreakdown, type NodeFilters,
   type NodeHours, type NodeHost, type NodeReport,
 } from "src/api/backend";
@@ -174,6 +174,9 @@ export default function AnalyticsCenter() {
   const [tab, setTab] = useState<Tab>("overview");
   const [chartType, setChartType] = useState<"requests" | "bytesOut" | "errors">("requests");
   const [offset, setOffset] = useState(0);
+  const [streamOffset, setStreamOffset] = useState(0);
+  const [streamIp, setStreamIp] = useState("");
+  const [streamId, setStreamId] = useState<number | null>(null);
   const [sourceIp, setSourceIp] = useState("");
   const [agentFilter, setAgentFilter] = useState("");
   const [botFilter, setBotFilter] = useState("");
@@ -192,6 +195,14 @@ export default function AnalyticsCenter() {
     queryFn: () => getNodeAnalyticsRequests(requestFilters, offset),
     enabled: tab === "requests" && hours <= 720,
     refetchInterval: tab === "requests" ? 20000 : false,
+  });
+  const streamHistory = useQuery({
+    queryKey: ["node-stream-history", hours, streamIp, streamId, streamOffset],
+    queryFn: () => getNodeStreamSessions({
+      hours,ip:streamIp || null,streamId,offset:streamOffset,
+    }),
+    enabled: tab === "streams" && hours <= 720,
+    refetchInterval: tab === "streams" ? 20000 : false,
   });
   const data = report.data;
   const unfiltered = useQuery({
@@ -336,6 +347,73 @@ export default function AnalyticsCenter() {
                 {!data.streamTraffic.streams.length ? <tr><td colSpan={5} className="text-secondary">No stream sessions recorded in this period.</td></tr> : null}
               </tbody>
             </table></div>
+          </div>
+
+          <div className="card mt-3">
+            <div className="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+              <h3 className="card-title">TCP / UDP connection history</h3>
+              <span className="text-secondary small">Completed sessions only · local node</span>
+            </div>
+            <div className="card-body">
+              <div className="row g-2">
+                <div className="col-md-6">
+                  <label className="form-label" htmlFor="npmi-stream-ip">Source IP</label>
+                  <input className="form-control" id="npmi-stream-ip" value={streamIp}
+                    onChange={event=>{setStreamIp(event.target.value);setStreamOffset(0);}}
+                    placeholder="Filter by IPv4 / IPv6"/>
+                </div>
+                <div className="col-md-6">
+                  <label className="form-label" htmlFor="npmi-stream-filter">Stream</label>
+                  <select className="form-select" id="npmi-stream-filter" value={streamId??""}
+                    onChange={event=>{setStreamId(event.target.value===""?null:Number(event.target.value));setStreamOffset(0);}}>
+                    <option value="">All configured streams</option>
+                    {Array.from(new Set(data.streamTraffic.streams.map(item=>item.streamId))).map(id=>
+                      <option value={id} key={id}>{id===0?"Fallback stream":`Stream #${id}`}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+            {hours > 720 ? <div className="p-3 text-secondary">
+              Raw session details are available only within retention ({data.retainedRawDays} days).
+              Choose a shorter reporting period.
+            </div> : <>
+              {streamHistory.error ? <div className="alert alert-danger m-3">{streamHistory.error.message}</div> : null}
+              {streamHistory.isPending ? <div className="p-3 text-secondary">Loading connection history…</div> : null}
+              <div className="table-responsive">
+                <table className="table card-table table-vcenter">
+                  <thead><tr><th>Time completed</th><th>Client</th><th>Stream / destination</th>
+                    <th>Protocol</th><th>Status</th><th className="text-end">Duration</th>
+                    <th className="text-end">Sent</th><th className="text-end">Received</th></tr></thead>
+                  <tbody>
+                    {streamHistory.data?.entries.map(row=><tr key={row.id}>
+                      <td className="text-nowrap">{new Date(row.at).toLocaleString()}</td>
+                      <td className="text-break">{row.clientIp || "Not recorded"}
+                        {row.clientPort ? `:${row.clientPort}` : ""}</td>
+                      <td className="text-break">#{row.streamId}
+                        {row.listenPort ? ` · Port ${row.listenPort}` : ""}
+                        {row.upstreamAddr ? <div className="text-secondary small">{row.upstreamAddr}</div> : null}
+                      </td><td>{row.protocol}</td><td>{row.status}</td>
+                      <td className="text-end">{formatMs(row.durationMs)}</td>
+                      <td className="text-end">{formatBytes(row.bytesSent)}</td>
+                      <td className="text-end">{formatBytes(row.bytesReceived)}</td>
+                    </tr>)}
+                    {streamHistory.data && !streamHistory.data.entries.length ? <tr>
+                      <td colSpan={8} className="text-secondary">No matching retained sessions.</td>
+                    </tr> : null}
+                  </tbody>
+                </table>
+              </div>
+              <div className="card-footer d-flex justify-content-between align-items-center">
+                <span className="small text-secondary">{formatNumber(streamHistory.data?.total||0)} matching sessions</span>
+                <div className="btn-group btn-group-sm">
+                  <button type="button" className="btn btn-outline-secondary" disabled={streamOffset===0}
+                    onClick={()=>setStreamOffset(Math.max(0,streamOffset-50))}>Previous</button>
+                  <button type="button" className="btn btn-outline-secondary"
+                    disabled={!streamHistory.data || streamOffset+streamHistory.data.entries.length>=streamHistory.data.total || streamOffset>=10000}
+                    onClick={()=>setStreamOffset(streamOffset+50)}>Next</button>
+                </div>
+              </div>
+            </>}
           </div>
         </> : null}
         {tab === "traffic" ? <div className="row row-cards">
