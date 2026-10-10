@@ -337,6 +337,32 @@ jobs:
             | jq -e --arg expected "$EXPECTED_SYNC" '.lastSync != null and .lastSync >= $expected and any(.peers[]; .last_sync != null and .last_sync >= $expected)'
 
 
+          # End-to-end NPMX ACME validation. Certbot writes on the primary,
+          # but Let's Encrypt can land on either public proxy node.
+          # This must go through real Nginx -> Express -> signed NPMX.
+          ACME_TOKEN="npmxci${GITHUB_RUN_ID:-0}"
+          ACME_VALUE="NPMX-ACME-CI-${ACME_TOKEN}"
+          docker exec npmi-npmx-primary sh -c '
+            dir=/data/letsencrypt-acme-challenge/.well-known/acme-challenge
+            mkdir -p "$dir"
+            printf "%s" "$1" > "$dir/$2"
+          ' sh "$ACME_VALUE" "$ACME_TOKEN"
+          docker exec npmi-npmx-secondary sh -c '
+            test ! -f "/data/letsencrypt-acme-challenge/.well-known/acme-challenge/$1"
+          ' sh "$ACME_TOKEN"
+          for port in 19280 19380; do
+            RESPONSE="$(curl --fail-with-body -sS --max-time 10 \
+              -H 'Host: acme-ci.example.invalid' \
+              "http://127.0.0.1:$port/.well-known/acme-challenge/$ACME_TOKEN")"
+            test "$RESPONSE" = "$ACME_VALUE" || {
+              echo "NPMX ACME challenge mismatch on proxy port $port" >&2
+              exit 1
+            }
+          done
+          docker exec npmi-npmx-primary rm -f \
+            "/data/letsencrypt-acme-challenge/.well-known/acme-challenge/$ACME_TOKEN"
+          echo "PASS: both NPMX nodes returned the primary's HTTP-01 token."
+
           # Pre-pairing JWTs must not be allowed to impersonate primary
           # account IDs after the synchronized user table was replaced.
           OLD_AUTH_STATUS="$(curl -sS -o /tmp/npmx-old-session.json -w '%{http_code}' \
