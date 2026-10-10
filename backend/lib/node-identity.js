@@ -1,8 +1,10 @@
 import fs from "node:fs";
 
 const READY_PATH = "/data/host-updater-ready.json";
-// Mounted read-only from the real Linux Docker host by every supported Compose
-// deployment. Docker's os.hostname() identifies the container, not its host.
+// New supported Compose deployments mount the real Linux host read-only.
+// In-app upgrades retain existing Compose files, so the native host-updater
+// marker provides the physical host name when the mount is not present.
+// Docker's os.hostname() identifies the container, not its host.
 const HOSTNAME_PATH = "/run/npm-improved/host-hostname";
 
 export function isValidHostName(value) {
@@ -22,9 +24,12 @@ function readHostFile(filename) {
 
 /**
  * Obtain the physical Linux host name without trusting the Docker container ID.
- * The Compose-mounted host /etc/hostname is available on existing installs as
- * soon as their container is recreated. Managed installations also have the
- * trusted node-local updater marker; custom deployments may use an override.
+ * A new Compose deployment can supply the read-only /etc/hostname mount.
+ * Existing in-app upgrades retain their Compose file. Their native host
+ * dispatch automatically refreshes the host-updater marker from the matching
+ * published release after the new application becomes healthy, exposing the
+ * real hostname without overwriting an operator-customized Compose file.
+ * Custom deployments can instead supply an explicit override.
  */
 export function getServingNodeHostname({
   env = process.env,
