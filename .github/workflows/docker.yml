@@ -378,6 +378,55 @@ jobs:
               exit 1
             fi
           done
+          # Reproduce the real production incident: an orphaned numeric
+          # proxy-host .conf (no database row) shadows the legitimate NPMi
+          # ACME responder. Reconciliation must quarantine it with a
+          # validated Nginx reload and restore the HTTP-01 response.
+          docker exec npmi-npmx-primary sh -c '
+            set -eu
+            mkdir -p /data/nginx/proxy_host
+            printf "%s\\n" "server {" "  listen 80;" \\
+              "  server_name acme-orphan-ci.example.invalid;" \\
+              "  location / { return 404; }" "}" \\
+              > /data/nginx/proxy_host/999991.conf
+            nginx -t
+            nginx -s reload
+          '
+          sleep 1
+          PRE_CODE="$(curl -sS --max-time 10 \
+            -H "Host: acme-orphan-ci.example.invalid" \
+            -o /tmp/npmx-orphan-before -w '%{http_code}' \
+            "http://127.0.0.1:19280/.well-known/acme-challenge/$ACME_TOKEN")"
+          test "$PRE_CODE" = "404" || {
+            echo "Orphan scenario did not shadow challenge: HTTP $PRE_CODE" >&2
+            exit 1
+          }
+          docker exec -w /app npmi-npmx-primary node --input-type=module -e '
+            import { quarantineOrphanedHostConfigs } from "./internal/acme-config-refresh.js";
+            const result = await quarantineOrphanedHostConfigs();
+            if (result.errors.length ||
+                !result.quarantined.some((entry) =>
+                  entry.type === "proxy_host" && entry.id === 999991)) {
+              console.error("Orphan reconciliation failed:", JSON.stringify(result));
+              process.exit(1);
+            }
+            console.log("PASS: orphan #999991 safely quarantined.");
+          '
+          POST_CODE="$(curl -sS --max-time 10 \
+            -H "Host: acme-orphan-ci.example.invalid" \
+            -o /tmp/npmx-orphan-after -w '%{http_code}' \
+            "http://127.0.0.1:19280/.well-known/acme-challenge/$ACME_TOKEN")"
+          test "$POST_CODE" = "200" &&
+            test "$(cat /tmp/npmx-orphan-after)" = "$ACME_VALUE" || {
+              echo "NPMX ACME still failed after orphan cleanup: HTTP $POST_CODE" >&2
+              exit 1
+            }
+          docker exec npmi-npmx-primary sh -c '
+            test ! -e /data/nginx/proxy_host/999991.conf
+            ls /data/nginx/orphan-quarantine/proxy_host-999991-*.conf.bak >/dev/null
+          '
+          echo "PASS: orphan shadowed ACME before reconciliation; ACME restored after quarantine."
+
           docker exec npmi-npmx-primary rm -f \
             "/data/letsencrypt-acme-challenge/.well-known/acme-challenge/$ACME_TOKEN"
           echo "PASS: both NPMX nodes returned the primary's HTTP-01 token."
