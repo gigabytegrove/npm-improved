@@ -44,12 +44,13 @@ export default function ClientsPage() {
         <thead><tr><th>Source IP</th><th className="text-end">Requests</th><th className="text-end">4xx/5xx</th><th className="text-end">Denied</th><th>First / last seen</th><th>Actions</th></tr></thead>
         <tbody>
           {paged.data?.entries.map((row) => <tr key={row.value}>
-            <td className="text-break fw-semibold">{row.value}<div className="small text-secondary">{row.routes} HTTP route(s) · {formatBytes(row.bytesOut)} sent</div></td>
+            <td className="text-break fw-semibold"><Link to={`/analytics/ips/detail?value=${encodeURIComponent(row.value)}`}>{row.value}</Link><div className="small text-secondary">{row.routes} HTTP route(s) · {formatBytes(row.bytesOut)} sent</div></td>
             <td className="text-end">{formatNumber(row.requests)}</td>
             <td className="text-end">{formatNumber(row.errors)} / {formatNumber(row.serverErrors)}</td>
             <td className="text-end">{formatNumber(row.blocked)}</td>
             <td className="text-nowrap">{new Date(row.firstSeen).toLocaleString()}<div className="small text-secondary">{new Date(row.lastSeen).toLocaleString()}</div></td>
             <td><div className="d-flex gap-2 flex-wrap">
+              <Link to={`/analytics/ips/detail?value=${encodeURIComponent(row.value)}`}>Profile</Link>
               <Link to={`/analytics/requests?ip=${encodeURIComponent(row.value)}`}>Requests</Link>
               <Link to={`/analytics/connections?ip=${encodeURIComponent(row.value)}`}>Connections</Link>
               <Link to={`/analytics/blocking?type=ip&target=${encodeURIComponent(row.value)}`}>Block</Link>
