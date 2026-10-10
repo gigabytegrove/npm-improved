@@ -1,6 +1,9 @@
 """Offline checks for native updater release-package integrity and version policy."""
 import hashlib
 import io
+import socket
+from unittest import mock
+from urllib.error import HTTPError, URLError
 from pathlib import Path
 import tarfile
 import tempfile
@@ -57,6 +60,32 @@ class HostUpdaterBundleTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "unexpected"):
                 module.verify_and_extract("1.4.2", self.sums(tarball), tarball,
                                           Path(dirname))
+
+    def test_host_dns_failures_are_explained_without_raw_tracebacks(self):
+        failure = URLError(socket.gaierror(-3, "Temporary failure in name resolution"))
+        message = module.explain_maintenance_error(failure)
+        self.assertIn("Docker host", message)
+        self.assertIn("DNS", message)
+        self.assertIn("GitHub", message)
+        self.assertNotIn("[Errno -3]", message)
+
+    def test_transient_dns_failures_retry_then_succeed(self):
+        response = io.BytesIO(b"verified release content")
+        failure = URLError(socket.gaierror(-3, "Temporary failure in name resolution"))
+        with mock.patch.object(module, "urlopen", side_effect=[failure, response]) as loader, \\
+             mock.patch.object(module.time, "sleep") as sleep:
+            self.assertEqual(module.fetch("https://github.com/test-release"), b"verified release content")
+            self.assertEqual(loader.call_count, 2)
+            sleep.assert_called_once_with(2)
+
+    def test_permanent_http_error_does_not_retry(self):
+        failure = HTTPError("https://github.com/release", 404, "Not Found", {}, None)
+        with mock.patch.object(module, "urlopen", side_effect=failure) as loader, \\
+             mock.patch.object(module.time, "sleep") as sleep:
+            with self.assertRaises(HTTPError):
+                module.fetch("https://github.com/release")
+            loader.assert_called_once()
+            sleep.assert_not_called()
 
     def test_only_forward_versions_install(self):
         self.assertTrue(module.newer_than("1.4.2", "1.4.1"))
