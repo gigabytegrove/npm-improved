@@ -220,8 +220,31 @@ jobs:
           test -s data/host-update-request.json
           sudo "/usr/local/libexec/npm-improved/$HASH/host-update-dispatch.py" "$GITHUB_WORKSPACE"
 
-          RESULT="$(curl -fsS -H "Authorization: Bearer $TOKEN" \
-            http://127.0.0.1:19181/api/version/update)"
+          # systemd.path may pick up the request before the CI shell's
+          # explicit dispatch invocation completes; wait for final state.
+          RESULT=""
+          for attempt in $(seq 1 90); do
+            RESULT="$(curl -fsS -H "Authorization: Bearer $TOKEN" \
+              http://127.0.0.1:19181/api/version/update 2>/dev/null || true)"
+            if jq -e '.status.state == "completed"' >/dev/null 2>&1 <<<"$RESULT"; then
+              break
+            fi
+            if jq -e '.status.state == "failed"' >/dev/null 2>&1 <<<"$RESULT"; then
+              echo "===== NATIVE UPDATE FAILED ====="
+              echo "$RESULT"
+              sudo cat data/update-status.json || true
+              sudo journalctl -u "npm-improved-update-$HASH.service" --no-pager -n 70 || true
+              exit 1
+            fi
+            if [ "$attempt" -eq 90 ]; then
+              echo "===== NATIVE UPDATE TIMED OUT ====="
+              echo "$RESULT"
+              sudo cat data/update-status.json || true
+              sudo journalctl -u "npm-improved-update-$HASH.service" --no-pager -n 70 || true
+              exit 1
+            fi
+            sleep 1
+          done
           jq -e '.status.state == "completed"' <<<"$RESULT"
           test ! -e data/host-update-request.json
           test -z "$(docker ps -aq --filter label=com.gigabytegrove.npm-improved.role=update-handoff)"
@@ -294,6 +317,24 @@ jobs:
           echo "$SYNC_RESULT"
           jq -e '.ok == true and .primary.protocol == "npmx"' <<<"$SYNC_RESULT"
 
+          # Pre-pairing JWTs must not be allowed to impersonate primary
+          # account IDs after the synchronized user table was replaced.
+          OLD_AUTH_STATUS="$(curl -sS -o /tmp/npmx-old-session.json -w '%{http_code}' \
+            -H "Authorization: Bearer $SECONDARY_TOKEN" \
+            -H 'Content-Type: application/json' -X PUT \
+            -d '{"value":"html","meta":{"html":"<h1>old JWT must not write</h1>"}}' \
+            http://127.0.0.1:19381/api/settings/default-site)"
+          test "$OLD_AUTH_STATUS" = "400"
+          jq -e '.error.message | contains("predates NPMX pairing")' /tmp/npmx-old-session.json
+
+          # A newly paired secondary now has the primary's user/permission
+          # database. Discard tokens from the pre-pairing local user table.
+          SECONDARY_TOKEN="$(curl -fsS -H 'Content-Type: application/json' \
+            -d '{"identity":"primary@example.com","secret":"primary-password-12345"}' \
+            http://127.0.0.1:19381/api/tokens | jq -r '.token')"
+          test -n "$SECONDARY_TOKEN" && test "$SECONDARY_TOKEN" != "null"
+
+
           PRIMARY_PAGE=""
           SECONDARY_PAGE=""
           for attempt in $(seq 1 20); do
@@ -315,6 +356,83 @@ jobs:
           grep -Fq 'npmi-secondary' <<<"$SECONDARY_PAGE"
           grep -Fq 'secondary / 1.1.0-ci / NPMX/1' <<<"$SECONDARY_PAGE"
           ! grep -Fq 'Primary A' <<<"$SECONDARY_PAGE"
+
+
+          # Freeze periodic pulls long enough to simulate an older secondary
+          # view of the same database row.
+          curl --fail-with-body -sS -H "Authorization: Bearer $SECONDARY_TOKEN" \
+            -H 'Content-Type: application/json' -X PUT \
+            -d '{"enabled":true,"role":"secondary","primary_url":"http://npmi-npmx-primary:81","interval_seconds":3600}' \
+            http://127.0.0.1:19381/api/cluster/settings \
+            | jq -e '.intervalSeconds == 3600'
+          sleep 4
+
+          curl --fail-with-body -sS -H "Authorization: Bearer $PRIMARY_TOKEN" \
+            -H 'Content-Type: application/json' -X PUT \
+            -d '{"value":"html","meta":{"html":"<h1>primary-newer-keep-this</h1>"}}' \
+            http://127.0.0.1:19281/api/settings/default-site \
+            | jq -e '.value == "html"'
+
+          # No secondary snapshot has been pulled since the primary changed.
+          curl --fail-with-body -sS -H "Authorization: Bearer $SECONDARY_TOKEN" \
+            http://127.0.0.1:19381/api/settings/default-site \
+            | jq -e '.meta.html | contains("{{node.name}}")'
+
+          STALE_STATUS="$(curl -sS -o /tmp/npmx-stale-secondary.json -w '%{http_code}' \
+            -H "Authorization: Bearer $SECONDARY_TOKEN" \
+            -H 'Content-Type: application/json' -X PUT \
+            -d '{"value":"html","meta":{"html":"<h1>stale-secondary-should-not-win</h1>"}}' \
+            http://127.0.0.1:19381/api/settings/default-site)"
+          test "$STALE_STATUS" = "409"
+          jq -e '.error.code == 409' /tmp/npmx-stale-secondary.json
+          curl --fail-with-body -sS -H "Authorization: Bearer $PRIMARY_TOKEN" \
+            http://127.0.0.1:19281/api/settings/default-site \
+            | jq -e '.meta.html | contains("primary-newer-keep-this")'
+
+          curl --fail-with-body -sS -H "Authorization: Bearer $SECONDARY_TOKEN" \
+            -X POST http://127.0.0.1:19381/api/cluster/sync-now \
+            | jq -e '.ok == true'
+
+          # An authenticated write sent to either node must be committed by
+          # the primary. The secondary may not mutate its independent SQLite
+          # copy or assign a conflicting ID.
+          curl --fail-with-body -sS -H "Authorization: Bearer $SECONDARY_TOKEN" \
+            -H 'Content-Type: application/json' -X PUT \
+            -d '{"value":"html","meta":{"html":"<h1>Written through secondary</h1>"}}' \
+            http://127.0.0.1:19381/api/settings/default-site \
+            | jq -e '.value == "html"'
+
+          curl --fail-with-body -sS -H "Authorization: Bearer $PRIMARY_TOKEN" \
+            http://127.0.0.1:19281/api/settings/default-site \
+            | jq -e '.meta.html | contains("Written through secondary")'
+
+          # The successful write schedules a prompt pull. Wait for it
+          # rather than racing a second manual sync against the scheduler.
+          NPMX_SYNCED=0
+          for attempt in $(seq 1 50); do
+            if curl -fsS -H "Authorization: Bearer $SECONDARY_TOKEN" \
+              http://127.0.0.1:19381/api/settings/default-site \
+              | jq -e '.meta.html | contains("Written through secondary")' >/dev/null; then
+              NPMX_SYNCED=1
+              break
+            fi
+            sleep 0.5
+          done
+          test "$NPMX_SYNCED" = "1"
+
+          # Stale record fingerprints must return HTTP 409 instead of deleting
+          # or overwriting the newer value on the primary.
+          STATUS_CODE="$(curl -sS -o /tmp/npmx-conflict-response.json -w '%{http_code}' \
+            -H "Authorization: Bearer $PRIMARY_TOKEN" \
+            -H 'X-NPMX-Expected-Fingerprint: missing' \
+            -H 'Content-Type: application/json' -X PUT \
+            -d '{"value":"html","meta":{"html":"<h1>stale-write-must-not-commit</h1>"}}' \
+            http://127.0.0.1:19281/api/settings/default-site)"
+          test "$STATUS_CODE" = "409"
+          jq -e '.error.code == 409' /tmp/npmx-conflict-response.json
+          curl --fail-with-body -sS -H "Authorization: Bearer $PRIMARY_TOKEN" \
+            http://127.0.0.1:19281/api/settings/default-site \
+            | jq -e '.meta.html | contains("Written through secondary")'
 
           sudo cat /tmp/npmi-npmx/primary/data/npmx-pairing.json | jq -e '.used == true and (.paired_node_id | length > 0)'
 

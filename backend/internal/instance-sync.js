@@ -30,6 +30,16 @@ import settingModel from "../models/setting.js";
 import pjson from "../package.json" with { type: "json" };
 import { global as logger } from "../logger.js";
 import internalDisasterRecovery from "./disaster-recovery.js";
+import db from "../db.js";
+import { describeNpmxWrite, recordFingerprint } from "../lib/npmx-write-policy.js";
+import {
+	applyAuthorizedWrite,
+	applyForwardedResponse,
+	checkWriteBaseline,
+	lockConfigurationWrite,
+	validateLocalActor,
+	validateMutationPayload,
+} from "./npmx-mutation.js";
 
 const SECRET_FILE = "/data/cluster-secret";
 const PAIRING_FILE = "/data/npmx-pairing.json";
@@ -142,6 +152,7 @@ const npmxCapabilities = () => ({
 		"filesystem-assets",
 		"heartbeat",
 		"node-local-template-rendering",
+		"primary-write-arbitration",
 	],
 });
 
@@ -199,6 +210,13 @@ const getRow = async () => {
 	}
 	if (!Array.isArray(meta.peers)) {
 		meta.peers = [];
+		changed = true;
+	}
+	// A secondary receives the primary's user table on first pairing/sync.
+	// Tokens issued before this boundary could refer to a different user ID.
+	// Record the boundary once, never on each normal snapshot refresh.
+	if (row.value === "enabled" && meta.role === "secondary" && !meta.write_session_floor) {
+		meta.write_session_floor = Math.ceil(Date.now() / 1000);
 		changed = true;
 	}
 	if (changed) {
@@ -417,7 +435,9 @@ const internalInstanceSync = {
 			last_sync: status.lastSync,
 			sync_policy: {
 				require_same_app_version: true,
-				secondary_read_only: true,
+				secondary_read_only: false,
+				write_authority: "primary",
+				conflict_handling: "stale-writes-rejected",
 			},
 		};
 	},
@@ -652,6 +672,7 @@ const internalInstanceSync = {
 				...meta,
 				role: "secondary",
 				primary_url: primaryUrl,
+				write_session_floor: Math.ceil(Date.now() / 1000),
 				last_error: null,
 				primary_status: payload.primary || null,
 			},
@@ -711,6 +732,26 @@ const internalInstanceSync = {
 		} catch (err) {
 			next(err);
 		}
+	},
+
+
+	/** A paired secondary submits a signed JSON mutation to the primary. */
+	applyPeerMutation: async (req) => {
+		const status = await sanitizedStatus();
+		if (!status.enabled || status.role !== "primary") {
+			throw new errs.ValidationError("Only the enabled primary accepts NPMX mutations");
+		}
+		if (req.body?.source_version !== currentVersion()) {
+			throw new errs.ValidationError("NPMX write rejected: application versions differ");
+		}
+		if (!status.peers.some((peer) => peer.node_id === req.npmxNodeId)) {
+			throw new errs.TokenRevokedError("NPMX write rejected: this node has not paired with the primary");
+		}
+		const data = validateMutationPayload(req.body);
+		return applyAuthorizedWrite({
+			method: data.method, path: data.path, query: data.query, body: data.body,
+			actor_id: data.actor, actor_iat: data.issuedAt, expected_fingerprint: data.baseline,
+		});
 	},
 
 	createPeerSnapshot: async () => {
@@ -889,31 +930,100 @@ const internalInstanceSync = {
 		return row.value === "enabled" && row.meta?.role === "secondary";
 	},
 
-	writeGuard: async (req, _res, next) => {
+	writeGuard: async (req, res, next) => {
 		try {
-			if (["GET", "HEAD", "OPTIONS"].includes(req.method)) {
-				next();
-				return;
-			}
-			if (!(await internalInstanceSync.isSecondaryReadOnly())) {
-				next();
-				return;
-			}
-			const guardedPrefixes = [
-				"/nginx/",
-				"/settings",
-				"/users",
-				"/disaster-recovery",
-				"/config-history",
+			if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
+			const prefixes = [
+				"/nginx/", "/settings", "/users", "/disaster-recovery", "/config-history",
 			];
-			if (guardedPrefixes.some((prefix) => req.path.startsWith(prefix))) {
+			if (!prefixes.some((prefix) => req.path.startsWith(prefix))) return next();
+
+			const descriptor = describeNpmxWrite(req.method, req.path);
+			const row = await getRow();
+			const secondary = !sharedDatabaseMode() && row.value === "enabled" && row.meta?.role === "secondary";
+			if (!secondary) {
+				// Only synchronized configuration needs a mutation lock.
+				if (descriptor && row.value === "enabled" && row.meta?.role === "primary") {
+					const release = await lockConfigurationWrite(res);
+					try {
+						if (!(await checkWriteBaseline(req, res, descriptor))) {
+							release();
+							return;
+						}
+					} catch (error) {
+						release();
+						throw error;
+					}
+				}
+				return next();
+			}
+			if (!descriptor) {
 				throw new errs.ValidationError(
-					"Secondary cluster nodes are read-only. Promote this node before changing synchronized configuration.",
+					"This action cannot be safely forwarded through NPMX yet. Use the primary for this operation.",
 				);
 			}
-			next();
+			if (req.files && Object.keys(req.files).length) {
+				throw new errs.ValidationError(
+					"Multipart configuration uploads must be made on the primary until NPMX supports signed file transfer.",
+				);
+			}
+			const secret = readSecret();
+			if (!secret) throw new errs.ValidationError("NPMX pairing credentials are missing");
+			const meta = row.meta || {};
+			const primaryUrl = normalizeUrl(meta.primary_url, "Primary node URL", true);
+			const selfId = String(meta.node_id || "");
+			const authUserId = await validateLocalActor(res.locals.token);
+			if (authUserId.issuedAt < Number(meta.write_session_floor || 0)) {
+				throw new errs.ValidationError(
+					"This sign-in predates NPMX pairing or the safe-write upgrade. Sign out and sign in again to make configuration changes.",
+				);
+			}
+			const preflight = await npmxRequest(primaryUrl, secret, selfId, "/status");
+			if (!preflight.ok) {
+				throw new errs.ValidationError("Primary node is unavailable. Configuration was not changed.");
+			}
+			const peer = await preflight.json();
+			if (!peer.enabled || peer.role !== "primary" ||
+				peer.node_id === selfId || peer.version !== currentVersion() ||
+				!peer.capabilities?.includes("primary-write-arbitration")) {
+				throw new errs.ValidationError(
+					"NPMX primary is not ready for conflict-safe writes. Both nodes must run a compatible release.",
+				);
+			}
+			const baseline = await recordFingerprint(db(), descriptor);
+			const queryAt = req.originalUrl.indexOf("?");
+			const request = {
+				source_version: currentVersion(),
+				method: req.method,
+				path: req.path,
+				query: queryAt === -1 ? "" : req.originalUrl.slice(queryAt),
+				body: req.body ?? {},
+				actor_id: authUserId.id,
+				actor_iat: authUserId.issuedAt,
+				...(descriptor.key !== null ? { expected_fingerprint: baseline } : {}),
+			};
+			// Only the primary executes writes and assigns new database IDs.
+			const response = await npmxRequest(primaryUrl, secret, selfId, "/write", {
+				method: "POST", body: request, timeout: 125_000,
+			});
+			if (!response.ok) {
+				const result = await response.json().catch(() => null);
+				throw new errs.ValidationError(
+					result?.error?.message || "Primary rejected the synchronized configuration edit.",
+				);
+			}
+			const result = await response.json();
+			if (result.status >= 200 && result.status < 300) {
+				// Refresh this secondary promptly after the primary accepts the write.
+				internalInstanceSync.reschedule(1000);
+			}
+			return applyForwardedResponse(res, result);
 		} catch (err) {
-			next(err);
+			return next(err instanceof errs.ValidationError ? err :
+				new errs.ValidationError(
+					"Could not reach the NPMX primary; no local configuration changes were applied. " +
+					(err instanceof Error ? err.message : String(err)),
+				));
 		}
 	},
 
