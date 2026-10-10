@@ -1,7 +1,7 @@
 import express from "express";
 import os from "node:os";
 import jwtdecode from "../lib/express/jwt-decode.js";
-import { addNodeBlockRule, deleteNodeBlockRule, listNodeBlockRules, getNodeBlockAudit, enableKnownScannerBlocking } from "../internal/analytics-blocking.js";
+import { addNodeBlockRule, deleteNodeBlockRule, listNodeBlockRules, getNodeBlockAudit, enableKnownScannerBlocking, getKnownScannerPolicy, setKnownScannerPolicy } from "../internal/analytics-blocking.js";
 import internalProxyHost from "../internal/proxy-host.js";
 import internalRedirectionHost from "../internal/redirection-host.js";
 import internalDeadHost from "../internal/dead-host.js";
@@ -152,6 +152,20 @@ router.delete("/blocks/:id", async (req, res, next) => {
     res.status(200).send(deleteNodeBlockRule(id, operator));
   } catch (err) { next(err); }
 });
+router.get("/blocks/scanner-policy", async (_req, res, next) => {
+  try {
+    await authorize(res);
+    res.status(200).send(getKnownScannerPolicy());
+  } catch (err) { next(err); }
+});
+router.put("/blocks/scanner-policy", async (req, res, next) => {
+  try {
+    await authorizeWrite(res);
+    const operator = res.locals.access.token.getUserId(1);
+    res.status(200).send(setKnownScannerPolicy(req.body?.enabled, operator));
+  } catch (err) { next(err); }
+});
+
 router.post("/blocks/scanner-presets", async (_req, res, next) => {
   try {
     await authorizeWrite(res);
