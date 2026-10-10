@@ -1,6 +1,6 @@
 {
 	"name": "npm-improved-backend",
-	"version": "1.6.6",
+	"version": "1.6.7",
 	"description": "NPM Improved control API and proxy management backend",
 	"author": "Gigabyte Grove",
 	"license": "MIT",
