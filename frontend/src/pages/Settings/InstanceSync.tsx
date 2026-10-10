@@ -128,8 +128,14 @@ export default function InstanceSync() {
 								</p>
 							</div>
 							<div className="d-flex gap-2 align-items-center">
-								<Badge bg={data.enabled ? "success" : "secondary"}>
-									{data.enabled ? <T id="sync.in-sync" /> : <T id="sync.disabled" />}
+								<Badge bg={!data.enabled ? "secondary" : data.lastError ? "danger" : !data.lastSync ? "warning" : "success"}>
+									{!data.enabled
+										? <T id="sync.disabled" />
+										: data.lastError
+											? "Synchronization error"
+											: data.lastSync
+												? "Last sync completed"
+												: "Awaiting first sync"}
 								</Badge>
 								<Badge bg={data.role === "primary" ? "primary" : "info"}>
 									{data.role === "primary" ? (
@@ -144,6 +150,12 @@ export default function InstanceSync() {
 
 						{message ? <Alert variant="success">{message}</Alert> : null}
 						{actionError ? <Alert variant="danger">{actionError}</Alert> : null}
+						{data.lastHeartbeatError ? (
+							<Alert variant="warning">
+								<strong>Configuration applied, but the primary did not confirm the sync heartbeat.</strong>{" "}
+								{data.lastHeartbeatError} The secondary will retry on its next scheduled synchronization.
+							</Alert>
+						) : null}
 						{data.lastError ? (
 							<Alert variant="danger">
 								<strong>
@@ -174,13 +186,27 @@ export default function InstanceSync() {
 										<div className="d-flex align-items-center gap-2 text-secondary mb-2">
 											<IconRefresh size={18} />
 											<span>
-												<T id="sync.last-sync" />
+												{data.role === "primary" ? "Latest secondary sync" : "Last successful sync"}
 											</span>
 										</div>
-										<div className="fw-bold">{formatDate(data.lastSync)}</div>
-										<div className="small text-secondary">
-											Last attempt: {formatDate(data.lastAttempt)}
+										<div className="fw-bold">
+											{data.lastSync ? formatDate(data.lastSync) : data.enabled ? "Awaiting first successful sync" : "Not enabled"}
 										</div>
+										<div className="small text-secondary">
+											{data.role === "primary"
+												? `Latest secondary check-in: ${formatDate(data.lastPeerCheckin)}`
+												: `Last pull attempt: ${formatDate(data.lastAttempt)}`}
+										</div>
+										{data.enabled && data.role === "primary" && !data.lastSync ? (
+											<div className="small text-secondary mt-1">
+												A paired node or check-in alone does not mean a snapshot was applied.
+											</div>
+										) : null}
+										{data.enabled && data.role === "secondary" && !data.lastSync && !data.lastError ? (
+											<div className="small text-secondary mt-1">
+												Waiting for the secondary's first successful configuration pull.
+											</div>
+										) : null}
 									</div>
 								</div>
 							</div>
@@ -515,6 +541,7 @@ export default function InstanceSync() {
 											<th>Address</th>
 											<th>Version</th>
 											<th>Last seen</th>
+											<th>Last successful sync</th>
 										</tr>
 									</thead>
 									<tbody>
@@ -533,16 +560,13 @@ export default function InstanceSync() {
 											<td>{data.publicUrl || "Local instance"}</td>
 											<td>{data.version}</td>
 											<td>Now</td>
+											<td>{data.role === "secondary" ? formatDate(data.lastSync) : "Receives from secondaries"}</td>
 										</tr>
 										{peers.map((peer, index) => {
 											const nodeName = peer.nodeName || peer.node_name || `Node ${index + 1}`;
 											const nodeId = peer.nodeId || peer.node_id || "";
 											const publicUrl = peer.publicUrl || peer.public_url || "";
-											const lastSeen =
-												peer.lastSeen ||
-												peer.last_seen ||
-												peer.lastSync ||
-												peer.last_sync;
+											const lastSeen = peer.lastSeen || peer.last_seen;
 											return (
 												<tr key={nodeId || `${nodeName}-${index}`}>
 													<td>
@@ -559,12 +583,13 @@ export default function InstanceSync() {
 													<td>{publicUrl || "Not advertised"}</td>
 													<td>{peer.version || "Unknown"}</td>
 													<td>{formatDate(lastSeen)}</td>
+													<td>{formatDate(peer.lastSync || peer.last_sync)}</td>
 												</tr>
 											);
 										})}
 										{peers.length === 0 ? (
 											<tr>
-												<td colSpan={5} className="text-center text-secondary py-4">
+												<td colSpan={6} className="text-center text-secondary py-4">
 													No other NPMX nodes have checked in yet.
 												</td>
 											</tr>
