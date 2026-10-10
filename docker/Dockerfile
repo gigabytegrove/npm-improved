@@ -28,6 +28,7 @@ ENV NPM_BUILD_VERSION="${BUILD_VERSION}" \
 # as the application. Copy these files into the ACTUAL runtime image.
 COPY docker/rootfs/etc/nginx/nginx.conf /etc/nginx/nginx.conf
 COPY docker/rootfs/etc/nginx/conf.d/include/log-proxy.conf /etc/nginx/conf.d/include/log-proxy.conf
+COPY docker/rootfs/etc/nginx/conf.d/include/letsencrypt-acme-challenge.conf /etc/nginx/conf.d/include/letsencrypt-acme-challenge.conf
 COPY docker/rootfs/etc/nginx/conf.d/default.conf /etc/nginx/conf.d/default.conf
 COPY docker/rootfs/etc/s6-overlay/s6-rc.d/prepare/00-all.sh /etc/s6-overlay/s6-rc.d/prepare/00-all.sh
 COPY docker/rootfs/etc/s6-overlay/s6-rc.d/prepare/26-analytics.sh /etc/s6-overlay/s6-rc.d/prepare/26-analytics.sh

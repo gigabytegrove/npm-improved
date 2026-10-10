@@ -2,6 +2,7 @@
 
 import app from "./app.js";
 import internalCertificate from "./internal/certificate.js";
+import { refreshAcmeHostConfigs } from "./internal/acme-config-refresh.js";
 import { startAnalyticsCollector } from "./internal/proxy-analytics.js";
 import { initializeNodeBlocking } from "./internal/analytics-blocking.js";
 import { startStreamCollector } from "./internal/stream-analytics.js";
@@ -54,6 +55,14 @@ async function appStart() {
 
 			const server = app.listen(3000, () => {
 				logger.info(`Backend PID ${process.pid} listening on port 3000 ...`);
+				// Upgrade persisted configs only after the management API is ready.
+				// Each changed file is validated and restored automatically on
+				// failure; existing certificate and proxy traffic remains intact.
+				setTimeout(() => {
+					refreshAcmeHostConfigs().catch((err) => {
+						logger.error(`ACME template refresh failed: ${err instanceof Error ? err.message : String(err)}`);
+					});
+				}, 2000).unref?.();
 
 				process.on("SIGTERM", () => {
 					logger.info(`PID ${process.pid} received SIGTERM`);

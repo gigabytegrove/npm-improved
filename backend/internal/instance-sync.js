@@ -27,6 +27,7 @@ import {
 	verifyNpmxRequestSignature,
 } from "../lib/npmx.js";
 import errs from "../lib/error.js";
+import { validAcmeToken, readLocalAcmeToken } from "../lib/acme-challenge.js";
 import settingModel from "../models/setting.js";
 import pjson from "../package.json" with { type: "json" };
 import { global as logger } from "../logger.js";
@@ -154,6 +155,7 @@ const npmxCapabilities = () => ({
 		"heartbeat",
 		"node-local-template-rendering",
 		"primary-write-arbitration",
+		"acme-http01-relay",
 	],
 });
 
@@ -305,8 +307,54 @@ const fetchWithTimeout = async (url, options = {}, timeout = REQUEST_TIMEOUT_MS)
 	}
 };
 
+// HTTP-01 tokens are opaque, short-lived Certbot artifacts. Never use a
+// request-supplied filesystem path; only these bounded token characters are allowed.
 const internalInstanceSync = {
 	getStatus: sanitizedStatus,
+
+	// Public ingress reaches this handler through the local Nginx ACME location.
+	// Secondary nodes relay only missing tokens to their paired primary using
+	// the existing HMAC-signature, nonce and replay-protection machinery.
+	resolveAcmeChallenge: async (token) => {
+		if (!validAcmeToken(token)) return { status: 404 };
+		const local = readLocalAcmeToken(token);
+		if (local !== null) return { status: 200, value: local };
+		const node = await sanitizedStatus();
+		if (!node.enabled || node.role !== "secondary" || !node.secretConfigured || !node.primaryUrl) {
+			return { status: 404 };
+		}
+		try {
+			const response = await npmxRequest(
+				normalizeUrl(node.primaryUrl, "Primary node URL", true),
+				readSecret(),
+				node.nodeId,
+				`/acme/${token}`,
+				{ timeout: 5000 },
+			);
+			if (response.status === 404) return { status: 404 };
+			if (!response.ok) {
+				logger.warn(`NPMX ACME relay failed: primary returned HTTP ${response.status}`);
+				return { status: 503 };
+			}
+			const contentLength = Number(response.headers.get("content-length") || 0);
+			if (contentLength > 4096) return { status: 502 };
+			const value = await response.text();
+			if (!value || Buffer.byteLength(value) > 4096) return { status: 502 };
+			return { status: 200, value };
+		} catch (err) {
+			logger.warn(`NPMX ACME relay unavailable: ${err instanceof Error ? err.message : String(err)}`);
+			return { status: 503 };
+		}
+	},
+
+	// Authenticated peer endpoint: never search other peers or recurse.
+	getAuthenticatedAcmeChallenge: async (token) => {
+		if (!validAcmeToken(token)) return { status: 404 };
+		const node = await sanitizedStatus();
+		if (!node.enabled || node.role !== "primary") return { status: 403 };
+		const value = readLocalAcmeToken(token);
+		return value === null ? { status: 404 } : { status: 200, value };
+	},
 
 	updateSettings: async (data) => {
 		if (sharedDatabaseMode() && data.enabled !== false) {
