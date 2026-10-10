@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
+import net from "node:net";
 import Database from "better-sqlite3";
 import { parseAnalyticsEvent } from "../lib/proxy-analytics.js";
 import { global as logger } from "../logger.js";
@@ -9,8 +10,8 @@ import { global as logger } from "../logger.js";
 const ANALYTICS_DIR = process.env.NPM_ANALYTICS_LOG_DIR || "/data/logs";
 const DATABASE_PATH = process.env.NPM_ANALYTICS_DB || "/data/analytics.sqlite";
 const MAX_CHUNK = 512 * 1024;
-const RAW_DAYS = Math.min(30, Math.max(1, Number.parseInt(process.env.NPM_ANALYTICS_RAW_DAYS || "7", 10) || 7));
-const ROLLUP_DAYS = Math.min(365, Math.max(30, Number.parseInt(process.env.NPM_ANALYTICS_ROLLUP_DAYS || "90", 10) || 90));
+const RAW_DAYS = Math.min(90, Math.max(1, Number.parseInt(process.env.NPM_ANALYTICS_RAW_DAYS || "30", 10) || 7));
+const ROLLUP_DAYS = Math.min(365, Math.max(30, Number.parseInt(process.env.NPM_ANALYTICS_ROLLUP_DAYS || "365", 10) || 90));
 const LOG_PATTERN = /^(?:(proxy-host|redirection-host|dead-host)-(\d+)|default-host|fallback-http)_analytics\.log(?:\.1)?$/;
 const NODE_ROUTE_OFFSETS = { "redirection-host": 1000000, "dead-host": 2000000 };
 export function analyticsSourceId(filename) {
@@ -61,6 +62,20 @@ export function classifyAnalyticsDevice(value) {
   return "other";
 }
 
+export function classifyAnalyticsBot(value) {
+  if (!value) return "unknown";
+  // Strings identify claimed user-agents, not validated crawler identities.
+  if (/googlebot|bingbot|duckduckbot|applebot|baiduspider|yandexbot/i.test(value))
+    return "search-crawler-claimed";
+  if (/uptimerobot|statuscake|pingdom|healthcheck/i.test(value))
+    return "monitor-claimed";
+  if (/curl\/|wget\/|python-requests|go-http-client|scrapy|httpclient/i.test(value))
+    return "automated-client";
+  if (/bot|crawler|spider|slurp|headless|selenium|playwright/i.test(value))
+    return "other-bot-claimed";
+  return "browser-or-other";
+}
+
 function getDb() {
   if (database) return database;
   fs.mkdirSync(path.dirname(DATABASE_PATH), { recursive: true });
@@ -88,7 +103,18 @@ function getDb() {
       duration_ms REAL,
       upstream_ms REAL,
       upstream_status TEXT NOT NULL,
-      device TEXT NOT NULL
+      device TEXT NOT NULL,
+      client_ip TEXT,
+      peer_ip TEXT,
+      user_agent TEXT,
+      request_id TEXT,
+      connection_id TEXT,
+      connection_requests INTEGER,
+      occurred_at_ms INTEGER,
+      scheme TEXT,
+      tls TEXT,
+      bot_class TEXT,
+      block_reason TEXT
     );
     CREATE INDEX IF NOT EXISTS analytics_event_host_time ON analytics_event(host_id, occurred_at);
     CREATE INDEX IF NOT EXISTS analytics_event_host_status_time ON analytics_event(host_id, status, occurred_at);
@@ -105,6 +131,17 @@ function getDb() {
     );
     CREATE INDEX IF NOT EXISTS analytics_hour_time ON analytics_hour(bucket);
   `);
+  // Non-destructive migrations for existing node-local analytics databases.
+  const columns = new Set(db.pragma("table_info(analytics_event)").map((c) => c.name));
+  for (const [name, definition] of Object.entries({
+    client_ip: "TEXT", peer_ip: "TEXT", user_agent: "TEXT", request_id: "TEXT",
+    connection_id: "TEXT", connection_requests: "INTEGER", occurred_at_ms: "INTEGER",
+    scheme: "TEXT", tls: "TEXT", bot_class: "TEXT", block_reason: "TEXT",
+  })) {
+    if (!columns.has(name)) db.exec("ALTER TABLE analytics_event ADD COLUMN " + name + " " + definition);
+  }
+  db.exec("CREATE INDEX IF NOT EXISTS analytics_event_ip_time ON analytics_event(client_ip,occurred_at)");
+  db.exec("CREATE INDEX IF NOT EXISTS analytics_event_bot_time ON analytics_event(bot_class,occurred_at)");
   database = db;
   return database;
 }
@@ -149,8 +186,10 @@ function processFile(fileName, hostId, deadline) {
   const lines = chunk.split("\n");
   const insert = db.prepare(`INSERT INTO analytics_event
     (host_id,occurred_at,domain,method,path,protocol,status,bytes_out,bytes_in,
-     duration_ms,upstream_ms,upstream_status,device)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+     duration_ms,upstream_ms,upstream_status,device,
+     client_ip,peer_ip,user_agent,request_id,connection_id,connection_requests,
+     occurred_at_ms,scheme,tls,bot_class,block_reason)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
   const hour = db.prepare(`INSERT INTO analytics_hour
     (host_id,bucket,status_band,requests,bytes_out,bytes_in,total_duration_ms,duration_samples)
     VALUES (?,?,?,?,?,?,?,?)
@@ -181,11 +220,38 @@ function processFile(fileName, hostId, deadline) {
       const bucket = Math.floor(base.time / 3600000) * 3600;
       const band = Math.floor(base.status / 100) + "xx";
       const bytesIn = numberOrNull(raw.request_length);
+      // Explicitly requested investigation data. Never trust X-Forwarded-For
+      // directly: Nginx $remote_addr has already applied configured real-IP trust.
+      const clientIp = typeof raw.client_ip === "string" && net.isIP(raw.client_ip)
+        ? raw.client_ip : null;
+      const peerIp = typeof raw.peer_ip === "string" && net.isIP(raw.peer_ip)
+        ? raw.peer_ip : null;
+      const userAgent = typeof raw.user_agent === "string"
+        ? [...raw.user_agent].filter((character) => {
+          const code = character.charCodeAt(0);
+          return code >= 32 && code !== 127;
+        }).join("").slice(0, 1024) : null;
+      const botClass = classifyAnalyticsBot(userAgent);
+      const epoch = Number(raw.epoch);
+      const millisecondTime = Number.isFinite(epoch) && epoch > 0
+        ? Math.floor(epoch * 1000) : base.time;
+      const connection = typeof raw.connection_id === "string" && /^\d{1,18}$/.test(raw.connection_id)
+        ? raw.connection_id : null;
+      const reqCount = numberOrNull(raw.connection_requests);
+      const requestId = typeof raw.request_id === "string" && /^[a-f0-9]{16,64}$/i.test(raw.request_id)
+        ? raw.request_id : null;
+      const scheme = raw.scheme === "https" ? "https" : "http";
+      const tls = typeof raw.tls === "string" ? raw.tls.slice(0, 30) : null;
+      const blockReason = raw.blocked_ip === "1" ? "ip"
+        : raw.blocked_ua === "1" ? "user_agent" : null;
       insert.run(hostId, Math.floor(base.time / 1000), domain, method,
         sanitizeAnalyticsPath(raw.path), protocol, base.status, base.bytes,
         bytesIn === null ? null : Math.floor(bytesIn), duration,
         upstreamSeconds === null ? null : upstreamSeconds * 1000,
-        upstream, classifyAnalyticsDevice(raw.user_agent));
+        upstream, classifyAnalyticsDevice(raw.user_agent),
+        clientIp, peerIp, userAgent, requestId, connection,
+        reqCount === null ? null : Math.floor(reqCount), millisecondTime,
+        scheme, tls, botClass, blockReason);
       hour.run(hostId, bucket, band, 1, base.bytes, bytesIn === null ? 0 : Math.floor(bytesIn),
         duration || 0, duration === null ? 0 : 1);
       accepted++;
@@ -254,6 +320,13 @@ export function injectNonProxyAnalyticsLog(existing, source, id = null) {
   }).join("\n");
 }
 
+export function injectNodeBlockChecks(existing) {
+  if (typeof existing !== "string" || existing.includes("if ($npmi_analytics_block_ip)")) return existing;
+  return existing.replace(/(^server\s*\{\s*\n)/m,
+    "$1  if ($npmi_analytics_block_ip) { return 403; }\n" +
+    "  if ($npmi_analytics_block_ua) { return 403; }\n");
+}
+
 export function upgradeExistingAnalyticsHostConfigs() {
   // Persistent generated routes are kept across image updates, so refresh
   // analytics access logs for every existing enabled HTTP routing category.
@@ -275,9 +348,11 @@ export function upgradeExistingAnalyticsHostConfigs() {
       const id = numeric ? Number(filename.slice(0, -5)) : null;
       const fullPath = path.join(directory, filename);
       const current = fs.readFileSync(fullPath, "utf8");
-      const updated = source.kind === "proxy-host"
+      const instrumented = source.kind === "proxy-host"
         ? injectAnalyticsLog(current, id)
         : injectNonProxyAnalyticsLog(current, source.kind, id);
+      const updated = source.kind === "stream" ? instrumented
+        : injectNodeBlockChecks(instrumented);
       if (updated !== current) changes.push({ fullPath, current, updated, mode: fs.statSync(fullPath).mode });
     }
   }

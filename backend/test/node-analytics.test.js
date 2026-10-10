@@ -21,6 +21,10 @@ test("Node Analytics Center aggregates local hosts, filters, timestamps and safe
     protocol: "HTTP/2.0", status: String(status), bytes_sent: String(bytes),
     request_length: "42", request_time: "0.120", upstream_time: "0.080",
     upstream_status: "200", user_agent: "Mozilla/5.0",
+    client_ip: "203.0.113.27", peer_ip: "172.18.0.1",
+    request_id: "a".repeat(32), connection_id: "87",
+    connection_requests: "2", epoch: String(Date.now()/1000),
+    scheme: "https", tls: "TLSv1.3", blocked_ip: "0", blocked_ua: "0",
   }) + "\n";
   fs.writeFileSync(path.join(process.env.NPM_ANALYTICS_LOG_DIR, "proxy-host-1_analytics.log"),
     logLine(200, 500, "/a?password=secret") + logLine(503, 100, "/b"));
@@ -34,6 +38,9 @@ test("Node Analytics Center aggregates local hosts, filters, timestamps and safe
     assert.equal(all.bytes_out, 650);
     assert.equal(all.bytes_in, 126);
     assert.equal(all.active_hosts, 2);
+    assert.equal(all.unique_ips, 1);
+    assert.equal(all.ips[0].ip, "203.0.113.27");
+    assert.equal(all.user_agents[0].label, "Mozilla/5.0");
     assert.equal(all.status["2xx"], 1);
     assert.equal(all.status["4xx"], 1);
     assert.equal(all.status["5xx"], 1);
@@ -48,8 +55,15 @@ test("Node Analytics Center aggregates local hosts, filters, timestamps and safe
     const events = getNodeAnalyticsRequests({ hours: 24, hostId: 1 }, 50, 0);
     assert.equal(events.total,2);
     assert.equal(events.entries.length,2);
+    assert.equal(events.entries[0].client_ip, "203.0.113.27");
+    assert.equal(events.entries[0].connection_id, "87");
+    assert.equal(getNodeAnalyticsRequests({ hours: 24, ip: "203.0.113.27" }).total, 3);
+    assert.equal(getNodeAnalyticsRequests({ hours: 24, userAgent: "Not a UA" }).total, 0);
+    assert.equal(getNodeAnalyticsRequests({ hours: 24, connection_id: "87" }).total, 3);
     const csv = exportNodeAnalyticsCsv({ hours: 24 }).csv;
     assert.ok(csv.includes("/a"));
+    assert.ok(csv.includes("203.0.113.27"));
+    assert.ok(csv.includes("Mozilla/5.0"));
     assert.ok(!csv.includes("password=secret"));
     assert.deepEqual(parseNodeFilters({ hours: "24", host_id: "2", status_class:"4xx" }), {
       hours: 24,hostId: 2,statusClass:"4xx",

@@ -129,7 +129,7 @@ jobs:
           HASH="$(printf %s "$GITHUB_WORKSPACE" | sha256sum | cut -c1-12)"
           systemctl is-active --quiet "npm-improved-update-$HASH.path"
           systemctl is-active --quiet "npm-improved-update-$HASH-maintenance.timer"
-          jq -e '.component_version == "1.4.2" and .maintenance == "automatic"' \
+          jq -e '.component_version == "1.5.0" and .maintenance == "automatic"' \
             data/host-updater-ready.json
 
           NPM_BUILD_VERSION=1.4.1-ci \
@@ -154,6 +154,60 @@ jobs:
             .capabilities.helper_image == null and
             .capabilities.host_service_installed == true
           '
+
+          # Traffic intelligence + active deny: API must enforce a rule in
+          # Nginx, NOT merely store/display a row in Analytics Center.
+          TEST_URL="http://127.0.0.1:19180/npmi-analytics-ci-expected-404-489912"
+          BASELINE="$(curl -sS -o /dev/null -w '%{http_code}' \
+            -A 'CI-Blocked-Agent-999' "$TEST_URL")"
+          echo "Baseline HTTP status without blocking: $BASELINE"
+          test "$BASELINE" != "403"
+          BLOCK_ID="$(curl --fail-with-body -sS -H "Authorization: Bearer $TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d '{"type":"user_agent","target":"CI-Blocked-Agent-999","note":"integration test"}' \
+            http://127.0.0.1:19181/api/analytics/blocks | jq -r '.id')"
+          test -n "$BLOCK_ID" && test "$BLOCK_ID" != "null"
+          CODE="000"
+          for attempt in $(seq 1 12); do
+            CODE="$(curl -sS -o /dev/null -w '%{http_code}' \
+              -A 'CI-Blocked-Agent-999' "$TEST_URL")"
+            if [ "$CODE" = "403" ]; then break; fi
+            sleep 0.25
+          done
+          echo "Blocked-user-agent HTTP status: $CODE"
+          if [ "$CODE" != "403" ]; then
+            echo "===== ACTIVE ANALYTICS BLOCK POLICY ====="
+            sudo cat data/nginx/analytics/blocked-ua-rules.conf || true
+            echo "===== GENERATED NGINX SERVER DIRECTIVES ====="
+            docker exec npm-improved-app-1 nginx -T 2>&1 | grep -E 'npmi_analytics_block|blocked-ua|analytics' | tail -n 60 || true
+            echo "===== CONTAINER LOGS ====="
+            docker compose -f compose.yaml logs --tail 80 app || true
+            exit 1
+          fi
+          curl --fail-with-body -sS -H "Authorization: Bearer $TOKEN" \
+            "http://127.0.0.1:19181/api/analytics/blocks" \
+            | jq -e --arg id "$BLOCK_ID" '.rules | any(.id == ($id|tonumber))'
+          curl --fail-with-body -sS -X DELETE -H "Authorization: Bearer $TOKEN" \
+            "http://127.0.0.1:19181/api/analytics/blocks/$BLOCK_ID" \
+            | jq -e '.target == "CI-Blocked-Agent-999"'
+          CODE="403"
+          for attempt in $(seq 1 16); do
+            CODE="$(curl -sS -o /dev/null -w '%{http_code}' \
+              -A 'CI-Blocked-Agent-999' "$TEST_URL")"
+            if [ "$CODE" != "403" ]; then break; fi
+            sleep 0.25
+          done
+          echo "Unblocked-user-agent HTTP status: $CODE"
+          if [ "$CODE" != "$BASELINE" ]; then
+            echo "Expected original HTTP status $BASELINE after unblock."
+            echo "===== POLICY AFTER REMOVE ====="
+            sudo cat data/nginx/analytics/blocked-ua-rules.conf || true
+            echo "===== NGINX RULE CONFIG ====="
+            docker exec npm-improved-app-1 nginx -T 2>&1 | grep -E 'npmi_analytics_block|blocked-ua|CI-Blocked-Agent-999' | tail -n 60 || true
+            echo "===== APP LOGS ====="
+            docker compose -f compose.yaml logs --tail 80 app || true
+            exit 1
+          fi
 
           curl -fsS -H "Authorization: Bearer $TOKEN" \
             -H 'Content-Type: application/json' \

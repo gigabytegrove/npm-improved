@@ -3,6 +3,7 @@
 import app from "./app.js";
 import internalCertificate from "./internal/certificate.js";
 import { startAnalyticsCollector } from "./internal/proxy-analytics.js";
+import { initializeNodeBlocking } from "./internal/analytics-blocking.js";
 import { startStreamCollector } from "./internal/stream-analytics.js";
 import internalDatabaseManager from "./internal/database-manager.js";
 import internalIpRanges from "./internal/ip_ranges.js";
@@ -43,6 +44,8 @@ async function appStart() {
 		})
 		.then(() => {
 			internalCertificate.initTimer();
+			try { initializeNodeBlocking(); }
+			catch (err) { logger.error(`Analytics blocking activation failed: ${err.message}`); }
 			startAnalyticsCollector();
 			startStreamCollector();
 			internalIpRanges.initTimer();

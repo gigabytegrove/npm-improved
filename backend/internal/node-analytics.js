@@ -89,6 +89,11 @@ export function getNodeAnalytics(filters) {
     bytes_out: Number(row.bytes_out || 0),
     errors: Number(row.errors || 0),
   }));
+  const ips = rollup ? [] : db.prepare(`SELECT client_ip AS ip, COUNT(*) AS requests,
+    SUM(bytes_out) AS bytes_out, MIN(occurred_at) AS first_seen,
+    MAX(occurred_at) AS last_seen, SUM(CASE WHEN status >= 400 THEN 1 ELSE 0 END) AS errors
+    FROM analytics_event WHERE ${where} AND client_ip IS NOT NULL
+    GROUP BY client_ip ORDER BY requests DESC LIMIT 100`).all(...args);
   const hosts = rollup
     ? db.prepare(`SELECT host_id, SUM(requests) AS requests,
         SUM(bytes_out) AS bytes_out, SUM(bytes_in) AS bytes_in,
@@ -132,6 +137,18 @@ export function getNodeAnalytics(filters) {
       WHERE ${rawWhere} AND duration_ms IS NOT NULL
       ORDER BY duration_ms LIMIT 1 OFFSET ?`).get(...rawArgs, offset)?.duration_ms ?? null;
   };
+  const userAgents = rollup ? [] : db.prepare(`SELECT user_agent AS label, COUNT(*) AS requests,
+    SUM(bytes_out) AS bytes_out FROM analytics_event WHERE ${rawWhere}
+    AND user_agent IS NOT NULL GROUP BY user_agent ORDER BY requests DESC LIMIT 60`).all(...rawArgs)
+    .map((row) => ({ label: row.label, requests: Number(row.requests), bytes_out: Number(row.bytes_out || 0) }));
+  const bots = rollup ? [] : db.prepare(`SELECT bot_class AS label, COUNT(*) AS requests,
+    SUM(bytes_out) AS bytes_out FROM analytics_event WHERE ${rawWhere}
+    GROUP BY bot_class ORDER BY requests DESC`).all(...rawArgs)
+    .map((row) => ({ label: row.label || "not recorded", requests: Number(row.requests), bytes_out: Number(row.bytes_out || 0) }));
+  const uniqueIps = rollup ? null : db.prepare(`SELECT COUNT(DISTINCT client_ip) AS n
+    FROM analytics_event WHERE ${rawWhere} AND client_ip IS NOT NULL`).get(...rawArgs).n;
+  const denied = rollup ? null : db.prepare(`SELECT COUNT(*) AS n FROM analytics_event
+    WHERE ${rawWhere} AND block_reason IS NOT NULL`).get(...rawArgs).n;
   const slowPaths = rollup ? [] : db.prepare(`SELECT host_id, path, COUNT(*) AS requests,
     ROUND(AVG(duration_ms),1) AS average_ms, ROUND(MAX(duration_ms),1) AS max_ms
     FROM analytics_event WHERE ${rawWhere} AND duration_ms IS NOT NULL
@@ -173,6 +190,13 @@ export function getNodeAnalytics(filters) {
       bytes_in: Number(host.bytes_in || 0),
       errors: Number(host.errors || 0),
     })),
+    unique_ips: uniqueIps, blocked_requests: denied,
+    ips: ips.map((row) => ({
+      ip: row.ip, requests: Number(row.requests), bytes_out: Number(row.bytes_out || 0),
+      errors: Number(row.errors), first_seen: new Date(row.first_seen * 1000).toISOString(),
+      last_seen: new Date(row.last_seen * 1000).toISOString(),
+    })),
+    user_agents: userAgents, bots,
     domains: breakdown("domain"), methods: breakdown("method"),
     paths: breakdown("path", 25), protocols: breakdown("protocol"),
     devices: breakdown("device"), upstreams: breakdown("upstream_status"),
@@ -182,7 +206,7 @@ export function getNodeAnalytics(filters) {
       node: "Only traffic recorded by this server is included; NPMX does not copy metrics.",
       history: "Older requests cannot be reconstructed before analytics logging was enabled.",
       extended: rollup ? "Path, device, method, hostname, protocol and latency details require retained raw events." : null,
-      visitors: "Unique people, IP addresses and countries are intentionally not collected.",
+      visitors: "Unique IPs are network endpoints, not unique people. User agents and bot names are unverified claims; no GeoIP database is bundled.",
       coverage: "Instrumented proxy, redirect, 404, default-site and fallback HTTP requests are counted here. TCP/UDP connections are counted separately in the Streams tab as completed sessions.",
     },
   };
@@ -190,49 +214,78 @@ export function getNodeAnalytics(filters) {
 
 export function getNodeAnalyticsRequests(filters, limit = 50, offset = 0) {
   const { hours, hostId, statusClass } = parseNodeFilters(filters);
-  if (![1, 24, 168].includes(hours) || !Number.isInteger(limit) || limit < 1 || limit > 100 ||
+  const ip = filters.ip || null;
+  const userAgent = filters.userAgent || filters.user_agent || null;
+  const bot = filters.bot || null;
+  const connectionId = filters.connectionId || filters.connection_id || null;
+  if (![1,24,168,720,2160].includes(hours) || !Number.isInteger(limit) || limit < 1 || limit > 100 ||
     !Number.isInteger(offset) || offset < 0 || offset > 10000)
-    throw new RangeError("Invalid request window or pagination");
+    throw new RangeError("Invalid request history window or pagination");
+  if (ip !== null && (typeof ip !== "string" || ip.length > 45))
+    throw new RangeError("Invalid IP filter");
+  if (userAgent !== null && (typeof userAgent !== "string" || userAgent.length > 1024))
+    throw new RangeError("Invalid user-agent filter");
+  if (bot !== null && (typeof bot !== "string" || bot.length > 50))
+    throw new RangeError("Invalid bot filter");
+  if (connectionId !== null && (typeof connectionId !== "string" || !/^\d{1,18}$/.test(connectionId)))
+    throw new RangeError("Invalid connection identifier");
+  const db = getAnalyticsDatabase();
+  const retention = getAnalyticsRetention();
+  if (hours > retention.rawDays * 24) throw new RangeError("Request details have expired outside raw retention");
   const conditions = ["occurred_at >= ?"];
   const args = [Math.floor(Date.now() / 1000) - hours * 3600];
   if (hostId !== null) { conditions.push("host_id = ?"); args.push(hostId); }
   if (statusClass !== null) {
     const min = Number(statusClass[0]) * 100;
-    conditions.push("status >= ? AND status < ?");
-    args.push(min, min + 100);
+    conditions.push("status >= ? AND status < ?"); args.push(min, min + 100);
   }
+  if (ip !== null) { conditions.push("client_ip = ?"); args.push(ip); }
+  if (userAgent !== null) { conditions.push("user_agent = ?"); args.push(userAgent); }
+  if (bot !== null) { conditions.push("bot_class = ?"); args.push(bot); }
+  if (connectionId !== null) { conditions.push("connection_id = ?"); args.push(connectionId); }
   const where = conditions.join(" AND ");
-  const db = getAnalyticsDatabase();
   const total = db.prepare(`SELECT COUNT(*) AS n FROM analytics_event WHERE ${where}`).get(...args).n;
-  const entries = db.prepare(`SELECT id,host_id,occurred_at,domain,method,path,protocol,
-    status,bytes_out,bytes_in,duration_ms,upstream_ms,upstream_status,device
+  const entries = db.prepare(`SELECT id,host_id,occurred_at,occurred_at_ms,domain,method,path,protocol,
+    status,bytes_out,bytes_in,duration_ms,upstream_ms,upstream_status,device,
+    client_ip,peer_ip,user_agent,request_id,connection_id,connection_requests,scheme,tls,bot_class,block_reason
     FROM analytics_event WHERE ${where}
-    ORDER BY occurred_at DESC,id DESC LIMIT ? OFFSET ?`).all(...args,limit,offset);
+    ORDER BY occurred_at DESC,id DESC LIMIT ? OFFSET ?`).all(...args, limit, offset);
   return { total, limit, offset, entries: entries.map((row) => ({
-    ...row, at: new Date(row.occurred_at * 1000).toISOString(),
+    ...row, at: new Date(row.occurred_at_ms || row.occurred_at * 1000).toISOString(),
   })) };
 }
 
 export function exportNodeAnalyticsCsv(filters) {
   const { hours, hostId, statusClass } = parseNodeFilters(filters);
-  if (![1, 24, 168].includes(hours)) throw new RangeError("Exports require a retained raw-data window");
+  if (![1, 24, 168, 720, 2160].includes(hours) || hours > getAnalyticsRetention().rawDays * 24)
+    throw new RangeError("Exports require retained raw request events");
   // Full export uses a bounded indexed query instead of the paged 100-row API.
   const conditions = ["occurred_at >= ?"];
   const args = [Math.floor(Date.now()/1000) - hours * 3600];
   if (hostId !== null) { conditions.push("host_id=?"); args.push(hostId); }
   if (statusClass !== null) { const min = Number(statusClass[0])*100; conditions.push("status>=? AND status<?"); args.push(min,min+100); }
+  const ip = filters.ip || null;
+  const userAgent = filters.userAgent || filters.user_agent || null;
+  const bot = filters.bot || null;
+  const connectionId = filters.connectionId || filters.connection_id || null;
+  if (ip !== null) { conditions.push("client_ip=?"); args.push(ip); }
+  if (userAgent !== null) { conditions.push("user_agent=?"); args.push(userAgent); }
+  if (bot !== null) { conditions.push("bot_class=?"); args.push(bot); }
+  if (connectionId !== null) { conditions.push("connection_id=?"); args.push(connectionId); }
+  // Match exactly the validated explorer filters; do not accept arbitrary SQL.
+  getNodeAnalyticsRequests(filters, 1, 0);
   const db = getAnalyticsDatabase();
-  const rows = db.prepare(`SELECT host_id,occurred_at,domain,method,path,protocol,status,bytes_out,bytes_in,
+  const rows = db.prepare(`SELECT host_id,occurred_at,occurred_at_ms,client_ip,user_agent,bot_class,request_id,connection_id,domain,method,path,protocol,status,bytes_out,bytes_in,
     duration_ms,upstream_ms,upstream_status,device FROM analytics_event WHERE ${conditions.join(" AND ")}
     ORDER BY occurred_at DESC,id DESC LIMIT 10001`).all(...args);
-  const headers = ["proxy_host_id","timestamp_utc","hostname","method","path","protocol","status","bytes_out","bytes_in","duration_ms","upstream_ms","upstream_status","device"];
+  const headers = ["route_id","timestamp_utc","source_ip","user_agent","bot_class","request_id","connection_id","hostname","method","path","protocol","status","bytes_out","bytes_in","duration_ms","upstream_ms","upstream_status","device"];
   const safe = (val) => {
     let value = String(val ?? "");
     if (/^[=+@\t\r-]/.test(value)) value = "'" + value;
     return '"' + value.replaceAll('"', '""') + '"';
   };
   const csv = rows.slice(0,10000).map((row)=>[
-    row.host_id,new Date(row.occurred_at*1000).toISOString(),row.domain,row.method,row.path,row.protocol,
+    row.host_id,new Date(row.occurred_at_ms || row.occurred_at*1000).toISOString(),row.client_ip,row.user_agent,row.bot_class,row.request_id,row.connection_id,row.domain,row.method,row.path,row.protocol,
     row.status,row.bytes_out,row.bytes_in,row.duration_ms,row.upstream_ms,row.upstream_status,row.device,
   ].map(safe).join(","));
   return { csv: [headers.join(","),...csv].join("\n")+"\n", truncated: rows.length > 10000 };

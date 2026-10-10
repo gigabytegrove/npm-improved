@@ -63,11 +63,12 @@ router.use("/schema", schemaRoutes);
 router.use("/cluster", clusterRoutes);
 router.use("/database", databaseRoutes);
 router.use(internalDatabaseManager.writeGuard);
+// Analytics rules are explicitly node-local, even on NPMX secondaries.
+router.use("/analytics", analyticsRoutes);
 router.use(internalInstanceSync.writeGuard);
 router.use("/tokens", tokensRoutes);
 router.use("/users", usersRoutes);
 router.use("/audit-log", auditLogRoutes);
-router.use("/analytics", analyticsRoutes);
 router.use("/config-history", configHistoryRoutes);
 router.use("/disaster-recovery", disasterRecoveryRoutes);
 router.use("/logs", logsRoutes);
