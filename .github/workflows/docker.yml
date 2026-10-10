@@ -185,9 +185,23 @@ jobs:
           curl --fail-with-body -sS -X DELETE -H "Authorization: Bearer $TOKEN" \
             "http://127.0.0.1:19181/api/analytics/blocks/$BLOCK_ID" \
             | jq -e '.target == "CI-Blocked-Agent-999"'
-          CODE="$(curl -sS -o /dev/null -w '%{http_code}' \
-            -A 'CI-Blocked-Agent-999' http://127.0.0.1:19180/)"
-          test "$CODE" != "403"
+          CODE="403"
+          for attempt in $(seq 1 16); do
+            CODE="$(curl -sS -o /dev/null -w '%{http_code}' \
+              -A 'CI-Blocked-Agent-999' http://127.0.0.1:19180/)"
+            if [ "$CODE" != "403" ]; then break; fi
+            sleep 0.25
+          done
+          echo "Unblocked-user-agent HTTP status: $CODE"
+          if [ "$CODE" = "403" ]; then
+            echo "===== POLICY AFTER REMOVE ====="
+            sudo cat data/nginx/analytics/blocked-ua-rules.conf || true
+            echo "===== NGINX RULE CONFIG ====="
+            docker exec npm-improved-app-1 nginx -T 2>&1 | grep -E 'npmi_analytics_block|blocked-ua|CI-Blocked-Agent-999' | tail -n 60 || true
+            echo "===== APP LOGS ====="
+            docker compose -f compose.yaml logs --tail 80 app || true
+            exit 1
+          fi
 
           curl -fsS -H "Authorization: Bearer $TOKEN" \
             -H 'Content-Type: application/json' \
