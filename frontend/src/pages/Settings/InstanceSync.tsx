@@ -435,8 +435,8 @@ export default function InstanceSync() {
 												className="form-control"
 												value={values.primaryUrl}
 												onChange={handleChange}
-												placeholder="Filled automatically by NPMX pairing"
-												readOnly={data.secretConfigured}
+												placeholder="Dedicated primary URL (not the load-balanced browser hostname)"
+												
 											/>
 										</div>
 									) : null}

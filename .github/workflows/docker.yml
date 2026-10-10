@@ -220,8 +220,31 @@ jobs:
           test -s data/host-update-request.json
           sudo "/usr/local/libexec/npm-improved/$HASH/host-update-dispatch.py" "$GITHUB_WORKSPACE"
 
-          RESULT="$(curl -fsS -H "Authorization: Bearer $TOKEN" \
-            http://127.0.0.1:19181/api/version/update)"
+          # systemd.path may pick up the request before the CI shell's
+          # explicit dispatch invocation completes; wait for final state.
+          RESULT=""
+          for attempt in $(seq 1 90); do
+            RESULT="$(curl -fsS -H "Authorization: Bearer $TOKEN" \
+              http://127.0.0.1:19181/api/version/update 2>/dev/null || true)"
+            if jq -e '.status.state == "completed"' >/dev/null 2>&1 <<<"$RESULT"; then
+              break
+            fi
+            if jq -e '.status.state == "failed"' >/dev/null 2>&1 <<<"$RESULT"; then
+              echo "===== NATIVE UPDATE FAILED ====="
+              echo "$RESULT"
+              sudo cat data/update-status.json || true
+              sudo journalctl -u "npm-improved-update-$HASH.service" --no-pager -n 70 || true
+              exit 1
+            fi
+            if [ "$attempt" -eq 90 ]; then
+              echo "===== NATIVE UPDATE TIMED OUT ====="
+              echo "$RESULT"
+              sudo cat data/update-status.json || true
+              sudo journalctl -u "npm-improved-update-$HASH.service" --no-pager -n 70 || true
+              exit 1
+            fi
+            sleep 1
+          done
           jq -e '.status.state == "completed"' <<<"$RESULT"
           test ! -e data/host-update-request.json
           test -z "$(docker ps -aq --filter label=com.gigabytegrove.npm-improved.role=update-handoff)"
