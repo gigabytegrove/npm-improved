@@ -20,7 +20,14 @@ test("ACME is isolated from GG Private-style access rules in proxy templates", (
 	assert.match(acme, /auth_basic off;/);
 	assert.match(acme, /auth_request off;/);
 	assert.match(acme, /allow all;/);
-	assert.match(acme, /proxy_pass http:\/\/127\.0\.0\.1:3000\/api\/cluster\/acme\//);
+	assert.match(acme, /proxy_pass http:\/\/127\.0\.0\.1:3000\/cluster\/acme\//);
+	assert.doesNotMatch(acme, /proxy_pass http:\/\/127\.0\.0\.1:3000\/api\/cluster\/acme\//);
+	const routes = read("backend/routes/main.js");
+	const clusterRoutes = read("backend/routes/cluster.js");
+	const app = read("backend/app.js");
+	assert.match(app, /app\.use\("\/", mainRoutes\)/);
+	assert.match(routes, /router\.use\("\/cluster", clusterRoutes\)/);
+	assert.match(clusterRoutes, /router\.get\("\/acme\/:token"/);
 });
 
 test("forced HTTPS exempts any HTTP-01 challenge token, not just a test file", () => {
