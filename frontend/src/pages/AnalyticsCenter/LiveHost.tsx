@@ -7,8 +7,8 @@ import {
 } from "src/api/backend";
 import { formatBytes, formatDate, formatNumber, routeName, useAnalyticsPage } from "./Shared";
 
-function ClientPanel({ title, kind, entries }: {
-  title: string; kind: "ip" | "agent"; entries: HostClientSignal[];
+function ClientPanel({ title, kind, entries, source }: {
+  title: string; kind: "ip" | "agent"; entries: HostClientSignal[]; source: number;
 }) {
   return <section className="card mb-3">
     <div className="card-header"><h3 className="card-title">{title} ({entries.length})</h3></div>
@@ -17,6 +17,8 @@ function ClientPanel({ title, kind, entries }: {
       <div className="row row-cards">
         {entries.map((entry) => {
           const inspect = kind === "ip" ? "/analytics/ips/detail?value=" : "/analytics/user-agents/detail?value=";
+          const scopedHistory = "/analytics/requests?source=" + source + "&" +
+            (kind === "ip" ? "ip=" : "userAgent=") + encodeURIComponent(entry.value);
           const block = kind === "ip"
             ? "/analytics/blocking?type=ip&target=" + encodeURIComponent(entry.value)
             : "/analytics/blocking?type=user_agent";
@@ -41,7 +43,8 @@ function ClientPanel({ title, kind, entries }: {
               </div>
               <div className="small text-secondary mb-2">Last observed: {new Date(entry.lastSeen * 1000).toLocaleString()}</div>
               <div className="d-flex flex-wrap gap-2">
-                <Link to={inspect + encodeURIComponent(entry.value)} className="btn btn-sm btn-outline-secondary">Investigate requests</Link>
+                <Link to={scopedHistory} className="btn btn-sm btn-outline-secondary">Requests on this host</Link>
+                <Link to={inspect + encodeURIComponent(entry.value)} className="btn btn-sm btn-outline-secondary">Full client profile</Link>
                 <Link to={block} className="btn btn-sm btn-outline-danger">
                   Prepare node-wide {kind === "ip" ? "IP" : "user-agent"} block
                 </Link>
@@ -150,7 +153,7 @@ export default function LiveHostPage() {
             aria-label="Minute-by-minute request counts">
             {report.timeline.map((bucket) => <div key={bucket.at}
               title={new Date(bucket.at).toLocaleTimeString() + ": " + bucket.requests + " requests"}
-              style={{flex: "1 1 4px", minWidth: 3, height: Math.max(3, bucket.requests / Math.max(1,...report.timeline.map(x=>x.requests)) * 85), background: "var(--npi-primary)", borderRadius: 2}} />)}
+              style={{flex: "1 1 4px", minWidth: 3, height: Math.max(3, bucket.requests / Math.max(1,...report.timeline.map(x=>x.requests)) * 85), background: "var(--tblr-primary, #238cce)", borderRadius: 2}} />)}
           </div>
           <p className="text-secondary small mb-0">Each bar represents a minute, oldest to newest. Select another window above to change the resolution.</p>
         </div>
@@ -159,8 +162,8 @@ export default function LiveHostPage() {
         {report.limitations.detection} {report.limitations.attribution}
         Existing deny rules are <strong>node-wide</strong> and can affect other hosted applications.
       </div>
-      <ClientPanel title="IP addresses requiring review" kind="ip" entries={report.suspiciousIps}/>
-      <ClientPanel title="User agents requiring review" kind="agent" entries={report.suspiciousAgents}/>
+      <ClientPanel title="IP addresses requiring review" kind="ip" entries={report.suspiciousIps} source={source}/>
+      <ClientPanel title="User agents requiring review" kind="agent" entries={report.suspiciousAgents} source={source}/>
       <div className="row row-cards mb-3">
         <div className="col-lg-6"><div className="card h-100">
           <div className="card-header"><h3 className="card-title">Requested paths</h3></div>
