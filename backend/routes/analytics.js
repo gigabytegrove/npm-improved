@@ -44,6 +44,7 @@ const reportFilters = (query) => ({
   ip: query.ip,
   user_agent: query.user_agent,
   bot: query.bot,
+  path: query.path,
   connection_id: query.connection_id,
 });
 

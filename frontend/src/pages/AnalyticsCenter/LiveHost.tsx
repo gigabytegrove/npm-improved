@@ -166,7 +166,7 @@ export default function LiveHostPage() {
           <div className="card-header"><h3 className="card-title">Requested paths</h3></div>
           <div className="card-body">
             {report.paths.map((path) => <div key={path.label} className="border-bottom py-2 d-flex justify-content-between gap-2">
-              <span className="text-break">{path.label}</span><span className="text-end text-nowrap small">
+              <Link className="text-break" to={"/analytics/requests?source=" + source + "&path=" + encodeURIComponent(path.label)}>{path.label}</Link><span className="text-end text-nowrap small">
                 {formatNumber(path.requests)} requests{path.probes ? " · probe pattern" : ""}
               </span>
             </div>)}

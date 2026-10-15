@@ -9,6 +9,7 @@ export interface NodeFilters {
   ip?: string | null;
   userAgent?: string | null;
   bot?: string | null;
+  path?: string | null;
   connectionId?: string | null;
 }
 export interface NodeBreakdown {
@@ -125,6 +126,7 @@ export async function getNodeAnalyticsRequests(
     ...(filters.ip ? { ip: filters.ip } : {}),
     ...(filters.userAgent ? { userAgent: filters.userAgent } : {}),
     ...(filters.bot ? { bot: filters.bot } : {}),
+    ...(filters.path ? { path: filters.path } : {}),
     ...(filters.connectionId ? { connectionId: filters.connectionId } : {}),
   }});
 }
@@ -133,6 +135,11 @@ export async function exportNodeAnalytics(filters: NodeFilters): Promise<void> {
     hours: filters.hours,
     ...(filters.hostId ? { hostId: filters.hostId } : {}),
     ...(filters.statusClass ? { statusClass: filters.statusClass } : {}),
+    ...(filters.ip ? { ip: filters.ip } : {}),
+    ...(filters.userAgent ? { userAgent: filters.userAgent } : {}),
+    ...(filters.bot ? { bot: filters.bot } : {}),
+    ...(filters.path ? { path: filters.path } : {}),
+    ...(filters.connectionId ? { connectionId: filters.connectionId } : {}),
   } }, "npmi-node-analytics.csv");
 }
 

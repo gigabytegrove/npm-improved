@@ -76,6 +76,10 @@ test("Node Analytics Center aggregates local hosts, filters, timestamps and safe
     assert.equal(getNodeAnalyticsRequests({ hours: 24, ip: "203.0.113.27" }).total, 3);
     assert.equal(getNodeAnalyticsRequests({ hours: 24, userAgent: "Not a UA" }).total, 0);
     assert.equal(getNodeAnalyticsRequests({ hours: 24, connection_id: "87" }).total, 3);
+    assert.equal(getNodeAnalyticsRequests({ hours: 24, hostId: 1, path: "/a" }).total, 1);
+    assert.throws(() => getNodeAnalyticsRequests({ hours: 24, hostId: 1, path: "/a?password=secret" }), RangeError);
+    assert.ok(exportNodeAnalyticsCsv({ hours: 24, hostId: 1, path: "/a" }).csv.includes("/a"));
+    assert.ok(!exportNodeAnalyticsCsv({ hours: 24, hostId: 1, path: "/a" }).csv.includes("/b"));
     const csv = exportNodeAnalyticsCsv({ hours: 24 }).csv;
     assert.ok(csv.includes("/a"));
     assert.ok(csv.includes("203.0.113.27"));
