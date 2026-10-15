@@ -13,7 +13,7 @@ interface TableLayoutProps<TFields extends RowData> {
 function TableLayout<TFields extends RowData>(props: TableLayoutProps<TFields>) {
 	const hasRows = props.tableInstance.getRowModel().rows.length > 0;
 	return (
-		<div className="table-responsive">
+		<div className="table-responsive npmi-responsive-table">
 			<table className="table table-vcenter table-selectable mb-0">
 				{hasRows ? <TableHeader tableInstance={props.tableInstance} /> : null}
 				<TableBody {...props} />
