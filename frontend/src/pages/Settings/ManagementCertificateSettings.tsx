@@ -250,8 +250,8 @@ export default function ManagementCertificateSettings() {
                             in Certificates and is not revoked or deleted.
                         </p>
                         {!confirmRelease ? (
-                            <button type="button" className="btn btn-outline-secondary btn-sm" disabled={busy}
-                                onClick={() => setConfirmRelease(true)} disabled={busy || Boolean(status?.enabled)}>Release management certificate assignment</button>
+                            <button type="button" className="btn btn-outline-secondary btn-sm" disabled={busy || Boolean(status?.enabled)}
+                                onClick={() => setConfirmRelease(true)}>Release management certificate assignment</button>
                         ) : (
                             <div className="d-flex flex-wrap align-items-center gap-2">
                                 <span className="small">Keep the certificate but release its management assignment?</span>
