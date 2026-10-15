@@ -243,3 +243,62 @@ export async function getNodeProfile(kind: "ips" | "user-agents", value: string,
     ...(filters.statusClass ? { statusClass: filters.statusClass } : {}),
   }});
 }
+
+// Near-real-time, single-route traffic investigation. The server returns
+// sanitized retained events only; it never invokes a blocking operation.
+export type LiveMinutes = 5 | 15 | 60;
+export interface HostClientSignal {
+  value: string;
+  requests: number;
+  probeRequests: number;
+  notFound: number;
+  clientErrors: number;
+  serverErrors: number;
+  blocked: number;
+  bytesOut: number;
+  firstSeen: number;
+  lastSeen: number;
+  signals: string[];
+  priority: "high" | "review" | "none";
+}
+export interface HostLiveRequest {
+  id: number;
+  at: string;
+  method: string;
+  path: string;
+  status: number;
+  clientIp: string | null;
+  userAgent: string | null;
+  botClass: string | null;
+  blockReason: string | null;
+  bytesOut: number;
+  requestId: string | null;
+  connectionId: string | null;
+}
+export interface HostTrafficIntelligence {
+  scope: "local-node";
+  hostId: number;
+  minutes: LiveMinutes;
+  sampledAt: string;
+  latestRequestAt: string | null;
+  lastIngestedAt: string | null;
+  collectorIntervalSeconds: number;
+  accuracy: "ingested-completed-requests";
+  requests: number;
+  bytesOut: number;
+  clientErrors: number;
+  serverErrors: number;
+  blocked: number;
+  uniqueIps: number;
+  timeline: Array<{ at: string; requests: number; bytesOut: number; errors: number }>;
+  paths: Array<{ label: string; requests: number; errors: number; probes: number }>;
+  browsers: Array<{ label: string; requests: number }>;
+  suspiciousIps: HostClientSignal[];
+  suspiciousAgents: HostClientSignal[];
+  recent: HostLiveRequest[];
+  geography: { available: boolean; reason: string };
+  limitations: { attribution: string; detection: string; enforcement: string };
+}
+export async function getHostTrafficIntelligence(source: number, minutes: LiveMinutes): Promise<HostTrafficIntelligence> {
+  return api.get({ url: "/analytics/node/hosts/" + source + "/live", params: { minutes } });
+}
