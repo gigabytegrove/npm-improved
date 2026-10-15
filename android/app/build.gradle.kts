@@ -63,3 +63,12 @@ val copyVersionedDebug by tasks.registering(Copy::class) {
 tasks.matching { it.name == "assembleDebug" }.configureEach {
     finalizedBy(copyVersionedDebug)
 }
+
+// Surface unit-test failure details in CI rather than publishing an unverified APK.
+tasks.withType<Test>().configureEach {
+    testLogging {
+        events("failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showStandardStreams = true
+    }
+}

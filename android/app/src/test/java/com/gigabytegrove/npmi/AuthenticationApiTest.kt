@@ -41,14 +41,15 @@ class AuthenticationApiTest {
             val profile = ServerProfile("test", "Test", server.url("/").toString(), true)
             val api = NpmApi(profile) { null }
             val first = api.login("admin@example.org", "password")
-            assertTrue(first is LoginResult.Challenge)
-            assertEquals("challenge-123", (first as LoginResult.Challenge).challengeToken)
-            assertEquals("verified-token", api.verify2fa("challenge-123", "123456"))
+            assertTrue("Expected 2FA challenge, received $first", first is LoginResult.Challenge)
+            assertEquals("2FA challenge token", "challenge-123", (first as LoginResult.Challenge).challengeToken)
+            assertEquals("2FA verification token", "verified-token", api.verify2fa("challenge-123", "123456"))
             server.takeRequest()
             val verify = server.takeRequest()
-            assertEquals("/api/tokens/2fa", verify.path)
-            assertTrue(verify.body.readUtf8().contains("challenge_token"))
-            assertTrue(verify.body.readUtf8().contains("123456"))
+            assertEquals("2FA URL", "/api/tokens/2fa", verify.path)
+            val verificationPayload = verify.body.readUtf8()
+            assertTrue("Challenge missing from 2FA POST: $verificationPayload", verificationPayload.contains("challenge_token"))
+            assertTrue("Code missing from 2FA POST: $verificationPayload", verificationPayload.contains("123456"))
         } finally { server.shutdown() }
     }
 
