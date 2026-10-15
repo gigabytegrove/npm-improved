@@ -720,6 +720,7 @@ private fun TrafficScreen(vm: NpmViewModel) {
     val id = vm.liveHostId ?: return
     val owner = LocalLifecycleOwner.current
     val minutes = vm.liveMinutes
+    var panel by remember(id) { mutableStateOf("overview") }
     LaunchedEffect(id, minutes, vm.selectedId, owner) {
         owner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (isActive) {
@@ -730,58 +731,119 @@ private fun TrafficScreen(vm: NpmViewModel) {
     }
     val host = vm.hosts.firstOrNull { it.id == id }
     val live = vm.live
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        TextButton(onClick = { vm.screen = "hosts"; vm.liveHostId = null }) { Text("← Back to hosts") }
-        Text(host?.domains?.joinToString(", ").orEmpty().ifBlank { "Host #" + id },
-            style = MaterialTheme.typography.headlineSmall)
-        Text("Near-real-time HTTP investigations · this NPMi node only",
-            style = MaterialTheme.typography.bodySmall)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf(5, 15, 60).forEach { choice ->
-                FilterChip(selected = minutes == choice, onClick = { vm.liveMinutes = choice; vm.live = null },
-                    label = { Text(choice.toString() + " min") })
+    Column(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            TextButton(onClick = { vm.screen = "hosts"; vm.liveHostId = null }) {
+                Text("← All proxy hosts")
+            }
+            Text(host?.domains?.joinToString(", ").orEmpty().ifBlank { "Host #" + id },
+                style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text("Completed HTTP requests · this NPMi node",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(5, 15, 60).forEach { choice ->
+                    FilterChip(selected = minutes == choice,
+                        onClick = { vm.liveMinutes = choice; vm.live = null },
+                        label = { Text(choice.toString() + " min") })
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("overview" to "Overview", "clients" to "Clients", "requests" to "Requests")
+                    .forEach { (code, label) ->
+                        FilterChip(selected = panel == code, onClick = { panel = code },
+                            label = { Text(label) })
+                    }
             }
         }
-        if (vm.liveError.isNotBlank()) ErrorText(vm.liveError)
-        if (live == null) {
-            CircularProgressIndicator()
-            Text("Loading recorded requests…")
-        } else {
-            StatCard("Requests", live.total.toString(),
-                "10-second refresh while this screen is open")
-            StatCard("Traffic sent", live.sent.bytesLabel())
-            StatCard("Source addresses", live.uniqueIps.toString(), "An IP is not necessarily one person.")
-            Text("Requests per minute", style = MaterialTheme.typography.titleMedium)
-            ElevatedCard(Modifier.fillMaxWidth()) { Box(Modifier.padding(16.dp)) { RequestsBar(live.timeline) } }
-            Text("Traffic is drawn from completed, ingested requests. Not a packet capture.",
-                style = MaterialTheme.typography.bodySmall)
-            Text("Client review signals", style = MaterialTheme.typography.titleLarge)
-            Text("Indicators do not prove malicious behavior; crawler and browser identities are self-reported.",
-                style = MaterialTheme.typography.bodySmall)
-            ClientSection("Source IP addresses", "ip", live.ips, vm)
-            ClientSection("User-agent strings", "user_agent", live.agents, vm)
-            Text("Requested paths", style = MaterialTheme.typography.titleLarge)
-            live.paths.take(25).forEach { (path, count) ->
-                HorizontalDivider()
-                Text(path + " — " + count + " requests", style = MaterialTheme.typography.bodyMedium)
-            }
-            Text("Browser and client claims", style = MaterialTheme.typography.titleLarge)
-            live.browsers.forEach { (label, count) ->
-                Text(label + ": " + count, style = MaterialTheme.typography.bodyMedium)
-            }
-            Text("Geography", style = MaterialTheme.typography.titleLarge)
-            Text(live.geographyNote, style = MaterialTheme.typography.bodySmall)
-            Text("Recent completed requests", style = MaterialTheme.typography.titleLarge)
-            live.requests.forEach { r ->
-                ElevatedCard(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text(r.method + " " + r.path + " · HTTP " + r.status,
-                            fontWeight = FontWeight.SemiBold)
-                        Text(r.ip + " · " + r.at, style = MaterialTheme.typography.bodySmall)
-                        Text(r.userAgent, style = MaterialTheme.typography.bodySmall)
-                        if (r.deniedBy.isNotBlank() && r.deniedBy != "null")
-                            Text("Denied: " + r.deniedBy, color = MaterialTheme.colorScheme.error)
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+            .padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            if (vm.liveError.isNotBlank()) InlineIssue(vm.liveError)
+            if (live == null) {
+                Row(verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(14.dp)) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    Text("Loading traffic recorded by this node…")
+                }
+            } else when (panel) {
+                "clients" -> {
+                    SectionHeading("Client signals", "Indicators are not proof of abuse; user-agent names can be spoofed")
+                    ClientSection("Source IP addresses", "ip", live.ips, vm)
+                    ClientSection("User-agent strings", "user_agent", live.agents, vm)
+                    Text("Proposed blocks will affect every HTTP host on this node.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall)
+                }
+                "requests" -> {
+                    SectionHeading("Recent requests", "Latest completed requests on this host")
+                    if (live.requests.isEmpty()) Text("No completed requests recorded in this interval.")
+                    live.requests.forEach { request ->
+                        ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
+                            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(request.method, fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        style = MaterialTheme.typography.labelMedium)
+                                    Spacer(Modifier.width(9.dp))
+                                    Text("HTTP " + request.status, style = MaterialTheme.typography.labelMedium,
+                                        color = if (request.status >= 400) MaterialTheme.colorScheme.error
+                                            else MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Text(request.path, style = MaterialTheme.typography.bodyMedium)
+                                Text(request.ip + " · " + request.at, style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(request.userAgent, style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (request.deniedBy.isNotBlank() && request.deniedBy != "null")
+                                    Text("Denied: " + request.deniedBy, color = MaterialTheme.colorScheme.error,
+                                        style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                    }
+                    SectionHeading("Requested paths", "Most frequently requested URLs")
+                    live.paths.take(25).forEach { (path, count) ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(path, modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodySmall)
+                            Text(count.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.labelMedium)
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                    SectionHeading("Claimed browsers", "Based on reported user-agent headers")
+                    live.browsers.forEach { (label, count) ->
+                        Row {
+                            Text(label, modifier = Modifier.weight(1f))
+                            Text(count.toString())
+                        }
+                    }
+                }
+                else -> {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        MetricTile("Requests", live.total.toString(), "Recorded", Modifier.weight(1f))
+                        MetricTile("Data sent", live.sent.bytesLabel(), "Responses", Modifier.weight(1f))
+                    }
+                    MetricTile("Source IPs", live.uniqueIps.toString(), "Not unique visitors")
+                    SectionHeading("Requests per minute", "Auto-refresh every 10 seconds while viewing")
+                    ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(17.dp)) {
+                        Box(Modifier.padding(16.dp)) { RequestsBar(live.timeline) }
+                    }
+                    Text("These are ingested, completed requests—not live packet captures.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    SectionHeading("Geography", "Only available when the server provides enrichment")
+                    Text(live.geographyNote, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedButton(onClick = { panel = "clients" },
+                        modifier = Modifier.fillMaxWidth()) {
+                        Text("Review client signals")
+                    }
+                    OutlinedButton(onClick = { panel = "requests" },
+                        modifier = Modifier.fillMaxWidth()) {
+                        Text("Browse recent requests")
                     }
                 }
             }
