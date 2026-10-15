@@ -136,7 +136,7 @@ class NpmViewModel(application: Application): AndroidViewModel(application) {
     fun verifyTwoFactor(code: String) {
         val profile = selected ?: return
         val pending = challenge ?: return
-        if (!Regex("^[0-9]{6,8}$").matches(code.trim())) {
+        if (!Regex("^(?:[0-9]{6}|[A-Fa-f0-9]{8})$").matches(code.trim())) {
             error = "Enter your six- to eight-digit authenticator or backup code."
             return
         }
