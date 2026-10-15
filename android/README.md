@@ -2,7 +2,7 @@
 
 Native Android app developed alongside the NPM Improved server, with no WebView, HTML-rendered UI, embedded server, or cloud proxy.
 
-**Status:** v0.1.0-alpha.4 development build (separate from the NPMi server v1.6.11 release).
+**Status:** v0.1.0-alpha.5 development build (separate from the NPMi server v1.6.11 release).
 
 ## Current scope
 
@@ -21,6 +21,8 @@ The control-plane HTTP server listens on port 81 by default and serves the nativ
 The control-plane endpoint `/api` returns a 302 redirect to `/api/`. The Android app intentionally does not follow redirects with credentials, so the health probe must request **`/api/` directly**. This regression is fixed in alpha.4, with automated tests for the API root, login, 2FA and traffic paths.
 
 ## Management connection and port 81
+
+NPMi's default port-81 listener is HTTP, **including when addressed by DNS hostname rather than IP**. Entering a hostname without a scheme therefore previews `http://hostname:81/api/`, but saving it requires explicit confirmation because HTTP transmits credentials in plaintext. An explicit `https://` input is **never silently downgraded**; it requires a working TLS listener and matching certificate on that port.
 
 The app takes one server URL or IP and sends **all** management requests to that host's **port 81** under \`/api\`. It never assumes the normal website proxy port 443 is the API.
 
