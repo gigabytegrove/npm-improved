@@ -15,7 +15,7 @@ describe("optional node management certificate hostname", () => {
             "*.gigabytegrove.net", "proxy1..gigabytegrove.net",
             "proxy1.gigabytegrove.net/path", "proxy1.local", "proxy1.127.0.0.1",
         ]) {
-            assert.throws(() => validateNodeCertificateName("proxy1", name), {name:"ValidationError"});
+            assert.throws(() => validateNodeCertificateName("proxy1", name), {status:400});
         }
     });
     it("fails closed without trustworthy physical node identity", () => {
