@@ -447,90 +447,126 @@ private fun MetricTile(label: String, value: String, details: String = "", modif
 private fun DashboardScreen(vm: NpmViewModel) {
     val status = vm.status
     val summary = vm.summary
-    val server = vm.selected
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(15.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.weight(1f)) {
-                Text("Overview", style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold)
-                Text("Your reverse proxy at a glance",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            TextButton(onClick = vm::refresh) { Text("Refresh") }
-        }
-        Surface(shape = RoundedCornerShape(22.dp), color = DeepNavy) {
-            Column(Modifier.fillMaxWidth().padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Text("CONTROL PLANE", style = MaterialTheme.typography.labelMedium,
-                    color = Color(0xFF90BAFF), fontWeight = FontWeight.SemiBold)
-                Text(status?.hostname?.ifBlank { server?.name ?: "NPMi node" }
-                    ?: (server?.name ?: "Connecting…"),
-                    color = Color.White, style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold)
-                Text(if (status?.healthy == true) "Management API connected"
-                    else "Waiting for management API response",
-                    color = Color(0xFFD4E0F1), style = MaterialTheme.typography.bodyMedium)
-                HorizontalDivider(color = Color(0xFF3C506B))
-                Text("Version " + (status?.version ?: "—") +
-                    "  ·  " + (status?.role?.ifBlank { "standalone" } ?: "unknown role"),
-                    color = Color(0xFFD4E0F1), style = MaterialTheme.typography.bodySmall)
-            }
-        }
-        Text("Proxy infrastructure", style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold)
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            MetricTile("Proxy hosts", vm.hosts.size.toString(),
-                "Configured", Modifier.weight(1f))
-            MetricTile("Enabled", vm.hosts.count { it.enabled }.toString(),
-                "Active routes", Modifier.weight(1f))
-        }
-        Text("HTTP traffic · last 24 hours", style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold)
-        if (summary != null) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                MetricTile("Requests", summary.requests.toString(),
-                    "This node", Modifier.weight(1f))
-                MetricTile("Data sent", summary.bytesOut.bytesLabel(),
-                    "HTTP response bytes", Modifier.weight(1f))
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                MetricTile("Source IPs", summary.uniqueIps?.toString() ?: "—",
-                    "Not unique users", Modifier.weight(1f))
-                MetricTile("Denied", summary.denied?.toString() ?: "—",
-                    "Blocked requests", Modifier.weight(1f))
-            }
-        } else {
-            ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
-                Text(vm.analyticsNotice.ifBlank { "Node analytics are currently unavailable." },
-                    modifier = Modifier.padding(16.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        Text("Manage", style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold)
-        ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Text("Proxy host management", style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold)
-                Text("Inspect configured hosts, view recorded traffic, and manage availability.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Button(onClick = { vm.screen = "hosts" }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Open hosts")
-                }
-            }
-        }
-        if (status?.role == "secondary") {
-            Text("NPMX secondary: host configuration is read-only here. Traffic observations remain node-local.",
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall)
-        } else {
-            Text("Traffic and deny rules are local to this node. Counts are not automatically combined across NPMX.",
+    val total = vm.hosts.size
+    val enabled = vm.hosts.count { it.enabled }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+        .padding(horizontal = 18.dp, vertical = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text("Overview", style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold)
+            Text("Your reverse proxy at a glance",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        Surface(shape = RoundedCornerShape(22.dp), color = DeepNavy) {
+            Column(Modifier.fillMaxWidth().padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(10.dp).background(
+                        if (status?.healthy == true) Color(0xFF4ACF9C) else Color(0xFFFFC46D),
+                        CircleShape))
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (status?.healthy == true) "MANAGEMENT API CONNECTED" else "CHECKING NODE",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color(0xFFD0DFF1), fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.weight(1f))
+                    Text(status?.role?.uppercase() ?: "NPMi",
+                        color = Color(0xFFD0DFF1),
+                        style = MaterialTheme.typography.labelSmall)
+                }
+                Text(status?.hostname?.ifBlank { vm.selected?.name ?: "NPMi node" }
+                    ?: (vm.selected?.name ?: "NPMi node"),
+                    color = Color.White, style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Bold)
+                Text(vm.selected?.url.orEmpty(), color = Color(0xFFC4D4E9),
+                    style = MaterialTheme.typography.bodySmall)
+                HorizontalDivider(color = Color(0xFF40516A))
+                Text("NPM Improved " + (status?.version ?: "—"),
+                    color = Color(0xFFE6EEF8),
+                    style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        SectionHeading("Infrastructure", "Proxy host availability")
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            MetricTile("Configured", total.toString(), "Proxy hosts", Modifier.weight(1f))
+            MetricTile("Enabled", enabled.toString(), "Active routes", Modifier.weight(1f))
+        }
+        if (total > 0) {
+            Row(verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                LinearProgressIndicator(
+                    progress = { enabled.toFloat() / total },
+                    modifier = Modifier.weight(1f).height(8.dp),
+                    color = Color(0xFF279A75),
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant)
+                Text(enabled.toString() + " of " + total + " enabled",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        OutlinedButton(onClick = { vm.screen = "hosts" },
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RoundedCornerShape(13.dp)) {
+            Icon(Icons.Default.Dns, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("Browse proxy hosts")
+        }
+        SectionHeading("Traffic", "Last 24 hours · this node only")
+        if (summary == null) {
+            ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                Text(vm.analyticsNotice.ifBlank { "Waiting for node analytics…" },
+                    modifier = Modifier.padding(18.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                MetricTile("Requests", summary.requests.toString(), "Completed", Modifier.weight(1f))
+                MetricTile("Data sent", summary.bytesOut.bytesLabel(), "Response bytes", Modifier.weight(1f))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                MetricTile("Source IPs", summary.uniqueIps?.toString() ?: "—", "Not unique users", Modifier.weight(1f))
+                MetricTile("Denied", summary.denied?.toString() ?: "—", "Blocked requests", Modifier.weight(1f))
+            }
+        }
+        SectionHeading("Quick actions", "Jump into the work")
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            ElevatedCard(Modifier.weight(1f), shape = RoundedCornerShape(18.dp)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Icon(Icons.Default.Analytics, contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary)
+                    Text("Live traffic", fontWeight = FontWeight.SemiBold)
+                    Text("Investigate one host", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    TextButton(onClick = { vm.screen = "hosts" }) { Text("View hosts →") }
+                }
+            }
+            ElevatedCard(Modifier.weight(1f), shape = RoundedCornerShape(18.dp)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Icon(Icons.Default.Security, contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary)
+                    Text("Security", fontWeight = FontWeight.SemiBold)
+                    Text("Review local rules", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    TextButton(onClick = { vm.screen = "security" }) { Text("Review rules →") }
+                }
+            }
+        }
+        Text(if (status?.role == "secondary")
+            "Secondary: configuration changes are read-only; local traffic remains separate from NPMX peers."
+            else "Counts are node-local. IP addresses can represent shared gateways, not individual people.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun SectionHeading(title: String, subtitle: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text(subtitle, style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
