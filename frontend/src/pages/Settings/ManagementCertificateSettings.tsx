@@ -17,6 +17,7 @@ interface CertificateStatus {
     certificate: ManagementCertificate | null;
     available: boolean;
     enabled: boolean;
+    httpsUrl: string | null;
     httpManagementPort: number;
     message: string;
 }
@@ -34,6 +35,8 @@ export default function ManagementCertificateSettings() {
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
     const [confirmRelease, setConfirmRelease] = useState(false);
+    const [confirmEnableHttps, setConfirmEnableHttps] = useState(false);
+    const [confirmDisableHttps, setConfirmDisableHttps] = useState(false);
 
     const load = async (updateInput = false) => {
         const response = (await api.get({ url: "/settings/management-certificate" })) as CertificateStatus;
@@ -91,6 +94,26 @@ export default function ManagementCertificateSettings() {
             setSuccess("The optional management reservation was removed. The certificate remains in Certificates.");
         } catch (err) { setError(err instanceof Error ? err.message : "Cannot release certificate."); }
         finally { setBusy(false); }
+    }
+
+    async function setHttpsEnabled(enabled: boolean) {
+        setError("");
+        setSuccess("");
+        setBusy(true);
+        try {
+            const response = (await api.put({
+                url: "/settings/management-certificate",
+                data: { enabled },
+            })) as CertificateStatus;
+            setStatus(response);
+            setConfirmEnableHttps(false);
+            setConfirmDisableHttps(false);
+            setSuccess(enabled ? "Management HTTPS activated on port 443 for this hostname." :
+                "Management HTTPS disabled. HTTP port 81 remains available.");
+            await load();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Unable to change management HTTPS.");
+        } finally { setBusy(false); }
     }
 
     if (loading) return <div className="card-body"><Loading noLogo /></div>;
@@ -153,20 +176,82 @@ export default function ManagementCertificateSettings() {
                     {node === "proxy2" ? " Example: proxy2.gigabytegrove.net." : ""}
                 </p>
                 <Alert variant="info" className="mb-3">
-                    <strong>Certificate only.</strong> Requesting this certificate does not enable HTTPS
-                    on port 81 or 443, switch the Go management listener, or modify proxy-host routes.
-                    The certificate is retained for standard renewal. HTTPS termination must be configured separately.
+                    <strong>Certificate issuance and HTTPS activation are separate.</strong>
+                    Request a hostname certificate first. Then explicitly enable management HTTPS
+                    for that exact name on port 443. HTTP port 81 stays available for recovery,
+                    and other proxy hosts are not modified.
                 </Alert>
+                {assigned && (
+                    <div className="border rounded p-3 mb-3">
+                        <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                            <div>
+                                <div className="fw-semibold">Management HTTPS · port 443</div>
+                                <div className="text-secondary small">
+                                    {status?.enabled ? "Enabled for this node" : "Not enabled"}
+                                </div>
+                            </div>
+                            <span className={status?.enabled ? "badge bg-success" : "badge bg-secondary"}>
+                                {status?.enabled ? "Enabled" : "Optional"}
+                            </span>
+                        </div>
+                        {status?.enabled && status.httpsUrl && (
+                            <p className="mb-2">Management URL: <a href={status.httpsUrl}
+                                target="_blank" rel="noreferrer">{status.httpsUrl}</a></p>
+                        )}
+                        <p className="small text-secondary">
+                            Nginx terminates TLS only for this hostname and forwards requests to
+                            the local HTTP management service. Other websites are unaffected.
+                        </p>
+                        {!status?.enabled && !confirmEnableHttps && (
+                            <button type="button" className="btn btn-outline-primary"
+                                disabled={busy} onClick={() => setConfirmEnableHttps(true)}>
+                                Enable management HTTPS
+                            </button>
+                        )}
+                        {!status?.enabled && confirmEnableHttps && (
+                            <div className="border rounded p-3">
+                                <p><strong>Enable HTTPS for {assigned.hostname}?</strong></p>
+                                <p className="small text-secondary">
+                                    The management login will be reachable through port 443
+                                    wherever your firewall allows access. Protect administrator
+                                    login with network restrictions and two-factor authentication.
+                                    NPMi checks certificate names, conflicting proxy hosts, and
+                                    Nginx validation before activation, with automatic rollback on failure.
+                                </p>
+                                <button type="button" className="btn btn-primary me-2" disabled={busy}
+                                    onClick={() => setHttpsEnabled(true)}>Confirm enable HTTPS</button>
+                                <button type="button" className="btn btn-outline-secondary" disabled={busy}
+                                    onClick={() => setConfirmEnableHttps(false)}>Cancel</button>
+                            </div>
+                        )}
+                        {status?.enabled && !confirmDisableHttps && (
+                            <button type="button" className="btn btn-outline-secondary"
+                                disabled={busy} onClick={() => setConfirmDisableHttps(true)}>
+                                Disable management HTTPS
+                            </button>
+                        )}
+                        {status?.enabled && confirmDisableHttps && (
+                            <div className="border rounded p-3">
+                                <p className="small">Remove this node's HTTPS management route?
+                                    The certificate and HTTP port-81 listener are preserved.</p>
+                                <button type="button" className="btn btn-danger me-2" disabled={busy}
+                                    onClick={() => setHttpsEnabled(false)}>Confirm disable HTTPS</button>
+                                <button type="button" className="btn btn-outline-secondary" disabled={busy}
+                                    onClick={() => setConfirmDisableHttps(false)}>Cancel</button>
+                            </div>
+                        )}
+                    </div>
+                )}
                 {assigned && (
                     <div className="border rounded p-3 mb-3">
                         <div className="fw-semibold mb-1">Change this optional assignment</div>
                         <p className="text-secondary small mb-2">
-                            Releasing only removes the node association. The actual SSL certificate is retained
+                            Release this association only after disabling HTTPS. The actual SSL certificate is retained
                             in Certificates and is not revoked or deleted.
                         </p>
                         {!confirmRelease ? (
                             <button type="button" className="btn btn-outline-secondary btn-sm" disabled={busy}
-                                onClick={() => setConfirmRelease(true)}>Release management certificate assignment</button>
+                                onClick={() => setConfirmRelease(true)} disabled={busy || Boolean(status?.enabled)}>Release management certificate assignment</button>
                         ) : (
                             <div className="d-flex flex-wrap align-items-center gap-2">
                                 <span className="small">Keep the certificate but release its management assignment?</span>
