@@ -5,6 +5,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -36,12 +42,40 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
+private val BrandBlue = Color(0xFF2062CF)
+private val DeepNavy = Color(0xFF10243D)
+private val CoolWhite = Color(0xFFF5F8FC)
+private val TextMuted = Color(0xFF52637B)
+
+@Composable
+private fun NpmiTheme(content: @Composable () -> Unit) {
+    val dark = isSystemInDarkTheme()
+    val palette = if (dark) darkColorScheme(
+        primary = Color(0xFF8DB7FF),
+        onPrimary = Color(0xFF0A2447),
+        background = Color(0xFF0B1425),
+        surface = Color(0xFF142238),
+        surfaceVariant = Color(0xFF25364C),
+        onSurface = Color(0xFFF0F6FF),
+        onSurfaceVariant = Color(0xFFC0CBD9)
+    ) else lightColorScheme(
+        primary = BrandBlue,
+        onPrimary = Color.White,
+        background = CoolWhite,
+        surface = Color.White,
+        surfaceVariant = Color(0xFFEDF3F9),
+        onSurface = DeepNavy,
+        onSurfaceVariant = TextMuted
+    )
+    MaterialTheme(colorScheme = palette, content = content)
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme {
-                Surface(Modifier.fillMaxSize()) { NpmiApp() }
+            NpmiTheme {
+                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { NpmiApp() }
             }
         }
     }
@@ -57,33 +91,126 @@ private fun NpmiApp(vm: NpmViewModel = viewModel()) {
 }
 
 @Composable
+private fun BrandWordmark() {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = Color.White,
+        shadowElevation = 1.dp
+    ) {
+        Image(
+            painter = painterResource(R.drawable.npmi_logo),
+            contentDescription = "NPM Improved official logo",
+            modifier = Modifier.fillMaxWidth().height(80.dp).padding(12.dp),
+            contentScale = ContentScale.Fit
+        )
+    }
+}
+
+@Composable
+private fun PageIntro(eyebrow: String, title: String, subtitle: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(eyebrow.uppercase(), color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+        Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@Composable
+private fun ConnectionHelp(direct: Boolean) {
+    Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(16.dp)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(if (direct) "Management API · port 81" else "HTTPS gateway · management backend",
+                style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text(if (direct)
+                "NPM Improved serves its management interface and /api over HTTP on port 81. Use a private LAN IP; your credentials are unencrypted in transit. Do not expose this directly to the internet."
+            else
+                "Use a dedicated HTTPS management hostname that forwards /api and the Control Center to NPMi port 81. The ordinary proxy-host website listener on 443 is not automatically the admin API.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun InlineIssue(message: String) {
+    Surface(color = MaterialTheme.colorScheme.errorContainer,
+        shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text("Connection needs attention",
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Text(message, color = MaterialTheme.colorScheme.onErrorContainer,
+                style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
 private fun ServerForm(vm: NpmViewModel) {
-    var name by remember { mutableStateOf("") }
-    var address by remember { mutableStateOf("") }
-    var confirmLocal by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(15.dp)) {
-        Text("NPM Improved", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("Connect a server", style = MaterialTheme.typography.titleLarge)
-        Text("Every server has its own login and independently stored session.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-        OutlinedTextField(name, { name = it }, label = { Text("Friendly name") },
-            modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(address, { address = it }, label = { Text("Server address") },
-            placeholder = { Text("https://proxy.example.com") },
-            modifier = Modifier.fillMaxWidth(), singleLine = true)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(checked = confirmLocal, onCheckedChange = { confirmLocal = it })
-            Text("Allow private LAN HTTP by IP (unencrypted)", style = MaterialTheme.typography.bodySmall)
+    val editing = vm.editing
+    var name by remember(editing?.id) { mutableStateOf(editing?.name.orEmpty()) }
+    var address by remember(editing?.id) { mutableStateOf(editing?.url.orEmpty()) }
+    var mode by remember(editing?.id) {
+        mutableStateOf(if (editing != null && !editing.insecureLan) "gateway" else "direct")
+    }
+    var confirmLocal by remember(editing?.id) { mutableStateOf(false) }
+    val direct = mode == "direct"
+    Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState())
+        .padding(horizontal = 20.dp, vertical = 26.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        BrandWordmark()
+        PageIntro("Server connection",
+            if (editing == null) "Connect your server" else "Edit management connection",
+            "Connect directly to the NPMi control plane—not to a website served by the reverse proxy.")
+        ElevatedCard(shape = RoundedCornerShape(22.dp)) {
+            Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text("Connection type", style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = direct,
+                        onClick = { if (!direct) { mode = "direct"; address = "" } },
+                        label = { Text("Direct LAN · :81") })
+                    FilterChip(selected = !direct,
+                        onClick = { if (direct) { mode = "gateway"; address = "" } },
+                        label = { Text("HTTPS gateway") })
+                }
+                OutlinedTextField(name, { name = it }, label = { Text("Connection name") },
+                    placeholder = { Text("Home proxy") }, modifier = Modifier.fillMaxWidth(),
+                    singleLine = true)
+                OutlinedTextField(address, { address = it },
+                    label = { Text(if (direct) "Private IP / management address" else "HTTPS management URL") },
+                    placeholder = { Text(if (direct) "192.168.1.20:81" else "https://admin.example.com") },
+                    supportingText = {
+                        Text(if (direct) "Port 81 is automatically added if omitted."
+                            else "Must proxy the management service on port 81.")
+                    },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true)
+                if (direct) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = confirmLocal, onCheckedChange = { confirmLocal = it })
+                        Text("I understand direct LAN HTTP is unencrypted",
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                if (vm.error.isNotBlank()) InlineIssue(vm.error)
+                Button(onClick = { vm.addServer(name, address, mode, confirmLocal) },
+                    enabled = !vm.loading && name.isNotBlank() && address.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = RoundedCornerShape(14.dp)) {
+                    Text(if (vm.loading) "Checking /api…" else "Verify API and save")
+                }
+                if (vm.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                if (vm.profiles.isNotEmpty()) {
+                    TextButton(onClick = vm::cancelServerEdit, modifier = Modifier.fillMaxWidth()) {
+                        Text("Cancel")
+                    }
+                }
+            }
         }
-        Text("HTTPS is recommended. LAN HTTP transmits credentials without encryption; public HTTP is refused.",
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-        if (vm.error.isNotBlank()) ErrorText(vm.error)
-        Button(onClick = { vm.addServer(name, address, confirmLocal) },
-            enabled = name.isNotBlank() && address.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
-            Text("Save server and sign in")
-        }
-        if (vm.profiles.isNotEmpty()) TextButton(onClick = { vm.addingServer = false }) { Text("Cancel") }
+        ConnectionHelp(direct)
     }
 }
 
@@ -93,43 +220,62 @@ private fun SignIn(vm: NpmViewModel) {
     var email by remember(server.id) { mutableStateOf("") }
     var password by remember(server.id) { mutableStateOf("") }
     var code by remember(server.id) { mutableStateOf("") }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("NPM Improved", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text(server.name, style = MaterialTheme.typography.titleLarge)
-        Text(server.url, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (server.insecureLan) ErrorText("Private LAN HTTP: credentials are unencrypted in transit.")
-        if (vm.challenge == null) {
-            OutlinedTextField(email, { email = it }, label = { Text("Account email") },
-                modifier = Modifier.fillMaxWidth(), singleLine = true)
-            OutlinedTextField(password, { password = it }, label = { Text("Password") },
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.fillMaxWidth(), singleLine = true)
-            Button(onClick = {
-                vm.signIn(email, password)
-                password = ""
-            }, enabled = !vm.loading && email.isNotBlank() && password.isNotBlank(),
-                modifier = Modifier.fillMaxWidth()) { Text("Sign in") }
-        } else {
-            Text("Two-factor verification", style = MaterialTheme.typography.titleMedium)
-            OutlinedTextField(code, { code = it }, label = { Text("6-digit code or 8-character backup code") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-                singleLine = true, modifier = Modifier.fillMaxWidth())
-            Button(onClick = { vm.verifyTwoFactor(code); code = "" },
-                enabled = !vm.loading && code.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
-                Text("Verify and continue")
+    Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState())
+        .padding(horizontal = 20.dp, vertical = 26.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        BrandWordmark()
+        PageIntro("Secure management",
+            if (vm.challenge == null) "Welcome back" else "Verify your identity",
+            if (vm.challenge == null) "Sign in with your existing NPM Improved administrator account."
+            else "Use your authenticator's six-digit code or an eight-character recovery code.")
+        ElevatedCard(shape = RoundedCornerShape(22.dp)) {
+            Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text(server.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(server.url, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (server.insecureLan) {
+                    Text("Direct LAN connection · HTTP port 81",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error)
+                }
+                HorizontalDivider()
+                if (vm.challenge == null) {
+                    OutlinedTextField(email, { email = it }, label = { Text("Account email") },
+                        placeholder = { Text("admin@example.com") },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    OutlinedTextField(password, { password = it }, label = { Text("Password") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    Button(onClick = {
+                        vm.signIn(email, password)
+                        password = ""
+                    }, enabled = !vm.loading && email.isNotBlank() && password.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        shape = RoundedCornerShape(14.dp)) { Text("Sign in to NPMi") }
+                } else {
+                    OutlinedTextField(code, { code = it }, label = { Text("Authentication code") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                        modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    Button(onClick = { vm.verifyTwoFactor(code); code = "" },
+                        enabled = !vm.loading && code.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        shape = RoundedCornerShape(14.dp)) { Text("Verify and continue") }
+                    TextButton(onClick = vm::cancelChallenge) { Text("Back to password") }
+                }
+                if (vm.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                if (vm.error.isNotBlank()) InlineIssue(vm.error)
+                OutlinedButton(onClick = { vm.editServer(server.id) },
+                    modifier = Modifier.fillMaxWidth()) {
+                    Text("Change management address / port")
+                }
             }
-            TextButton(onClick = vm::cancelChallenge) { Text("Back to password") }
         }
-        if (vm.loading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-        if (vm.error.isNotBlank()) ErrorText(vm.error)
-        TextButton(onClick = { vm.screen = "servers"; vm.addingServer = true }) {
-            Text("Add another server")
-        }
-        if (vm.profiles.size > 1) {
-            Text("Other servers", style = MaterialTheme.typography.titleSmall)
-            vm.profiles.filter { it.id != server.id }.forEach { other ->
-                TextButton(onClick = { vm.switch(other.id) }) { Text(other.name) }
+        ConnectionHelp(server.insecureLan)
+        TextButton(onClick = { vm.addingServer = true },
+            modifier = Modifier.fillMaxWidth()) { Text("Connect another server") }
+        vm.profiles.filter { it.id != server.id }.forEach { other ->
+            OutlinedButton(onClick = { vm.switch(other.id) }, modifier = Modifier.fillMaxWidth()) {
+                Text("Switch to " + other.name)
             }
         }
     }
