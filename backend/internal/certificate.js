@@ -28,6 +28,7 @@ import userModel from "../models/user.js";
 import internalAuditLog from "./audit-log.js";
 import internalHost from "./host.js";
 import internalNginx from "./nginx.js";
+import { getServingNodeHostname } from "../lib/node-identity.js";
 
 const letsencryptConfig = "/etc/letsencrypt.ini";
 const certbotCommand = "certbot";
@@ -95,6 +96,11 @@ const internalCertificate = {
 			]);
 
 			for (const certificate of certificates) {
+				// In a shared NPMX database, a node only holds its own ACME
+				// management cert files. Never renew another physical node's
+				// hostname certificate through the wrong instance.
+				if (certificate.meta?.management_node &&
+					certificate.meta.management_node !== getServingNodeHostname()?.toLowerCase()) continue;
 				if ((usageMap.get(certificate.id) || 0) === 0) {
 					logger.info(`Skipping renewal for unused Cert #${certificate.id}`);
 					continue;
@@ -145,6 +151,16 @@ const internalCertificate = {
 				const certificateId = Number.parseInt(row.certificate_id, 10);
 				const count = Number.parseInt(row.count, 10) || 0;
 				usageMap.set(certificateId, (usageMap.get(certificateId) || 0) + count);
+			}
+		}
+		// Reserved node-management hostname certificates remain in use even when
+		// no proxy host references them. Retain and automatically renew them.
+		const managementRows = await certificateModel.query()
+			.select("id", "meta", "domain_names").where("is_deleted", 0);
+		for (const row of managementRows) {
+			if (row.meta?.management_node && row.meta?.management_hostname &&
+				row.domain_names?.includes(row.meta.management_hostname)) {
+				usageMap.set(row.id, (usageMap.get(row.id) || 0) + 1);
 			}
 		}
 		return usageMap;
@@ -589,7 +605,7 @@ const internalCertificate = {
 		const usageCount = usageMap.get(row.id) || 0;
 		if (usageCount > 0) {
 			throw new error.ValidationError(
-				`Certificate is still referenced by ${usageCount} host${usageCount === 1 ? "" : "s"}`,
+				`Certificate is still referenced by ${usageCount} host or management-node reservation${usageCount === 1 ? "" : "s"}`,
 			);
 		}
 

@@ -140,7 +140,7 @@ export default function CertificateLifecycle() {
 
 						<Alert variant="info" className="mb-0">
 							A certificate is considered active when any non-deleted Proxy Host, Redirection Host, 404 Host,
-							or Stream references it. Disabled hosts still count as references so their certificates cannot be
+							Stream, or optional management-node assignment references it. Disabled hosts and reserved node certificates still count as references so their certificates cannot be
 							purged underneath them.
 						</Alert>
 					</div>
