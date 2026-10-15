@@ -2,7 +2,7 @@
 
 Native Android app developed alongside the NPM Improved server, with no WebView, HTML-rendered UI, embedded server, or cloud proxy.
 
-**Status:** v0.1.0-alpha.1 development build (separate from the NPMi server v1.6.11 release).
+**Status:** v0.1.0-alpha.2 development build (separate from the NPMi server v1.6.11 release).
 
 ## Current scope
 
@@ -14,6 +14,17 @@ Native Android app developed alongside the NPM Improved server, with no WebView,
 - Existing **node-wide** IP/UA denial rules with deliberate administrator confirmation. Host-scoped blocking is **not yet** in the backend and is not simulated by the app.
 - Host enable/disable management on primary/standalone nodes with user confirmation.
 
+## Management connection and port 81
+
+NPM Improved uses the standalone **control-plane server on port 81** for both the management interface and \`/api\`. By default, port 81 serves ordinary HTTP, not HTTPS. Proxy-host ports 80/443 are for published websites, and their default TLS server can reject unrecognized names before API authentication.
+
+The app distinguishes two connection modes:
+
+1. **Direct LAN** (default): enter a private IPv4 address (e.g. \`192.168.1.10\`). The app connects to \`http://192.168.1.10:81/api\`. It warns that HTTP is unencrypted and refuses public addresses. An explicitly mapped alternate admin port may be entered.
+2. **HTTPS management gateway**: use a dedicated HTTPS hostname and configure the TLS reverse proxy to forward \`/api\` and the management UI to the NPMi control plane on port 81. The app uses the HTTPS URL exactly, without silently changing 443 to 81 or relaxing certificate validation.
+
+The app probes \`GET /api\` to verify the NPMi API before saving new or edited server connections, and the login screen includes **Change management address / port** for existing profiles. TLS \`unrecognized_name\` alerts are explained as a potential management-vs-data-plane hostname mismatch rather than displayed as raw OpenSSL traces.
+
 ## Security
 
 Prefer `https://` with a trusted certificate. For users managing LAN-only instances by IP, **HTTP is allowed only for RFC1918/private IPv4 or loopback**, and must be explicitly acknowledged when adding the server. HTTP transmits session and password traffic without TLS; it is not safe on untrusted networks. Public internet HTTP is rejected. TLS certificate verification is never disabled. Network redirects are disabled to prevent token forwarding to another origin.
@@ -24,7 +35,7 @@ Analytics and security operations require the server's own permissions. NPMX rea
 
 ## Build
 
-Requires JDK 17, Gradle 9.6 and Android SDK platform 37.2.2.
+Requires JDK 17, Gradle 9.6 and Android SDK platform 37.2.
 
 ```bash
 cd android
