@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.gigabytegrove.npmi"
-    compileSdk = 36
+    compileSdk { version = release(37) { minorApiLevel = 2 } }
 
     defaultConfig {
         applicationId = "com.gigabytegrove.npmi"
