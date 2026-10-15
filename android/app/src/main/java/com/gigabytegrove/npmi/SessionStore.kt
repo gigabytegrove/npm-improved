@@ -41,10 +41,13 @@ class SessionStore(context: Context) {
 
     fun selectedId(): String? = preferences.getString("active", null)
 
-    fun upsert(name: String, endpoint: NetworkPolicy.Endpoint): ServerProfile {
+    fun upsert(name: String, endpoint: NetworkPolicy.Endpoint, editId: String? = null): ServerProfile {
         val all = profiles().toMutableList()
-        val existing = all.firstOrNull { it.url == endpoint.baseUrl }
-        val profile = existing?.copy(name = name) ?: ServerProfile(
+        val existing = if (editId != null) all.firstOrNull { it.id == editId }
+            else all.firstOrNull { it.url == endpoint.baseUrl }
+        if (existing != null && existing.url != endpoint.baseUrl) removeToken(existing.id)
+        val profile = existing?.copy(name = name, url = endpoint.baseUrl,
+            insecureLan = endpoint.insecureLan) ?: ServerProfile(
             UUID.randomUUID().toString(), name, endpoint.baseUrl, endpoint.insecureLan
         )
         all.removeAll { it.id == profile.id }
