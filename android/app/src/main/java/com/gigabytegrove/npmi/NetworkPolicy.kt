@@ -11,6 +11,16 @@ import java.util.Locale
  */
 object NetworkPolicy {
     const val DEFAULT_API_PORT = 81
+
+    fun insecureAlternative(entered: String): String {
+        val input = entered.trim()
+        val uri = URI(if (input.contains("://")) input else "https://$input")
+        require(uri.host != null && uri.host.isNotBlank() && uri.userInfo == null &&
+            uri.rawQuery == null && uri.rawFragment == null) { "Invalid server address." }
+        val host = uri.host.lowercase(Locale.US)
+        val port = if (uri.port > 0 && uri.port !in listOf(80, 443)) uri.port else DEFAULT_API_PORT
+        return "http://$host:$port"
+    }
     data class Endpoint(val baseUrl: String, val insecureLan: Boolean)
 
     fun normalize(input: String, acknowledgedHttp: Boolean): Endpoint {
@@ -20,13 +30,10 @@ object NetworkPolicy {
             raw.startsWith("http://", ignoreCase = true) ||
                 raw.startsWith("https://", ignoreCase = true) -> raw
             else -> {
-                // Unqualified private IPs connect to the standard HTTP control
-                // plane; all other hostnames default to HTTPS, not plaintext.
-                val provisional = try { URI("https://" + raw) } catch (_: Exception) {
-                    throw IllegalArgumentException("Enter a valid hostname or IP address.")
-                }
-                val scheme = if (provisional.host?.let(::isPrivateIpv4) == true) "http" else "https"
-                "$scheme://$raw"
+                // The stock NPMi management listener on :81 is HTTP, even for
+                // DNS hostnames. Do not silently send credentials: HTTP still
+                // requires acknowledgement before the profile can be saved.
+                "http://$raw"
             }
         }
         val uri = try { URI(address) } catch (_: Exception) {
@@ -49,11 +56,9 @@ object NetworkPolicy {
                 "HTTP sends your password and session token without encryption. Acknowledge this risk, or use HTTPS on the management port."
             }
         }
-        // Default to 81 for EVERY hostname and IP. An explicitly supplied
-        // nonstandard management port remains possible for remapped instances.
-        val managementPort = if (uri.port == -1 || uri.port == 80 || uri.port == 443) {
-            DEFAULT_API_PORT
-        } else uri.port
+        // Default to 81 for every hostname and IP. Explicit ports are honored,
+        // including 443 when the operator has configured a TLS gateway.
+        val managementPort = if (uri.port == -1) DEFAULT_API_PORT else uri.port
         return Endpoint("$scheme://$hostname:$managementPort/", isHttp)
     }
 

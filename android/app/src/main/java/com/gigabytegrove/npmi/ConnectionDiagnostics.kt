@@ -10,12 +10,12 @@ object ConnectionDiagnostics {
             .joinToString(" | ").lowercase()
         return when {
             "unrecognized_name" in message || "unrecognized name" in message ->
-                "TLS hostname was rejected by the server. The app is contacting management port 81, but the TLS hostname was rejected. Check that port 81 is configured for HTTPS for this hostname. NPMi's default port 81 uses HTTP, not HTTPS."
+                "TLS handshake rejected the requested hostname. NPMi's default management listener on port 81 is HTTP, not HTTPS. Use the explicit HTTP option on a trusted LAN/VPN, or configure a TLS-enabled management gateway with a certificate covering this hostname."
             "wrong version number" in message || "protocol_version" in message ||
                 "unsupported or unrecognized ssl" in message ->
                 "The selected port does not appear to support HTTPS. NPMi's default port 81 uses HTTP, not TLS. Use an explicit HTTP URL only on a trusted network (with the unencrypted-transport acknowledgement), or enable HTTPS on the management endpoint."
             failure is SSLException || "certificate" in message || "sslhandshake" in message ->
-                "Secure connection failed. Check the gateway's hostname, certificate, and whether it forwards /api to management port 81. Certificate verification remains enabled."
+                "TLS validation failed: verify that the management endpoint has a certificate whose names include this hostname, and that HTTPS is actually enabled on the selected port. The app will not ignore a mismatched or untrusted certificate."
             "failed to connect" in message || "timeout" in message || "unreachable" in message ->
                 "The management API could not be reached at $baseUrl. Verify the host, port, network access, and that port 81 is published (or proxied by your HTTPS gateway)."
             failure is ApiFailure && failure.statusCode == 404 ->

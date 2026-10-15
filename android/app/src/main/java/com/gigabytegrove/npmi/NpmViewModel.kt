@@ -159,6 +159,7 @@ class NpmViewModel(application: Application): AndroidViewModel(application) {
                 when (val result = client(profile).login(identity.trim(), password)) {
                     is LoginResult.Authorized -> {
                         if (selectedId == profile.id) {
+                            NpmApi(profile) { result.token }.verifySession()
                             store.saveToken(profile.id, result.token)
                             challenge = null
                             refresh()
@@ -187,6 +188,7 @@ class NpmViewModel(application: Application): AndroidViewModel(application) {
             try {
                 val token = client(profile).verify2fa(pending, code.trim())
                 if (selectedId == profile.id) {
+                    NpmApi(profile) { token }.verifySession()
                     store.saveToken(profile.id, token)
                     challenge = null
                     refresh()
@@ -207,12 +209,25 @@ class NpmViewModel(application: Application): AndroidViewModel(application) {
             clearError()
             val api = client(profile)
             try {
+                // Verify token validity on the identity endpoint. A 401 from a
+                // protected analytics/host route is NOT proof of a bad login.
+                api.verifySession()
                 val info = api.status()
-                val list = api.hosts()
                 if (selectedId != profile.id) return@launch
                 status = info
-                hosts.clear()
-                hosts.addAll(list)
+
+                try {
+                    val list = api.hosts()
+                    if (selectedId == profile.id) {
+                        hosts.clear()
+                        hosts.addAll(list)
+                    }
+                } catch (e: ApiFailure) {
+                    if (selectedId == profile.id) {
+                        error = "Signed in successfully, but proxy hosts could not be loaded (HTTP " +
+                            e.statusCode + "): " + e.message.orEmpty()
+                    }
+                }
                 try {
                     val stats = api.summary()
                     if (selectedId == profile.id) {
@@ -220,24 +235,31 @@ class NpmViewModel(application: Application): AndroidViewModel(application) {
                         analyticsNotice = ""
                     }
                 } catch (e: ApiFailure) {
-                    if (e.statusCode == 401) throw e
-                    if (selectedId == profile.id) { summary = null; analyticsNotice = "Analytics requires administrator access (" + e.statusCode + ")." }
+                    if (selectedId == profile.id) {
+                        summary = null
+                        analyticsNotice = "Signed in; analytics unavailable (HTTP " +
+                            e.statusCode + ")."
+                    }
                 }
+
                 try {
                     val result = api.blocks()
                     if (selectedId == profile.id) { rules.clear(); rules.addAll(result) }
-                } catch (e: ApiFailure) {
-                    if (e.statusCode == 401) throw e
-                    // Host read-only users may not access administrative block policies.
+                } catch (_: ApiFailure) {
+                    // Block rules can require administrator permissions.
                 }
             } catch (e: CancellationException) { throw e }
             catch (e: ApiFailure) {
                 if (selectedId == profile.id) {
                     if (e.statusCode == 401) {
+                        // This branch follows the independent users/me check.
                         store.removeToken(profile.id)
                         resetState()
-                        error = "Session expired. Please sign in again."
-                    } else error = e.message ?: "Server request failed."
+                        error = "The management API rejected this session (HTTP 401). Please sign in again."
+                    } else {
+                        error = "Signed in, but the management API reported HTTP " +
+                            e.statusCode + ": " + e.message.orEmpty()
+                    }
                 }
             } catch (e: Exception) {
                 if (selectedId == profile.id) error = ConnectionDiagnostics.explain(e, profile.url)
