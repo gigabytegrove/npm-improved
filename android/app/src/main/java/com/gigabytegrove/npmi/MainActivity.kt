@@ -296,51 +296,110 @@ private fun SignIn(vm: NpmViewModel) {
 @Composable
 private fun ControlCenter(vm: NpmViewModel) {
     val server = vm.selected ?: return
-    val destinations = listOf(
+    val tabs = listOf(
         Triple("dashboard", "Overview", Icons.Default.Analytics),
         Triple("hosts", "Hosts", Icons.Default.Dns),
-        Triple("security", "Security", Icons.Default.Security),
-        Triple("servers", "Servers", Icons.Default.Settings),
+        Triple("security", "Security", Icons.Default.Security)
     )
-    BackHandler(enabled = vm.screen == "traffic") { vm.screen = "hosts"; vm.liveHostId = null }
+    var switcherOpen by remember { mutableStateOf(false) }
+    BackHandler(enabled = vm.screen == "traffic" || vm.screen == "servers") {
+        if (vm.screen == "traffic") { vm.screen = "hosts"; vm.liveHostId = null }
+        else vm.screen = "dashboard"
+    }
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                title = { Column {
-                    Text("NPM Improved", style = MaterialTheme.typography.titleMedium)
-                    Text(server.name, style = MaterialTheme.typography.bodySmall)
-                } },
-                actions = {
-                    IconButton(onClick = vm::refresh, enabled = !vm.loading) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh server data")
+            Column {
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface),
+                    navigationIcon = {
+                        Box(Modifier.padding(start = 12.dp, end = 6.dp).size(38.dp)
+                            .background(MaterialTheme.colorScheme.primaryContainer,
+                                RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Dns, contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary)
+                        }
+                    },
+                    title = {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("NPM IMPROVED", style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            Text(server.name, style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold, maxLines = 1)
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = vm::refresh, enabled = !vm.loading) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Refresh node")
+                        }
+                        Box {
+                            IconButton(onClick = { switcherOpen = true }) {
+                                Icon(Icons.Default.Settings, contentDescription = "Servers and account")
+                            }
+                            DropdownMenu(expanded = switcherOpen, onDismissRequest = { switcherOpen = false }) {
+                                Text("YOUR SERVERS", Modifier.padding(16.dp, 8.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                vm.profiles.forEach { profile ->
+                                    DropdownMenuItem(
+                                        text = { Text(profile.name +
+                                            if (profile.id == vm.selectedId) "  ·  Current" else "") },
+                                        onClick = {
+                                            switcherOpen = false
+                                            if (profile.id != vm.selectedId) vm.switch(profile.id)
+                                        },
+                                        leadingIcon = { Icon(Icons.Default.Dns, contentDescription = null) })
+                                }
+                                HorizontalDivider()
+                                DropdownMenuItem(text = { Text("Manage servers and account") },
+                                    onClick = { switcherOpen = false; vm.screen = "servers" },
+                                    leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) })
+                            }
+                        }
                     }
-                })
+                )
+                if (vm.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+            }
         },
         bottomBar = {
-            NavigationBar {
-                destinations.forEach { (route, label, symbol) ->
+            if (vm.screen != "servers") NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
+                tabs.forEach { (route, label, symbol) ->
                     NavigationBarItem(
                         selected = if (vm.screen == "traffic") route == "hosts" else vm.screen == route,
-                        onClick = { vm.screen = route; if (route != "traffic") vm.liveHostId = null },
+                        onClick = {
+                            vm.screen = route
+                            if (route != "hosts") vm.liveHostId = null
+                        },
                         icon = { Icon(symbol, contentDescription = null) },
-                        label = { Text(label) }
-                    )
+                        label = { Text(label) },
+                        alwaysShowLabel = true)
                 }
             }
         }
     ) { insets ->
         Column(Modifier.fillMaxSize().padding(insets)) {
             if (server.insecureLan) {
-                Text("Unencrypted LAN connection", modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                Surface(color = MaterialTheme.colorScheme.errorContainer) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Default.Security, contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.size(16.dp))
+                        Text("Unencrypted HTTP · Trusted LAN or VPN only",
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.labelSmall)
+                    }
+                }
             }
-            if (vm.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-            if (vm.error.isNotBlank()) ErrorText(vm.error)
-            if (vm.message.isNotBlank()) {
-                Text(vm.message, color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
-            }
-            Box(Modifier.fillMaxSize()) {
+            if (vm.error.isNotBlank()) InlineIssue(vm.error)
+            if (vm.message.isNotBlank()) Text(vm.message,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.bodySmall)
+            Box(Modifier.weight(1f)) {
                 when (vm.screen) {
                     "hosts" -> HostsScreen(vm)
                     "traffic" -> TrafficScreen(vm)
