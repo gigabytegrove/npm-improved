@@ -17,10 +17,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -361,69 +364,197 @@ private fun StatCard(title: String, value: String, detail: String = "") {
 }
 
 @Composable
+private fun MetricTile(label: String, value: String, details: String = "", modifier: Modifier = Modifier) {
+    ElevatedCard(modifier, shape = RoundedCornerShape(18.dp)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Text(label, style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            if (details.isNotBlank()) Text(details, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
 private fun DashboardScreen(vm: NpmViewModel) {
     val status = vm.status
     val summary = vm.summary
+    val server = vm.selected
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Server overview", style = MaterialTheme.typography.headlineSmall)
-        StatCard("Node", status?.hostname?.ifBlank { "Unknown host" } ?: "Connecting",
-            "Version " + (status?.version ?: "—") + " · " + (status?.role?.ifBlank { "standalone" } ?: "Unknown role"))
-        StatCard("Proxy hosts", vm.hosts.size.toString(),
-            vm.hosts.count { it.enabled }.toString() + " enabled")
+        verticalArrangement = Arrangement.spacedBy(15.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.weight(1f)) {
+                Text("Overview", style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold)
+                Text("Your reverse proxy at a glance",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            TextButton(onClick = vm::refresh) { Text("Refresh") }
+        }
+        Surface(shape = RoundedCornerShape(22.dp), color = DeepNavy) {
+            Column(Modifier.fillMaxWidth().padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                Text("CONTROL PLANE", style = MaterialTheme.typography.labelMedium,
+                    color = Color(0xFF90BAFF), fontWeight = FontWeight.SemiBold)
+                Text(status?.hostname?.ifBlank { server?.name ?: "NPMi node" }
+                    ?: (server?.name ?: "Connecting…"),
+                    color = Color.White, style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold)
+                Text(if (status?.healthy == true) "Management API connected"
+                    else "Waiting for management API response",
+                    color = Color(0xFFD4E0F1), style = MaterialTheme.typography.bodyMedium)
+                HorizontalDivider(color = Color(0xFF3C506B))
+                Text("Version " + (status?.version ?: "—") +
+                    "  ·  " + (status?.role?.ifBlank { "standalone" } ?: "unknown role"),
+                    color = Color(0xFFD4E0F1), style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        Text("Proxy infrastructure", style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold)
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            MetricTile("Proxy hosts", vm.hosts.size.toString(),
+                "Configured", Modifier.weight(1f))
+            MetricTile("Enabled", vm.hosts.count { it.enabled }.toString(),
+                "Active routes", Modifier.weight(1f))
+        }
+        Text("HTTP traffic · last 24 hours", style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold)
         if (summary != null) {
-            StatCard("Requests (24 hours)", summary.requests.toString(),
-                "Local node: " + summary.observedNode)
-            StatCard("HTTP traffic sent", summary.bytesOut.bytesLabel())
-            StatCard("Source IPs", summary.uniqueIps?.toString() ?: "Raw events unavailable",
-                "Not unique people")
-            StatCard("Blocked requests", summary.denied?.toString() ?: "Unavailable")
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                MetricTile("Requests", summary.requests.toString(),
+                    "This node", Modifier.weight(1f))
+                MetricTile("Data sent", summary.bytesOut.bytesLabel(),
+                    "HTTP response bytes", Modifier.weight(1f))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                MetricTile("Source IPs", summary.uniqueIps?.toString() ?: "—",
+                    "Not unique users", Modifier.weight(1f))
+                MetricTile("Denied", summary.denied?.toString() ?: "—",
+                    "Blocked requests", Modifier.weight(1f))
+            }
         } else {
-            Text(vm.analyticsNotice.ifBlank { "Analytics have not been loaded." },
-                style = MaterialTheme.typography.bodySmall)
+            ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                Text(vm.analyticsNotice.ifBlank { "Node analytics are currently unavailable." },
+                    modifier = Modifier.padding(16.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Text("Manage", style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold)
+        ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                Text("Proxy host management", style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold)
+                Text("Inspect configured hosts, view recorded traffic, and manage availability.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Button(onClick = { vm.screen = "hosts" }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Open hosts")
+                }
+            }
         }
         if (status?.role == "secondary") {
-            Text("This NPMX secondary can report local traffic but rejects proxy-host configuration writes.",
-                color = MaterialTheme.colorScheme.error)
+            Text("NPMX secondary: host configuration is read-only here. Traffic observations remain node-local.",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall)
+        } else {
+            Text("Traffic and deny rules are local to this node. Counts are not automatically combined across NPMX.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Text("Analytics are node-local. The app does not combine unrelated NPMX nodes.",
-            style = MaterialTheme.typography.bodySmall)
     }
 }
 
 @Composable
 private fun HostsScreen(vm: NpmViewModel) {
     var confirm by remember { mutableStateOf<ProxyHost?>(null) }
+    var query by remember { mutableStateOf("") }
+    var show by remember { mutableStateOf("all") }
     val canModify = vm.status?.role != "secondary"
     val hosts = vm.hosts.toList()
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { Text("Proxy hosts (" + hosts.size + ")", style = MaterialTheme.typography.headlineSmall) }
-        items(hosts, key = { it.id }) { host ->
-            ElevatedCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(host.domains.joinToString(", ").ifBlank { "Host #" + host.id },
-                        style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(host.upstream, style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(if (host.enabled) "Enabled" else "Disabled",
-                        color = if (host.enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { vm.openLive(host.id) }) { Text("Live traffic") }
-                        OutlinedButton(onClick = { confirm = host }, enabled = canModify && !vm.loading) {
-                            Text(if (host.enabled) "Disable" else "Enable")
+    val filtered = hosts.filter { host ->
+        (show == "all" || (show == "enabled" && host.enabled) ||
+            (show == "disabled" && !host.enabled)) &&
+            (query.isBlank() || host.domains.any { it.contains(query.trim(), ignoreCase = true) } ||
+                host.upstream.contains(query.trim(), ignoreCase = true))
+    }
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        Spacer(Modifier.height(12.dp))
+        Text("Proxy hosts", style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold)
+        Text(hosts.size.toString() + " configured · " + hosts.count { it.enabled } + " enabled",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(13.dp))
+        OutlinedTextField(query, { query = it },
+            label = { Text("Search hosts or upstreams") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            modifier = Modifier.fillMaxWidth(), singleLine = true)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("all" to "All", "enabled" to "Enabled", "disabled" to "Disabled").forEach { (code, label) ->
+                FilterChip(selected = show == code, onClick = { show = code }, label = { Text(label) })
+            }
+        }
+        LazyColumn(modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(top = 7.dp, bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(filtered, key = { it.id }) { host ->
+                var expanded by remember(host.id) { mutableStateOf(false) }
+                ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Text(host.domains.joinToString(", ").ifBlank { "Host #" + host.id },
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold)
+                                Text(host.upstream, style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Box {
+                                IconButton(onClick = { expanded = true }) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = "Host actions")
+                                }
+                                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                                    DropdownMenuItem(text = { Text("Inspect live traffic") },
+                                        onClick = { expanded = false; vm.openLive(host.id) })
+                                    DropdownMenuItem(
+                                        text = { Text(if (host.enabled) "Disable host" else "Enable host") },
+                                        enabled = canModify && !vm.loading,
+                                        onClick = { expanded = false; confirm = host })
+                                }
+                            }
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()) {
+                            Box(Modifier.size(9.dp).background(
+                                if (host.enabled) Color(0xFF25A36D) else Color(0xFF9AA9BA),
+                                CircleShape))
+                            Spacer(Modifier.width(8.dp))
+                            Text(if (host.enabled) "Enabled" else "Disabled",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.labelMedium)
+                            Spacer(Modifier.weight(1f))
+                            TextButton(onClick = { vm.openLive(host.id) }) { Text("Traffic →") }
                         }
                     }
                 }
             }
+            if (filtered.isEmpty()) item {
+                Text(if (hosts.isEmpty()) "No proxy hosts are configured on this server."
+                    else "No hosts match these filters.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(24.dp))
+            }
         }
-        if (hosts.isEmpty()) item { Text("No proxy hosts reported on this server.") }
     }
     confirm?.let { host ->
         AlertDialog(
             onDismissRequest = { confirm = null },
-            title = { Text(if (host.enabled) "Disable proxy host?" else "Enable proxy host?") },
-            text = { Text(host.domains.joinToString(", ") + "\nThis changes the live NPMi configuration.") },
+            title = { Text(if (host.enabled) "Disable this host?" else "Enable this host?") },
+            text = { Text(host.domains.joinToString(", ") +
+                "\nThis changes the live NPM Improved proxy configuration.") },
             confirmButton = {
                 TextButton(onClick = { vm.toggleHost(host); confirm = null }) {
                     Text(if (host.enabled) "Disable" else "Enable")
