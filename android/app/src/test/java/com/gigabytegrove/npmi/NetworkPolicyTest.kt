@@ -11,7 +11,7 @@ class NetworkPolicyTest {
         assertEquals("https://proxy.gigabytegrove.net:81/",
             NetworkPolicy.normalize("https://proxy.gigabytegrove.net/", false).baseUrl)
         assertEquals("https://proxy.gigabytegrove.net:81/",
-            NetworkPolicy.normalize("proxy.gigabytegrove.net", false).baseUrl)
+            NetworkPolicy.normalize("https://proxy.gigabytegrove.net", false).baseUrl)
         assertEquals("https://proxy.example.org:81/",
             NetworkPolicy.normalize("https://proxy.example.org:443/api", false).baseUrl)
         assertEquals("http://192.168.20.5:81/",
@@ -27,6 +27,17 @@ class NetworkPolicyTest {
             NetworkPolicy.normalize("192.168.10.1:8181", true).baseUrl)
     }
 
+    @Test fun hostnameDefaultsToControlPlaneHttpWithExplicitConsent() {
+        assertEquals("http://proxy1.gigabytegrove.net:81/",
+            NetworkPolicy.normalize("proxy1.gigabytegrove.net", true).baseUrl)
+        try {
+            NetworkPolicy.normalize("proxy1.gigabytegrove.net", false)
+            fail("HTTP must require explicit consent")
+        } catch (_: IllegalArgumentException) { }
+        assertEquals("http://proxy1.gigabytegrove.net:81",
+            NetworkPolicy.insecureAlternative("https://proxy1.gigabytegrove.net"))
+    }
+
     @Test fun noSilentTlsDowngrades() {
         val https = NetworkPolicy.normalize("https://proxy.gigabytegrove.net", false)
         assertFalse(https.insecureLan)
@@ -36,7 +47,7 @@ class NetworkPolicyTest {
             fail("Cleartext requires an explicit acknowledgement")
         } catch (_: IllegalArgumentException) { }
         assertEquals("http://proxy.gigabytegrove.net:81/",
-            NetworkPolicy.normalize("http://proxy.gigabytegrove.net", true).baseUrl)
+            NetworkPolicy.normalize("proxy.gigabytegrove.net", true).baseUrl)
     }
 
     private fun rejects(url: String) {
