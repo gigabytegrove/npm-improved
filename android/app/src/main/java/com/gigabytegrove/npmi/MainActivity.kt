@@ -157,71 +157,101 @@ private fun ServerForm(vm: NpmViewModel) {
     var name by remember(editing?.id) { mutableStateOf(editing?.name.orEmpty()) }
     var address by remember(editing?.id) { mutableStateOf(editing?.url.orEmpty()) }
     var confirmHttp by remember(editing?.id) { mutableStateOf(false) }
-    // Preview uses acknowledgement only to parse; saving still requires an explicit opt-in.
-    val preview = remember(address) { runCatching { NetworkPolicy.normalize(address, true) }.getOrNull() }
+    val preview = remember(address) {
+        runCatching { NetworkPolicy.normalize(address, true) }.getOrNull()
+    }
     val isHttp = preview?.insecureLan == true
     Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState())
-        .padding(horizontal = 20.dp, vertical = 26.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        .padding(horizontal = 20.dp, vertical = 22.dp),
+        verticalArrangement = Arrangement.spacedBy(17.dp)) {
         BrandWordmark()
-        PageIntro("Server connection",
-            if (editing == null) "Connect your server" else "Edit server connection",
-            "Enter your server hostname or IP once. The app automatically uses NPM Improved's management API on port 81.")
-        ElevatedCard(shape = RoundedCornerShape(22.dp)) {
-            Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                OutlinedTextField(name, { name = it }, label = { Text("Connection name") },
-                    placeholder = { Text("Home proxy") }, modifier = Modifier.fillMaxWidth(),
-                    singleLine = true)
+        PageIntro("Connection setup",
+            if (editing == null) "Add a management node" else "Edit management node",
+            "Identify your NPM Improved server, then verify its API before saving the connection.")
+        ElevatedCard(shape = RoundedCornerShape(20.dp)) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text("01  SERVER DETAILS",
+                    style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary)
+                OutlinedTextField(name, { name = it },
+                    label = { Text("Display name") },
+                    placeholder = { Text("Proxy 1") },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    shape = RoundedCornerShape(13.dp))
                 OutlinedTextField(address, { address = it },
-                    label = { Text("Server URL or IP address") },
-                    placeholder = { Text("https://proxy.example.com or 192.168.1.20") },
-                    supportingText = { Text("Management API port 81 is selected automatically.") },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true)
-                if (preview != null) {
-                    Surface(color = MaterialTheme.colorScheme.surfaceVariant,
-                        shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("API ENDPOINT", style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(preview.baseUrl + "api/",
-                                style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                        }
+                    label = { Text("Hostname or IP address") },
+                    placeholder = { Text("proxy1.example.com or 192.168.1.20") },
+                    supportingText = { Text("NPMi management requests use port 81 unless you specify another port.") },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    shape = RoundedCornerShape(13.dp))
+            }
+        }
+        ElevatedCard(shape = RoundedCornerShape(20.dp)) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text("02  VERIFY MANAGEMENT API",
+                    style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary)
+                Text("The app verifies the Control Center before saving anything.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Surface(shape = RoundedCornerShape(13.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant) {
+                    Column(Modifier.fillMaxWidth().padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("RESOLVED API ADDRESS",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(preview?.baseUrl?.plus("api/") ?: "Enter a valid server address above",
+                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.bodyMedium)
                     }
                 }
                 if (isHttp) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = confirmHttp, onCheckedChange = { confirmHttp = it })
-                        Text("I understand HTTP credentials are unencrypted",
-                            style = MaterialTheme.typography.bodySmall)
+                    Surface(shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.errorContainer) {
+                        Column(Modifier.fillMaxWidth().padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("HTTP management is not encrypted",
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodyMedium)
+                            Text("Use this only on a trusted LAN or VPN. Login credentials and API tokens otherwise travel in plaintext.",
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodySmall)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(checked = confirmHttp,
+                                    onCheckedChange = { confirmHttp = it })
+                                Text("I understand and accept this risk",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer)
+                            }
+                        }
                     }
                 }
-                if (vm.error.isNotBlank()) InlineIssue(vm.error)
                 if (!isHttp && address.isNotBlank()) {
                     TextButton(onClick = {
                         runCatching { NetworkPolicy.insecureAlternative(address) }
                             .onSuccess { address = it; confirmHttp = false; vm.clearError() }
-                    }, modifier = Modifier.fillMaxWidth()) {
-                        Text("Use default HTTP management connection (:81)")
-                    }
-                    Text("HTTP sends passwords and session tokens unencrypted. Only use it on a trusted LAN/VPN and acknowledge the risk before connecting.",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall)
+                    }) { Text("Switch to the default HTTP port-81 listener") }
                 }
+                if (vm.error.isNotBlank()) InlineIssue(vm.error)
                 Button(onClick = { vm.addServer(name, address, confirmHttp) },
-                    enabled = !vm.loading && name.isNotBlank() && address.isNotBlank(),
+                    enabled = !vm.loading && name.isNotBlank() && preview != null &&
+                        (!isHttp || confirmHttp),
                     modifier = Modifier.fillMaxWidth().height(52.dp),
-                    shape = RoundedCornerShape(14.dp)) {
-                    Text(if (vm.loading) "Checking port 81…" else "Verify API and save")
+                    shape = RoundedCornerShape(13.dp)) {
+                    Text(if (vm.loading) "Verifying NPMi API…" else "Verify and save connection")
                 }
                 if (vm.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-                if (vm.profiles.isNotEmpty()) {
-                    TextButton(onClick = vm::cancelServerEdit, modifier = Modifier.fillMaxWidth()) {
-                        Text("Cancel")
-                    }
-                }
             }
         }
-        ConnectionHelp(isHttp)
+        if (vm.profiles.isNotEmpty()) {
+            OutlinedButton(onClick = vm::cancelServerEdit,
+                modifier = Modifier.fillMaxWidth()) { Text("Cancel") }
+        }
+        Text("An HTTPS URL requires working TLS and a trusted certificate on its configured port. NPMi's default port 81 uses HTTP.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -231,64 +261,110 @@ private fun SignIn(vm: NpmViewModel) {
     var email by remember(server.id) { mutableStateOf("") }
     var password by remember(server.id) { mutableStateOf("") }
     var code by remember(server.id) { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+    var serverSwitcher by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState())
-        .padding(horizontal = 20.dp, vertical = 26.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        .padding(horizontal = 20.dp, vertical = 22.dp),
+        verticalArrangement = Arrangement.spacedBy(17.dp)) {
         BrandWordmark()
-        PageIntro("Secure management",
-            if (vm.challenge == null) "Welcome back" else "Verify your identity",
-            if (vm.challenge == null) "Sign in with your existing NPM Improved administrator account."
-            else "Use your authenticator's six-digit code or an eight-character recovery code.")
-        ElevatedCard(shape = RoundedCornerShape(22.dp)) {
-            Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text(server.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text(server.url, style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (server.insecureLan) {
-                    Text("HTTP management connection · port 81",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error)
+        PageIntro("Management login",
+            if (vm.challenge == null) "Welcome back" else "Two-factor verification",
+            if (vm.challenge == null) "Sign in to manage your reverse proxy securely."
+                else "Enter the verification code from your authenticator or a recovery code.")
+        ElevatedCard(shape = RoundedCornerShape(20.dp)) {
+            Column(Modifier.fillMaxWidth().padding(17.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
+                Text("CONNECTING TO", style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(38.dp).background(MaterialTheme.colorScheme.primaryContainer,
+                        RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Dns, contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary)
+                    }
+                    Spacer(Modifier.width(11.dp))
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(server.name, style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold)
+                        Text(server.url, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Box {
+                        TextButton(onClick = { serverSwitcher = true }) { Text("Change") }
+                        DropdownMenu(expanded = serverSwitcher, onDismissRequest = { serverSwitcher = false }) {
+                            vm.profiles.forEach { profile ->
+                                DropdownMenuItem(text = { Text(profile.name) },
+                                    onClick = { serverSwitcher = false; vm.switch(profile.id) })
+                            }
+                            HorizontalDivider()
+                            DropdownMenuItem(text = { Text("Add another server") },
+                                onClick = { serverSwitcher = false; vm.addingServer = true })
+                        }
+                    }
                 }
-                HorizontalDivider()
+                if (server.insecureLan) {
+                    Surface(shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.errorContainer) {
+                        Text("HTTP connection · Credentials are unencrypted. Use a trusted LAN/VPN only.",
+                            modifier = Modifier.padding(12.dp),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 if (vm.challenge == null) {
-                    OutlinedTextField(email, { email = it }, label = { Text("Account email") },
+                    Text("Administrator account", style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold)
+                    OutlinedTextField(email, { email = it },
+                        label = { Text("Email address") },
                         placeholder = { Text("admin@example.com") },
-                        modifier = Modifier.fillMaxWidth(), singleLine = true)
-                    OutlinedTextField(password, { password = it }, label = { Text("Password") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth(), singleLine = true)
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        modifier = Modifier.fillMaxWidth(), singleLine = true,
+                        shape = RoundedCornerShape(13.dp))
+                    OutlinedTextField(password, { password = it },
+                        label = { Text("Password") },
+                        visualTransformation = if (passwordVisible)
+                            androidx.compose.ui.text.input.VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            TextButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Text(if (passwordVisible) "Hide" else "Show")
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true,
+                        shape = RoundedCornerShape(13.dp))
                     Button(onClick = {
                         vm.signIn(email, password)
                         password = ""
+                        passwordVisible = false
                     }, enabled = !vm.loading && email.isNotBlank() && password.isNotBlank(),
                         modifier = Modifier.fillMaxWidth().height(52.dp),
-                        shape = RoundedCornerShape(14.dp)) { Text("Sign in to NPMi") }
+                        shape = RoundedCornerShape(13.dp)) { Text("Sign in") }
                 } else {
-                    OutlinedTextField(code, { code = it }, label = { Text("Authentication code") },
+                    OutlinedTextField(code, { code = it },
+                        label = { Text("Authenticator or recovery code") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-                        modifier = Modifier.fillMaxWidth(), singleLine = true)
+                        modifier = Modifier.fillMaxWidth(), singleLine = true,
+                        shape = RoundedCornerShape(13.dp))
                     Button(onClick = { vm.verifyTwoFactor(code); code = "" },
                         enabled = !vm.loading && code.isNotBlank(),
                         modifier = Modifier.fillMaxWidth().height(52.dp),
-                        shape = RoundedCornerShape(14.dp)) { Text("Verify and continue") }
-                    TextButton(onClick = vm::cancelChallenge) { Text("Back to password") }
+                        shape = RoundedCornerShape(13.dp)) { Text("Verify and continue") }
+                    TextButton(onClick = vm::cancelChallenge,
+                        modifier = Modifier.fillMaxWidth()) { Text("Back to sign in") }
                 }
-                if (vm.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                if (vm.loading) {
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                    Text("Contacting your NPM Improved management API…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 if (vm.error.isNotBlank()) InlineIssue(vm.error)
-                OutlinedButton(onClick = { vm.editServer(server.id) },
-                    modifier = Modifier.fillMaxWidth()) {
-                    Text("Change API address / HTTP or HTTPS")
-                }
             }
         }
-        ConnectionHelp(server.insecureLan)
-        TextButton(onClick = { vm.addingServer = true },
-            modifier = Modifier.fillMaxWidth()) { Text("Connect another server") }
-        vm.profiles.filter { it.id != server.id }.forEach { other ->
-            OutlinedButton(onClick = { vm.switch(other.id) }, modifier = Modifier.fillMaxWidth()) {
-                Text("Switch to " + other.name)
-            }
-        }
+        OutlinedButton(onClick = { vm.editServer(server.id) },
+            modifier = Modifier.fillMaxWidth()) { Text("Edit management connection") }
+        Text("Your password is only sent to your selected server and is never saved by the app.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -296,51 +372,110 @@ private fun SignIn(vm: NpmViewModel) {
 @Composable
 private fun ControlCenter(vm: NpmViewModel) {
     val server = vm.selected ?: return
-    val destinations = listOf(
+    val tabs = listOf(
         Triple("dashboard", "Overview", Icons.Default.Analytics),
         Triple("hosts", "Hosts", Icons.Default.Dns),
-        Triple("security", "Security", Icons.Default.Security),
-        Triple("servers", "Servers", Icons.Default.Settings),
+        Triple("security", "Security", Icons.Default.Security)
     )
-    BackHandler(enabled = vm.screen == "traffic") { vm.screen = "hosts"; vm.liveHostId = null }
+    var switcherOpen by remember { mutableStateOf(false) }
+    BackHandler(enabled = vm.screen == "traffic" || vm.screen == "servers") {
+        if (vm.screen == "traffic") { vm.screen = "hosts"; vm.liveHostId = null }
+        else vm.screen = "dashboard"
+    }
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                title = { Column {
-                    Text("NPM Improved", style = MaterialTheme.typography.titleMedium)
-                    Text(server.name, style = MaterialTheme.typography.bodySmall)
-                } },
-                actions = {
-                    IconButton(onClick = vm::refresh, enabled = !vm.loading) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh server data")
+            Column {
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface),
+                    navigationIcon = {
+                        Box(Modifier.padding(start = 12.dp, end = 6.dp).size(38.dp)
+                            .background(MaterialTheme.colorScheme.primaryContainer,
+                                RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Dns, contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary)
+                        }
+                    },
+                    title = {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("NPM IMPROVED", style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            Text(server.name, style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold, maxLines = 1)
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = vm::refresh, enabled = !vm.loading) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Refresh node")
+                        }
+                        Box {
+                            IconButton(onClick = { switcherOpen = true }) {
+                                Icon(Icons.Default.Settings, contentDescription = "Servers and account")
+                            }
+                            DropdownMenu(expanded = switcherOpen, onDismissRequest = { switcherOpen = false }) {
+                                Text("YOUR SERVERS", Modifier.padding(16.dp, 8.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                vm.profiles.forEach { profile ->
+                                    DropdownMenuItem(
+                                        text = { Text(profile.name +
+                                            if (profile.id == vm.selectedId) "  ·  Current" else "") },
+                                        onClick = {
+                                            switcherOpen = false
+                                            if (profile.id != vm.selectedId) vm.switch(profile.id)
+                                        },
+                                        leadingIcon = { Icon(Icons.Default.Dns, contentDescription = null) })
+                                }
+                                HorizontalDivider()
+                                DropdownMenuItem(text = { Text("Manage servers and account") },
+                                    onClick = { switcherOpen = false; vm.screen = "servers" },
+                                    leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) })
+                            }
+                        }
                     }
-                })
+                )
+                if (vm.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+            }
         },
         bottomBar = {
-            NavigationBar {
-                destinations.forEach { (route, label, symbol) ->
+            if (vm.screen != "servers") NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
+                tabs.forEach { (route, label, symbol) ->
                     NavigationBarItem(
                         selected = if (vm.screen == "traffic") route == "hosts" else vm.screen == route,
-                        onClick = { vm.screen = route; if (route != "traffic") vm.liveHostId = null },
+                        onClick = {
+                            vm.screen = route
+                            if (route != "hosts") vm.liveHostId = null
+                        },
                         icon = { Icon(symbol, contentDescription = null) },
-                        label = { Text(label) }
-                    )
+                        label = { Text(label) },
+                        alwaysShowLabel = true)
                 }
             }
         }
     ) { insets ->
         Column(Modifier.fillMaxSize().padding(insets)) {
             if (server.insecureLan) {
-                Text("Unencrypted LAN connection", modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                Surface(color = MaterialTheme.colorScheme.errorContainer) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Default.Security, contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.size(16.dp))
+                        Text("Unencrypted HTTP · Trusted LAN or VPN only",
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.labelSmall)
+                    }
+                }
             }
-            if (vm.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-            if (vm.error.isNotBlank()) ErrorText(vm.error)
-            if (vm.message.isNotBlank()) {
-                Text(vm.message, color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
-            }
-            Box(Modifier.fillMaxSize()) {
+            if (vm.error.isNotBlank()) InlineIssue(vm.error)
+            if (vm.message.isNotBlank()) Text(vm.message,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.bodySmall)
+            Box(Modifier.weight(1f)) {
                 when (vm.screen) {
                     "hosts" -> HostsScreen(vm)
                     "traffic" -> TrafficScreen(vm)
@@ -388,90 +523,126 @@ private fun MetricTile(label: String, value: String, details: String = "", modif
 private fun DashboardScreen(vm: NpmViewModel) {
     val status = vm.status
     val summary = vm.summary
-    val server = vm.selected
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(15.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.weight(1f)) {
-                Text("Overview", style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold)
-                Text("Your reverse proxy at a glance",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            TextButton(onClick = vm::refresh) { Text("Refresh") }
-        }
-        Surface(shape = RoundedCornerShape(22.dp), color = DeepNavy) {
-            Column(Modifier.fillMaxWidth().padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Text("CONTROL PLANE", style = MaterialTheme.typography.labelMedium,
-                    color = Color(0xFF90BAFF), fontWeight = FontWeight.SemiBold)
-                Text(status?.hostname?.ifBlank { server?.name ?: "NPMi node" }
-                    ?: (server?.name ?: "Connecting…"),
-                    color = Color.White, style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold)
-                Text(if (status?.healthy == true) "Management API connected"
-                    else "Waiting for management API response",
-                    color = Color(0xFFD4E0F1), style = MaterialTheme.typography.bodyMedium)
-                HorizontalDivider(color = Color(0xFF3C506B))
-                Text("Version " + (status?.version ?: "—") +
-                    "  ·  " + (status?.role?.ifBlank { "standalone" } ?: "unknown role"),
-                    color = Color(0xFFD4E0F1), style = MaterialTheme.typography.bodySmall)
-            }
-        }
-        Text("Proxy infrastructure", style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold)
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            MetricTile("Proxy hosts", vm.hosts.size.toString(),
-                "Configured", Modifier.weight(1f))
-            MetricTile("Enabled", vm.hosts.count { it.enabled }.toString(),
-                "Active routes", Modifier.weight(1f))
-        }
-        Text("HTTP traffic · last 24 hours", style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold)
-        if (summary != null) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                MetricTile("Requests", summary.requests.toString(),
-                    "This node", Modifier.weight(1f))
-                MetricTile("Data sent", summary.bytesOut.bytesLabel(),
-                    "HTTP response bytes", Modifier.weight(1f))
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                MetricTile("Source IPs", summary.uniqueIps?.toString() ?: "—",
-                    "Not unique users", Modifier.weight(1f))
-                MetricTile("Denied", summary.denied?.toString() ?: "—",
-                    "Blocked requests", Modifier.weight(1f))
-            }
-        } else {
-            ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
-                Text(vm.analyticsNotice.ifBlank { "Node analytics are currently unavailable." },
-                    modifier = Modifier.padding(16.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        Text("Manage", style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold)
-        ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Text("Proxy host management", style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold)
-                Text("Inspect configured hosts, view recorded traffic, and manage availability.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Button(onClick = { vm.screen = "hosts" }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Open hosts")
-                }
-            }
-        }
-        if (status?.role == "secondary") {
-            Text("NPMX secondary: host configuration is read-only here. Traffic observations remain node-local.",
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall)
-        } else {
-            Text("Traffic and deny rules are local to this node. Counts are not automatically combined across NPMX.",
+    val total = vm.hosts.size
+    val enabled = vm.hosts.count { it.enabled }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+        .padding(horizontal = 18.dp, vertical = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text("Overview", style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold)
+            Text("Your reverse proxy at a glance",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        Surface(shape = RoundedCornerShape(22.dp), color = DeepNavy) {
+            Column(Modifier.fillMaxWidth().padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(10.dp).background(
+                        if (status?.healthy == true) Color(0xFF4ACF9C) else Color(0xFFFFC46D),
+                        CircleShape))
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (status?.healthy == true) "MANAGEMENT API CONNECTED" else "CHECKING NODE",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color(0xFFD0DFF1), fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.weight(1f))
+                    Text(status?.role?.uppercase() ?: "NPMi",
+                        color = Color(0xFFD0DFF1),
+                        style = MaterialTheme.typography.labelSmall)
+                }
+                Text(status?.hostname?.ifBlank { vm.selected?.name ?: "NPMi node" }
+                    ?: (vm.selected?.name ?: "NPMi node"),
+                    color = Color.White, style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Bold)
+                Text(vm.selected?.url.orEmpty(), color = Color(0xFFC4D4E9),
+                    style = MaterialTheme.typography.bodySmall)
+                HorizontalDivider(color = Color(0xFF40516A))
+                Text("NPM Improved " + (status?.version ?: "—"),
+                    color = Color(0xFFE6EEF8),
+                    style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        SectionHeading("Infrastructure", "Proxy host availability")
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            MetricTile("Configured", total.toString(), "Proxy hosts", Modifier.weight(1f))
+            MetricTile("Enabled", enabled.toString(), "Active routes", Modifier.weight(1f))
+        }
+        if (total > 0) {
+            Row(verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                LinearProgressIndicator(
+                    progress = { enabled.toFloat() / total },
+                    modifier = Modifier.weight(1f).height(8.dp),
+                    color = Color(0xFF279A75),
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant)
+                Text(enabled.toString() + " of " + total + " enabled",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        OutlinedButton(onClick = { vm.screen = "hosts" },
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RoundedCornerShape(13.dp)) {
+            Icon(Icons.Default.Dns, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("Browse proxy hosts")
+        }
+        SectionHeading("Traffic", "Last 24 hours · this node only")
+        if (summary == null) {
+            ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                Text(vm.analyticsNotice.ifBlank { "Waiting for node analytics…" },
+                    modifier = Modifier.padding(18.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                MetricTile("Requests", summary.requests.toString(), "Completed", Modifier.weight(1f))
+                MetricTile("Data sent", summary.bytesOut.bytesLabel(), "Response bytes", Modifier.weight(1f))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                MetricTile("Source IPs", summary.uniqueIps?.toString() ?: "—", "Not unique users", Modifier.weight(1f))
+                MetricTile("Denied", summary.denied?.toString() ?: "—", "Blocked requests", Modifier.weight(1f))
+            }
+        }
+        SectionHeading("Quick actions", "Jump into the work")
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            ElevatedCard(Modifier.weight(1f), shape = RoundedCornerShape(18.dp)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Icon(Icons.Default.Analytics, contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary)
+                    Text("Live traffic", fontWeight = FontWeight.SemiBold)
+                    Text("Investigate one host", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    TextButton(onClick = { vm.screen = "hosts" }) { Text("View hosts →") }
+                }
+            }
+            ElevatedCard(Modifier.weight(1f), shape = RoundedCornerShape(18.dp)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Icon(Icons.Default.Security, contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary)
+                    Text("Security", fontWeight = FontWeight.SemiBold)
+                    Text("Review local rules", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    TextButton(onClick = { vm.screen = "security" }) { Text("Review rules →") }
+                }
+            }
+        }
+        Text(if (status?.role == "secondary")
+            "Secondary: configuration changes are read-only; local traffic remains separate from NPMX peers."
+            else "Counts are node-local. IP addresses can represent shared gateways, not individual people.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun SectionHeading(title: String, subtitle: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text(subtitle, style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -481,39 +652,52 @@ private fun HostsScreen(vm: NpmViewModel) {
     var query by remember { mutableStateOf("") }
     var show by remember { mutableStateOf("all") }
     val canModify = vm.status?.role != "secondary"
-    val hosts = vm.hosts.toList()
-    val filtered = hosts.filter { host ->
+    val all = vm.hosts.toList()
+    val filtered = all.filter { host ->
         (show == "all" || (show == "enabled" && host.enabled) ||
             (show == "disabled" && !host.enabled)) &&
             (query.isBlank() || host.domains.any { it.contains(query.trim(), ignoreCase = true) } ||
                 host.upstream.contains(query.trim(), ignoreCase = true))
     }
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Spacer(Modifier.height(12.dp))
-        Text("Proxy hosts", style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold)
-        Text(hosts.size.toString() + " configured · " + hosts.count { it.enabled } + " enabled",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(13.dp))
-        OutlinedTextField(query, { query = it },
-            label = { Text("Search hosts or upstreams") },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-            modifier = Modifier.fillMaxWidth(), singleLine = true)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("all" to "All", "enabled" to "Enabled", "disabled" to "Disabled").forEach { (code, label) ->
-                FilterChip(selected = show == code, onClick = { show = code }, label = { Text(label) })
+    Column(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Proxy hosts", style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold)
+                    Text(all.size.toString() + " configured · " + all.count { it.enabled } + " enabled",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                IconButton(onClick = vm::refresh, enabled = !vm.loading) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Reload host list")
+                }
+            }
+            OutlinedTextField(query, { query = it },
+                label = { Text("Search domains or upstreams") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                modifier = Modifier.fillMaxWidth(), singleLine = true,
+                shape = RoundedCornerShape(15.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("all" to "All", "enabled" to "Enabled", "disabled" to "Disabled")
+                    .forEach { (code, label) ->
+                        FilterChip(selected = show == code, onClick = { show = code },
+                            label = { Text(label) })
+                    }
             }
         }
-        LazyColumn(modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(top = 7.dp, bottom = 20.dp),
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        LazyColumn(modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(filtered, key = { it.id }) { host ->
                 var expanded by remember(host.id) { mutableStateOf(false) }
-                ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(17.dp)) {
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(11.dp)) {
                         Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text(host.domains.joinToString(", ").ifBlank { "Host #" + host.id },
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold)
@@ -522,50 +706,69 @@ private fun HostsScreen(vm: NpmViewModel) {
                             }
                             Box {
                                 IconButton(onClick = { expanded = true }) {
-                                    Icon(Icons.Default.MoreVert, contentDescription = "Host actions")
+                                    Icon(Icons.Default.MoreVert, contentDescription = "Actions for " +
+                                        host.domains.joinToString(", "))
                                 }
                                 DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                                    DropdownMenuItem(text = { Text("Inspect live traffic") },
-                                        onClick = { expanded = false; vm.openLive(host.id) })
+                                    DropdownMenuItem(text = { Text("Investigate traffic") },
+                                        onClick = { expanded = false; vm.openLive(host.id) },
+                                        leadingIcon = { Icon(Icons.Default.Analytics, contentDescription = null) })
                                     DropdownMenuItem(
-                                        text = { Text(if (host.enabled) "Disable host" else "Enable host") },
+                                        text = { Text(if (host.enabled) "Disable proxy" else "Enable proxy") },
                                         enabled = canModify && !vm.loading,
                                         onClick = { expanded = false; confirm = host })
                                 }
                             }
                         }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                         Row(verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()) {
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Box(Modifier.size(9.dp).background(
-                                if (host.enabled) Color(0xFF25A36D) else Color(0xFF9AA9BA),
-                                CircleShape))
-                            Spacer(Modifier.width(8.dp))
+                                if (host.enabled) Color(0xFF1C9A70) else Color(0xFF96A4B3), CircleShape))
                             Text(if (host.enabled) "Enabled" else "Disabled",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.labelMedium)
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Spacer(Modifier.weight(1f))
-                            TextButton(onClick = { vm.openLive(host.id) }) { Text("Traffic →") }
+                            TextButton(onClick = { vm.openLive(host.id) }) {
+                                Icon(Icons.Default.Analytics, contentDescription = null,
+                                    modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(5.dp))
+                                Text("Traffic")
+                            }
                         }
                     }
                 }
             }
             if (filtered.isEmpty()) item {
-                Text(if (hosts.isEmpty()) "No proxy hosts are configured on this server."
-                    else "No hosts match these filters.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(24.dp))
+                ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(17.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(24.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.Search, contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(if (all.isEmpty()) "No proxy hosts configured" else "No matching hosts",
+                            style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(if (all.isEmpty()) "Hosts added in NPM Improved will appear here." else
+                            "Try a different domain, upstream, or status filter.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (query.isNotBlank() || show != "all") TextButton(onClick = {
+                            query = ""; show = "all"
+                        }) { Text("Clear filters") }
+                    }
+                }
             }
         }
     }
     confirm?.let { host ->
         AlertDialog(
             onDismissRequest = { confirm = null },
-            title = { Text(if (host.enabled) "Disable this host?" else "Enable this host?") },
+            title = { Text(if (host.enabled) "Disable proxy host?" else "Enable proxy host?") },
             text = { Text(host.domains.joinToString(", ") +
-                "\nThis changes the live NPM Improved proxy configuration.") },
+                "\nThis changes the live NPM Improved proxy configuration. Existing connections may be affected.") },
             confirmButton = {
                 TextButton(onClick = { vm.toggleHost(host); confirm = null }) {
-                    Text(if (host.enabled) "Disable" else "Enable")
+                    Text(if (host.enabled) "Disable host" else "Enable host")
                 }
             },
             dismissButton = { TextButton(onClick = { confirm = null }) { Text("Cancel") } }
@@ -593,6 +796,7 @@ private fun TrafficScreen(vm: NpmViewModel) {
     val id = vm.liveHostId ?: return
     val owner = LocalLifecycleOwner.current
     val minutes = vm.liveMinutes
+    var panel by remember(id) { mutableStateOf("overview") }
     LaunchedEffect(id, minutes, vm.selectedId, owner) {
         owner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (isActive) {
@@ -603,58 +807,119 @@ private fun TrafficScreen(vm: NpmViewModel) {
     }
     val host = vm.hosts.firstOrNull { it.id == id }
     val live = vm.live
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        TextButton(onClick = { vm.screen = "hosts"; vm.liveHostId = null }) { Text("← Back to hosts") }
-        Text(host?.domains?.joinToString(", ").orEmpty().ifBlank { "Host #" + id },
-            style = MaterialTheme.typography.headlineSmall)
-        Text("Near-real-time HTTP investigations · this NPMi node only",
-            style = MaterialTheme.typography.bodySmall)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf(5, 15, 60).forEach { choice ->
-                FilterChip(selected = minutes == choice, onClick = { vm.liveMinutes = choice; vm.live = null },
-                    label = { Text(choice.toString() + " min") })
+    Column(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            TextButton(onClick = { vm.screen = "hosts"; vm.liveHostId = null }) {
+                Text("← All proxy hosts")
+            }
+            Text(host?.domains?.joinToString(", ").orEmpty().ifBlank { "Host #" + id },
+                style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text("Completed HTTP requests · this NPMi node",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(5, 15, 60).forEach { choice ->
+                    FilterChip(selected = minutes == choice,
+                        onClick = { vm.liveMinutes = choice; vm.live = null },
+                        label = { Text(choice.toString() + " min") })
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("overview" to "Overview", "clients" to "Clients", "requests" to "Requests")
+                    .forEach { (code, label) ->
+                        FilterChip(selected = panel == code, onClick = { panel = code },
+                            label = { Text(label) })
+                    }
             }
         }
-        if (vm.liveError.isNotBlank()) ErrorText(vm.liveError)
-        if (live == null) {
-            CircularProgressIndicator()
-            Text("Loading recorded requests…")
-        } else {
-            StatCard("Requests", live.total.toString(),
-                "10-second refresh while this screen is open")
-            StatCard("Traffic sent", live.sent.bytesLabel())
-            StatCard("Source addresses", live.uniqueIps.toString(), "An IP is not necessarily one person.")
-            Text("Requests per minute", style = MaterialTheme.typography.titleMedium)
-            ElevatedCard(Modifier.fillMaxWidth()) { Box(Modifier.padding(16.dp)) { RequestsBar(live.timeline) } }
-            Text("Traffic is drawn from completed, ingested requests. Not a packet capture.",
-                style = MaterialTheme.typography.bodySmall)
-            Text("Client review signals", style = MaterialTheme.typography.titleLarge)
-            Text("Indicators do not prove malicious behavior; crawler and browser identities are self-reported.",
-                style = MaterialTheme.typography.bodySmall)
-            ClientSection("Source IP addresses", "ip", live.ips, vm)
-            ClientSection("User-agent strings", "user_agent", live.agents, vm)
-            Text("Requested paths", style = MaterialTheme.typography.titleLarge)
-            live.paths.take(25).forEach { (path, count) ->
-                HorizontalDivider()
-                Text(path + " — " + count + " requests", style = MaterialTheme.typography.bodyMedium)
-            }
-            Text("Browser and client claims", style = MaterialTheme.typography.titleLarge)
-            live.browsers.forEach { (label, count) ->
-                Text(label + ": " + count, style = MaterialTheme.typography.bodyMedium)
-            }
-            Text("Geography", style = MaterialTheme.typography.titleLarge)
-            Text(live.geographyNote, style = MaterialTheme.typography.bodySmall)
-            Text("Recent completed requests", style = MaterialTheme.typography.titleLarge)
-            live.requests.forEach { r ->
-                ElevatedCard(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text(r.method + " " + r.path + " · HTTP " + r.status,
-                            fontWeight = FontWeight.SemiBold)
-                        Text(r.ip + " · " + r.at, style = MaterialTheme.typography.bodySmall)
-                        Text(r.userAgent, style = MaterialTheme.typography.bodySmall)
-                        if (r.deniedBy.isNotBlank() && r.deniedBy != "null")
-                            Text("Denied: " + r.deniedBy, color = MaterialTheme.colorScheme.error)
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+            .padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            if (vm.liveError.isNotBlank()) InlineIssue(vm.liveError)
+            if (live == null) {
+                Row(verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(14.dp)) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    Text("Loading traffic recorded by this node…")
+                }
+            } else when (panel) {
+                "clients" -> {
+                    SectionHeading("Client signals", "Indicators are not proof of abuse; user-agent names can be spoofed")
+                    ClientSection("Source IP addresses", "ip", live.ips, vm)
+                    ClientSection("User-agent strings", "user_agent", live.agents, vm)
+                    Text("Proposed blocks will affect every HTTP host on this node.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall)
+                }
+                "requests" -> {
+                    SectionHeading("Recent requests", "Latest completed requests on this host")
+                    if (live.requests.isEmpty()) Text("No completed requests recorded in this interval.")
+                    live.requests.forEach { request ->
+                        ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
+                            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(request.method, fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        style = MaterialTheme.typography.labelMedium)
+                                    Spacer(Modifier.width(9.dp))
+                                    Text("HTTP " + request.status, style = MaterialTheme.typography.labelMedium,
+                                        color = if (request.status >= 400) MaterialTheme.colorScheme.error
+                                            else MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Text(request.path, style = MaterialTheme.typography.bodyMedium)
+                                Text(request.ip + " · " + request.at, style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(request.userAgent, style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (request.deniedBy.isNotBlank() && request.deniedBy != "null")
+                                    Text("Denied: " + request.deniedBy, color = MaterialTheme.colorScheme.error,
+                                        style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                    }
+                    SectionHeading("Requested paths", "Most frequently requested URLs")
+                    live.paths.take(25).forEach { (path, count) ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(path, modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodySmall)
+                            Text(count.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.labelMedium)
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                    SectionHeading("Claimed browsers", "Based on reported user-agent headers")
+                    live.browsers.forEach { (label, count) ->
+                        Row {
+                            Text(label, modifier = Modifier.weight(1f))
+                            Text(count.toString())
+                        }
+                    }
+                }
+                else -> {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        MetricTile("Requests", live.total.toString(), "Recorded", Modifier.weight(1f))
+                        MetricTile("Data sent", live.sent.bytesLabel(), "Responses", Modifier.weight(1f))
+                    }
+                    MetricTile("Source IPs", live.uniqueIps.toString(), "Not unique visitors")
+                    SectionHeading("Requests per minute", "Auto-refresh every 10 seconds while viewing")
+                    ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(17.dp)) {
+                        Box(Modifier.padding(16.dp)) { RequestsBar(live.timeline) }
+                    }
+                    Text("These are ingested, completed requests—not live packet captures.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    SectionHeading("Geography", "Only available when the server provides enrichment")
+                    Text(live.geographyNote, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedButton(onClick = { panel = "clients" },
+                        modifier = Modifier.fillMaxWidth()) {
+                        Text("Review client signals")
+                    }
+                    OutlinedButton(onClick = { panel = "requests" },
+                        modifier = Modifier.fillMaxWidth()) {
+                        Text("Browse recent requests")
                     }
                 }
             }
@@ -687,36 +952,88 @@ private fun ClientSection(title: String, type: String, entries: List<ClientSigna
 private fun SecurityScreen(vm: NpmViewModel) {
     val draft = vm.blockDraft
     var removeRule by remember { mutableStateOf<BlockRule?>(null) }
+    var showComposer by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Security & enforcement", style = MaterialTheme.typography.headlineSmall)
-        Text("Blocks in NPMi v1.6.11 apply to ALL HTTP hosts on THIS NODE. They do not automatically synchronize across NPMX nodes. Review the affected traffic before changing rules.",
-            color = MaterialTheme.colorScheme.error)
-        Text("Prepare a node-wide deny", style = MaterialTheme.typography.titleMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = draft.type == "ip",
-                onClick = { vm.blockDraft = draft.copy(type = "ip", target = "") }, label = { Text("IP / CIDR") })
-            FilterChip(selected = draft.type == "user_agent",
-                onClick = { vm.blockDraft = draft.copy(type = "user_agent", target = "") },
-                label = { Text("User-agent substring") })
+        verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        SectionHeading("Security", "Node-wide enforcement and existing deny rules")
+        Surface(color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = RoundedCornerShape(15.dp)) {
+            Row(Modifier.fillMaxWidth().padding(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(11.dp),
+                verticalAlignment = Alignment.Top) {
+                Icon(Icons.Default.Security, contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                Text("Rules here affect ALL HTTP hosts on this node, not just one proxy host. NPMX does not automatically synchronize these rules. Review scope before activating anything.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
-        OutlinedTextField(draft.target, { vm.blockDraft = vm.blockDraft.copy(target = it.take(160)) },
-            label = { Text("Match target") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(draft.note, { vm.blockDraft = vm.blockDraft.copy(note = it.take(256)) },
-            label = { Text("Reason / audit note") }, modifier = Modifier.fillMaxWidth())
-        Button(onClick = { vm.blockConfirmation = true },
-            enabled = !vm.loading && draft.target.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
-            Text("Review node-wide block")
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Active deny rules", style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold)
+                Text(vm.rules.size.toString() + " reported on this node",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall)
+            }
+            OutlinedButton(onClick = { showComposer = !showComposer },
+                enabled = !vm.loading) {
+                Text(if (showComposer) "Close editor" else "New rule")
+            }
         }
-        Text("Active local deny rules", style = MaterialTheme.typography.titleLarge)
-        if (vm.rules.isEmpty()) Text("No deny rules reported (or your account does not have access).",
-            style = MaterialTheme.typography.bodySmall)
-        vm.rules.forEach { rule ->
-            ElevatedCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(14.dp)) {
-                    Text(rule.type + " · " + rule.target, fontWeight = FontWeight.Bold)
-                    Text(rule.note, style = MaterialTheme.typography.bodySmall)
-                    TextButton(onClick = { removeRule = rule }) { Text("Remove rule") }
+        if (vm.rules.isEmpty()) {
+            ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+                Text("No active deny rules reported. Your account may also lack permission to view them.",
+                    modifier = Modifier.padding(18.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else {
+            vm.rules.forEach { rule ->
+                ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+                    Row(Modifier.fillMaxWidth().padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Text(rule.target, fontWeight = FontWeight.SemiBold,
+                                style = MaterialTheme.typography.bodyMedium)
+                            Text(rule.type + if (rule.note.isNotBlank()) " · " + rule.note else "",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall)
+                        }
+                        TextButton(onClick = { removeRule = rule },
+                            enabled = !vm.loading) { Text("Remove") }
+                    }
+                }
+            }
+        }
+        if (showComposer || draft.target.isNotBlank()) {
+            ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(17.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Prepare a node-wide deny", style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(selected = draft.type == "ip",
+                            onClick = { vm.blockDraft = draft.copy(type = "ip", target = "") },
+                            label = { Text("IP / CIDR") })
+                        FilterChip(selected = draft.type == "user_agent",
+                            onClick = { vm.blockDraft = draft.copy(type = "user_agent", target = "") },
+                            label = { Text("User-agent") })
+                    }
+                    OutlinedTextField(draft.target,
+                        { vm.blockDraft = vm.blockDraft.copy(target = it.take(160)) },
+                        label = { Text("Match target") },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true,
+                        shape = RoundedCornerShape(13.dp))
+                    OutlinedTextField(draft.note,
+                        { vm.blockDraft = vm.blockDraft.copy(note = it.take(256)) },
+                        label = { Text("Audit note (optional)") },
+                        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(13.dp))
+                    Button(onClick = { vm.blockConfirmation = true },
+                        enabled = !vm.loading && draft.target.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                        Text("Review before activating")
+                    }
                 }
             }
         }
@@ -726,21 +1043,19 @@ private fun SecurityScreen(vm: NpmViewModel) {
         title = { Text("Block traffic on ALL hosts on this node?") },
         text = {
             Text("Rule: " + draft.type + " = " + draft.target +
-                "\nThis can block legitimate visitors across every site served by this NPMi node. " +
-                "It does not apply only to the host being investigated. Nginx will validate and reload the policy; there is no automatic expiry.")
+                "\nThis can block legitimate visitors across every site served by this node. " +
+                "It does not apply only to the host under investigation. Nginx will validate and reload the policy. There is no automatic expiry.")
         },
-        confirmButton = {
-            TextButton(onClick = vm::addBlock) { Text("Activate node-wide deny") }
-        },
-        dismissButton = {
-            TextButton(onClick = { vm.blockConfirmation = false }) { Text("Cancel") }
-        }
+        confirmButton = { TextButton(onClick = vm::addBlock) { Text("Activate node-wide deny") } },
+        dismissButton = { TextButton(onClick = { vm.blockConfirmation = false }) { Text("Cancel") } }
     )
     removeRule?.let { rule ->
         AlertDialog(onDismissRequest = { removeRule = null },
             title = { Text("Remove node-wide block?") },
             text = { Text("Unblock " + rule.target + " on this NPMi node?") },
-            confirmButton = { TextButton(onClick = { vm.removeBlock(rule); removeRule = null }) { Text("Unblock") } },
+            confirmButton = { TextButton(onClick = { vm.removeBlock(rule); removeRule = null }) {
+                Text("Remove deny rule")
+            } },
             dismissButton = { TextButton(onClick = { removeRule = null }) { Text("Cancel") } })
     }
 }
@@ -748,40 +1063,77 @@ private fun SecurityScreen(vm: NpmViewModel) {
 @Composable
 private fun ServersScreen(vm: NpmViewModel) {
     var removeId by remember { mutableStateOf<String?>(null) }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Managed servers", style = MaterialTheme.typography.headlineSmall)
-        Text("Each connection has an independent encrypted session.",
-            style = MaterialTheme.typography.bodySmall)
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+        .padding(horizontal = 16.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        TextButton(onClick = { vm.screen = "dashboard" }) { Text("← Back to overview") }
+        SectionHeading("Servers & account", "Connections are stored separately on this device")
         vm.profiles.forEach { profile ->
-            ElevatedCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                    Text(profile.name, style = MaterialTheme.typography.titleMedium)
-                    Text(profile.url, style = MaterialTheme.typography.bodySmall)
-                    if (profile.insecureLan) Text("Unencrypted private LAN",
-                        color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { vm.switch(profile.id) },
-                            enabled = vm.selectedId != profile.id) {
-                            Text(if (vm.selectedId == profile.id) "Current" else "Switch")
+            var menuOpen by remember(profile.id) { mutableStateOf(false) }
+            ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                Column(Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(13.dp)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(39.dp).background(MaterialTheme.colorScheme.primaryContainer,
+                            RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Dns, contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary)
                         }
-                        TextButton(onClick = { removeId = profile.id }) { Text("Remove") }
+                        Spacer(Modifier.width(11.dp))
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(profile.name, fontWeight = FontWeight.SemiBold,
+                                style = MaterialTheme.typography.titleMedium)
+                            Text(if (profile.id == vm.selectedId) "Current connection" else "Saved connection",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Box {
+                            IconButton(onClick = { menuOpen = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "Server actions")
+                            }
+                            DropdownMenu(expanded = menuOpen,
+                                onDismissRequest = { menuOpen = false }) {
+                                DropdownMenuItem(text = { Text("Switch to server") },
+                                    enabled = profile.id != vm.selectedId,
+                                    onClick = { menuOpen = false; vm.switch(profile.id) })
+                                DropdownMenuItem(text = { Text("Edit connection") },
+                                    onClick = { menuOpen = false; vm.editServer(profile.id) })
+                                DropdownMenuItem(text = { Text("Remove from device") },
+                                    onClick = { menuOpen = false; removeId = profile.id })
+                            }
+                        }
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Text(profile.url, style = MaterialTheme.typography.bodyMedium)
+                    Text(if (profile.insecureLan) "HTTP · Unencrypted management connection"
+                        else "HTTPS · Certificate verified",
+                        color = if (profile.insecureLan) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall)
+                    if (profile.id != vm.selectedId) {
+                        OutlinedButton(onClick = { vm.switch(profile.id) },
+                            modifier = Modifier.fillMaxWidth()) { Text("Switch to " + profile.name) }
                     }
                 }
             }
         }
-        Button(onClick = { vm.addingServer = true }, modifier = Modifier.fillMaxWidth()) {
-            Text("Add another server")
-        }
-        OutlinedButton(onClick = vm::logout, modifier = Modifier.fillMaxWidth()) {
-            Text("Sign out of this server")
-        }
+        Button(onClick = { vm.addingServer = true },
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RoundedCornerShape(14.dp)) { Text("Add another server") }
+        OutlinedButton(onClick = vm::logout,
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RoundedCornerShape(14.dp)) { Text("Sign out of current server") }
+        Text("Deleting a saved connection only removes its locally stored profile and encrypted token. It never changes NPMi's server configuration.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall)
     }
     removeId?.let { id ->
         AlertDialog(onDismissRequest = { removeId = null },
-            title = { Text("Remove this server?") },
-            text = { Text("The locally stored connection and encrypted token will be erased. NPMi itself is not modified.") },
-            confirmButton = { TextButton(onClick = { vm.deleteServer(id); removeId = null }) { Text("Remove server") } },
+            title = { Text("Remove saved server?") },
+            text = { Text("Erase this connection and its locally encrypted token? The actual NPMi server will not be changed.") },
+            confirmButton = {
+                TextButton(onClick = { vm.deleteServer(id); removeId = null }) { Text("Remove") }
+            },
             dismissButton = { TextButton(onClick = { removeId = null }) { Text("Cancel") } })
     }
 }
