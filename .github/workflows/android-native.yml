@@ -1,0 +1,103 @@
+name: NPMi Native Android CI
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-native.yml'
+  pull_request:
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-native.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK platform
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          if [[ -z "$SDKMANAGER" ]]; then
+            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -1)"
+          fi
+          test -n "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" 'platforms;android-37.2' 'build-tools;36.0.0'
+      - name: Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+      - name: Unit tests and build
+        run: gradle --no-daemon --stacktrace testDebugUnitTest assembleDebug
+      - name: Verify APK and version
+        run: |
+          set -euo pipefail
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          grep -q "versionName = \"$VERSION\"" app/build.gradle.kts
+          APK="app/build/outputs/versioned/NPMi-Android-v${VERSION}-debug.apk"
+          test -s "$APK"
+          "${ANDROID_HOME}/build-tools/36.0.0/apksigner" verify --verbose "$APK"
+          (cd app/build/outputs/versioned && sha256sum "NPMi-Android-v${VERSION}-debug.apk" > SHA256SUMS)
+      - name: Upload test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NPMi-Android-v0.1.0-alpha.1-debug
+          path: |
+            android/app/build/outputs/versioned/*.apk
+            android/app/build/outputs/versioned/SHA256SUMS
+          if-no-files-found: error
+
+      - name: Publish Android alpha APK on develop
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          TAG="android-v${VERSION}"
+          OUT="app/build/outputs/versioned"
+          APK="$OUT/NPMi-Android-v${VERSION}-debug.apk"
+          test -s "$APK"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; refusing to overwrite the same version."
+            exit 1
+          fi
+          cat > /tmp/npmi-android-notes.md <<EOF
+          # NPM Improved Android $VERSION
+
+          Native Kotlin / Jetpack Compose alpha for testing. **No WebView.**
+
+          Includes multi-server accounts, NPMi login and 2FA, Keystore encrypted tokens,
+          proxy host management, node-local traffic intelligence, and manual node-wide
+          IP/user-agent blocking with explicit confirmation.
+
+          Requires a compatible NPM Improved v1.6.11+ server for live host analytics.
+          This APK is **debug-signed** for tester evaluation. It is not a production
+          signing identity or Play Store release. Install only if you trust this build.
+
+          GeoIP, true per-host deny rules, alerts and full host editors are not yet implemented.
+          EOF
+          gh release create "$TAG" "$APK" "$OUT/SHA256SUMS" \
+            --title "NPM Improved Android $VERSION (alpha)" \
+            --notes-file /tmp/npmi-android-notes.md \
+            --target "$GITHUB_SHA" --prerelease
