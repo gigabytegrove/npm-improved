@@ -24,14 +24,15 @@ The control-plane endpoint `/api` returns a 302 redirect to `/api/`. The Android
 
 NPMi's default port-81 listener is HTTP, **including when addressed by DNS hostname rather than IP**. Entering a hostname without a scheme therefore previews `http://hostname:81/api/`, but saving it requires explicit confirmation because HTTP transmits credentials in plaintext. An explicit `https://` input is **never silently downgraded**; it requires a working TLS listener and matching certificate on that port.
 
-The app takes one server URL or IP and sends **all** management requests to that host's **port 81** under `/api`. It never assumes the normal website proxy port 443 is the API.
+The app takes one server URL or IP and defaults management requests to that host's **port 81** under `/api/`, unless an explicit port is supplied. It never assumes the normal website proxy port 443 is the API, but respects an explicitly entered `:443` if an HTTPS management gateway there forwards `/api/` to the backend on 81.
 
 Examples:
 - `https://proxy.example.com/` → `https://proxy.example.com:81/api/` (only with TLS on port 81)
 - `proxy.example.com` → `http://proxy.example.com:81/api/` (explicit HTTP acknowledgement)
 - `192.168.1.10` → `http://192.168.1.10:81/api/` (explicit acknowledgement of HTTP)
 - `http://proxy.example.com/` → `http://proxy.example.com:81/api/` (explicit acknowledgement)
-- `https://proxy.example.com:8443/` → `https://proxy.example.com:8443/api/` (explicit nonstandard management port)
+- `https://proxy.example.com:8443/` → `https://proxy.example.com:8443/api/`
+- `https://proxy.example.com:443/` → `https://proxy.example.com:443/api/` (requires a separately configured HTTPS gateway with the correct certificate) (explicit nonstandard management port)
 
 **Transport is not silently changed.** NPMi normally serves port 81 over **HTTP**. An HTTPS URL uses TLS on port 81 and requires an HTTPS-enabled management listener, rather than silently exposing credentials over HTTP. If HTTPS on port 81 isn't configured, enter an appropriate HTTP URL and explicitly acknowledge the cleartext risk, preferably only from a trusted LAN/VPN.
 

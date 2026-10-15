@@ -56,11 +56,9 @@ object NetworkPolicy {
                 "HTTP sends your password and session token without encryption. Acknowledge this risk, or use HTTPS on the management port."
             }
         }
-        // Default to 81 for EVERY hostname and IP. An explicitly supplied
-        // nonstandard management port remains possible for remapped instances.
-        val managementPort = if (uri.port == -1 || uri.port == 80 || uri.port == 443) {
-            DEFAULT_API_PORT
-        } else uri.port
+        // Default to 81 for every hostname and IP. Explicit ports are honored,
+        // including 443 when the operator has configured a TLS gateway.
+        val managementPort = if (uri.port == -1) DEFAULT_API_PORT else uri.port
         return Endpoint("$scheme://$hostname:$managementPort/", isHttp)
     }
 

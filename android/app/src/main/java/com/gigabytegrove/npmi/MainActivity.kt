@@ -130,7 +130,7 @@ private fun ConnectionHelp(isHttp: Boolean) {
             Text(if (isHttp)
                 "NPMi normally serves /api over HTTP on port 81. This connection is unencrypted. For access outside a trusted LAN or VPN, configure a secure management endpoint."
             else
-                "The app uses your entered hostname on port 81, not the website listener on 443. HTTPS requires TLS to be configured on that management port. NPMi's default port-81 listener is HTTP, not HTTPS.",
+                "Port 81 uses HTTP by default. An explicit HTTPS URL requires TLS on that port. If you have an HTTPS management gateway on port 443 that forwards /api/ to port 81, enter https://hostname:443 explicitly.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
