@@ -2,7 +2,7 @@
 
 Native Android app developed alongside the NPM Improved server, with no WebView, HTML-rendered UI, embedded server, or cloud proxy.
 
-**Status:** v0.1.0-alpha.5 development build (separate from the NPMi server v1.6.11 release).
+**Status:** v0.1.0-alpha.6 development build (separate from the NPMi server v1.6.11 release).
 
 ## Current scope
 
@@ -60,3 +60,14 @@ The GitHub Actions `NPMi Native Android CI` workflow builds and uploads a **vers
 ## Next implementation milestones
 
 Editable host forms, certificate renewal/management, deeper request filters, user-configurable alert delivery, offline data cache, authenticated automatic token refresh, richer material-design charts, tablet layouts, and source-verified geography/ASN after corresponding server capabilities are implemented. No Android feature may falsely claim source-limited blocking or verified bot identities until the server supports them.
+
+## Native design refresh (alpha.6)
+
+- Three primary areas: **Overview**, **Hosts**, **Security**. The servers/account workspace is accessible from the top bar instead of occupying a main tab.
+- Persistent node identification, in-context server switching, clear HTTP transport warning, and visible refresh state.
+- Operational overview with node identity, route availability, node-local traffic metrics, and clear entry points to host investigations.
+- Compact, searchable host list with status filters, clear empty states, and per-host action menus. Live configuration changes still require confirmation.
+- Live traffic organized into **Overview**, **Clients**, and **Requests** instead of an unbounded stack of unrelated panels. Existing recorded traffic, client signals, paths, and block preparation remain available.
+- More deliberate login with password reveal/hide, server selection, explicit progress, independent 2FA step, and inline connection feedback.
+- Consolidated saved server/account screen with switch, edit, remove and sign-out actions. Existing encrypted session storage and server API behavior are retained.
+- This is a visual/interaction update. Full host editing, per-host block rules, and GeoIP enrichment are not introduced by it.
