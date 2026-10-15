@@ -10,10 +10,10 @@ object ConnectionDiagnostics {
             .joinToString(" | ").lowercase()
         return when {
             "unrecognized_name" in message || "unrecognized name" in message ->
-                "TLS hostname was rejected by the server. This address may be reaching the proxy website listener on port 443, not NPMi's management API on port 81. Use Direct LAN with a private server IP, or configure an HTTPS management gateway that forwards /api to port 81."
+                "TLS hostname was rejected by the server. The app is contacting management port 81, but the TLS hostname was rejected. Check that port 81 is configured for HTTPS for this hostname. NPMi's default port 81 uses HTTP, not HTTPS."
             "wrong version number" in message || "protocol_version" in message ||
                 "unsupported or unrecognized ssl" in message ->
-                "The selected port does not appear to support HTTPS. NPMi's default port 81 uses HTTP, not TLS. Choose Direct LAN, or connect through a separately configured HTTPS management gateway."
+                "The selected port does not appear to support HTTPS. NPMi's default port 81 uses HTTP, not TLS. Use an explicit HTTP URL only on a trusted network (with the unencrypted-transport acknowledgement), or enable HTTPS on the management endpoint."
             failure is SSLException || "certificate" in message || "sslhandshake" in message ->
                 "Secure connection failed. Check the gateway's hostname, certificate, and whether it forwards /api to management port 81. Certificate verification remains enabled."
             "failed to connect" in message || "timeout" in message || "unreachable" in message ->

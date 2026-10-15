@@ -122,15 +122,15 @@ private fun PageIntro(eyebrow: String, title: String, subtitle: String) {
 }
 
 @Composable
-private fun ConnectionHelp(direct: Boolean) {
+private fun ConnectionHelp(isHttp: Boolean) {
     Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(16.dp)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(if (direct) "Management API · port 81" else "HTTPS gateway · management backend",
+            Text("NPM Improved management API · port 81",
                 style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            Text(if (direct)
-                "NPM Improved serves its management interface and /api over HTTP on port 81. Use a private LAN IP; your credentials are unencrypted in transit. Do not expose this directly to the internet."
+            Text(if (isHttp)
+                "NPMi normally serves /api over HTTP on port 81. This connection is unencrypted. For access outside a trusted LAN or VPN, configure a secure management endpoint."
             else
-                "Use a dedicated HTTPS management hostname that forwards /api and the Control Center to NPMi port 81. The ordinary proxy-host website listener on 443 is not automatically the admin API.",
+                "The app uses your entered hostname on port 81, not the website listener on 443. HTTPS requires TLS to be configured on that management port. NPMi's default port-81 listener is HTTP, not HTTPS.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -156,54 +156,51 @@ private fun ServerForm(vm: NpmViewModel) {
     val editing = vm.editing
     var name by remember(editing?.id) { mutableStateOf(editing?.name.orEmpty()) }
     var address by remember(editing?.id) { mutableStateOf(editing?.url.orEmpty()) }
-    var mode by remember(editing?.id) {
-        mutableStateOf(if (editing != null && !editing.insecureLan) "gateway" else "direct")
-    }
-    var confirmLocal by remember(editing?.id) { mutableStateOf(false) }
-    val direct = mode == "direct"
+    var confirmHttp by remember(editing?.id) { mutableStateOf(false) }
+    // Preview uses acknowledgement only to parse; saving still requires an explicit opt-in.
+    val preview = remember(address) { runCatching { NetworkPolicy.normalize(address, true) }.getOrNull() }
+    val isHttp = preview?.insecureLan == true
     Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState())
         .padding(horizontal = 20.dp, vertical = 26.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)) {
         BrandWordmark()
         PageIntro("Server connection",
-            if (editing == null) "Connect your server" else "Edit management connection",
-            "Connect directly to the NPMi control plane—not to a website served by the reverse proxy.")
+            if (editing == null) "Connect your server" else "Edit server connection",
+            "Enter your server hostname or IP once. The app automatically uses NPM Improved's management API on port 81.")
         ElevatedCard(shape = RoundedCornerShape(22.dp)) {
             Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text("Connection type", style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = direct,
-                        onClick = { if (!direct) { mode = "direct"; address = "" } },
-                        label = { Text("Direct LAN · :81") })
-                    FilterChip(selected = !direct,
-                        onClick = { if (direct) { mode = "gateway"; address = "" } },
-                        label = { Text("HTTPS gateway") })
-                }
                 OutlinedTextField(name, { name = it }, label = { Text("Connection name") },
                     placeholder = { Text("Home proxy") }, modifier = Modifier.fillMaxWidth(),
                     singleLine = true)
                 OutlinedTextField(address, { address = it },
-                    label = { Text(if (direct) "Private IP / management address" else "HTTPS management URL") },
-                    placeholder = { Text(if (direct) "192.168.1.20:81" else "https://admin.example.com") },
-                    supportingText = {
-                        Text(if (direct) "Port 81 is automatically added if omitted."
-                            else "Must proxy the management service on port 81.")
-                    },
+                    label = { Text("Server URL or IP address") },
+                    placeholder = { Text("https://proxy.example.com or 192.168.1.20") },
+                    supportingText = { Text("Management API port 81 is selected automatically.") },
                     modifier = Modifier.fillMaxWidth(), singleLine = true)
-                if (direct) {
+                if (preview != null) {
+                    Surface(color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("API ENDPOINT", style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(preview.baseUrl + "api",
+                                style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+                if (isHttp) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = confirmLocal, onCheckedChange = { confirmLocal = it })
-                        Text("I understand direct LAN HTTP is unencrypted",
+                        Checkbox(checked = confirmHttp, onCheckedChange = { confirmHttp = it })
+                        Text("I understand HTTP credentials are unencrypted",
                             style = MaterialTheme.typography.bodySmall)
                     }
                 }
                 if (vm.error.isNotBlank()) InlineIssue(vm.error)
-                Button(onClick = { vm.addServer(name, address, mode, confirmLocal) },
+                Button(onClick = { vm.addServer(name, address, confirmHttp) },
                     enabled = !vm.loading && name.isNotBlank() && address.isNotBlank(),
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = RoundedCornerShape(14.dp)) {
-                    Text(if (vm.loading) "Checking /api…" else "Verify API and save")
+                    Text(if (vm.loading) "Checking port 81…" else "Verify API and save")
                 }
                 if (vm.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
                 if (vm.profiles.isNotEmpty()) {
@@ -213,7 +210,7 @@ private fun ServerForm(vm: NpmViewModel) {
                 }
             }
         }
-        ConnectionHelp(direct)
+        ConnectionHelp(isHttp)
     }
 }
 
@@ -237,7 +234,7 @@ private fun SignIn(vm: NpmViewModel) {
                 Text(server.url, style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (server.insecureLan) {
-                    Text("Direct LAN connection · HTTP port 81",
+                    Text("HTTP management connection · port 81",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.error)
                 }
@@ -269,7 +266,7 @@ private fun SignIn(vm: NpmViewModel) {
                 if (vm.error.isNotBlank()) InlineIssue(vm.error)
                 OutlinedButton(onClick = { vm.editServer(server.id) },
                     modifier = Modifier.fillMaxWidth()) {
-                    Text("Change management address / port")
+                    Text("Edit server URL / IP")
                 }
             }
         }

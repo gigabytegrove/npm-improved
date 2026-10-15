@@ -69,17 +69,15 @@ class NpmViewModel(application: Application): AndroidViewModel(application) {
     }
 
     /**
-     * Probe /api before storing the connection. This avoids persisting a data-plane
-     * 443 endpoint in place of the port-81 management API, even if it answers HTTP.
+     * Probe the normalized port-81 /api endpoint before saving a profile.
      */
-    fun addServer(name: String, url: String, mode: String, acknowledgeHttp: Boolean) {
+    fun addServer(name: String, url: String, acknowledgeHttp: Boolean) {
         val editing = editingId
         val endpoint = try {
             require(name.isNotBlank() && name.length <= 80) {
                 "Give this server a name (up to 80 characters)."
             }
-            if (mode == "direct") NetworkPolicy.directLan(url, acknowledgeHttp)
-            else NetworkPolicy.secureGateway(url)
+            NetworkPolicy.normalize(url, acknowledgeHttp)
         } catch (e: Exception) {
             error = e.message ?: "Invalid management address."
             return

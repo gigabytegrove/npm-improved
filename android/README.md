@@ -16,14 +16,18 @@ Native Android app developed alongside the NPM Improved server, with no WebView,
 
 ## Management connection and port 81
 
-NPM Improved uses the standalone **control-plane server on port 81** for both the management interface and \`/api\`. By default, port 81 serves ordinary HTTP, not HTTPS. Proxy-host ports 80/443 are for published websites, and their default TLS server can reject unrecognized names before API authentication.
+The app takes one server URL or IP and sends **all** management requests to that host's **port 81** under \`/api\`. It never assumes the normal website proxy port 443 is the API.
 
-The app distinguishes two connection modes:
+Examples:
+- \`https://proxy.example.com/\` → \`https://proxy.example.com:81/api\`
+- \`proxy.example.com\` → \`https://proxy.example.com:81/api\`
+- \`192.168.1.10\` → \`http://192.168.1.10:81/api\` (explicit acknowledgement of HTTP)
+- \`http://proxy.example.com/\` → \`http://proxy.example.com:81/api\` (explicit acknowledgement)
+- \`https://proxy.example.com:8443/\` → \`https://proxy.example.com:8443/api\` (explicit nonstandard management port)
 
-1. **Direct LAN** (default): enter a private IPv4 address (e.g. \`192.168.1.10\`). The app connects to \`http://192.168.1.10:81/api\`. It warns that HTTP is unencrypted and refuses public addresses. An explicitly mapped alternate admin port may be entered.
-2. **HTTPS management gateway**: use a dedicated HTTPS hostname and configure the TLS reverse proxy to forward \`/api\` and the management UI to the NPMi control plane on port 81. The app uses the HTTPS URL exactly, without silently changing 443 to 81 or relaxing certificate validation.
+**Transport is not silently changed.** NPMi normally serves port 81 over **HTTP**. An HTTPS URL uses TLS on port 81 and requires an HTTPS-enabled management listener, rather than silently exposing credentials over HTTP. If HTTPS on port 81 isn't configured, enter an appropriate HTTP URL and explicitly acknowledge the cleartext risk, preferably only from a trusted LAN/VPN.
 
-The app probes \`GET /api\` to verify the NPMi API before saving new or edited server connections, and the login screen includes **Change management address / port** for existing profiles. TLS \`unrecognized_name\` alerts are explained as a potential management-vs-data-plane hostname mismatch rather than displayed as raw OpenSSL traces.
+The app probes \`GET /api\` on the resolved management port before saving a new or edited profile. Existing alpha profiles without an explicit management port are migrated to port 81 on app startup; their former-origin access tokens are removed to avoid sending credentials to an unexpected origin.
 
 ## Security
 
