@@ -2,7 +2,7 @@
 
 Native Android app developed alongside the NPM Improved server, with no WebView, HTML-rendered UI, embedded server, or cloud proxy.
 
-**Status:** v0.1.0-alpha.2 development build (separate from the NPMi server v1.6.11 release).
+**Status:** v0.1.0-alpha.4 development build (separate from the NPMi server v1.6.11 release).
 
 ## Current scope
 
@@ -13,6 +13,12 @@ Native Android app developed alongside the NPM Improved server, with no WebView,
 - 5/15/60-minute live event investigation from the v1.6.11 API, local-node identity, source IP, claimed user agents, paths, client signals and blocking preparation.
 - Existing **node-wide** IP/UA denial rules with deliberate administrator confirmation. Host-scoped blocking is **not yet** in the backend and is not simulated by the app.
 - Host enable/disable management on primary/standalone nodes with user confirmation.
+
+## Management API layout
+
+The control-plane HTTP server listens on port 81 by default and serves the native web Control Center and `/api/`. It forwards API requests internally to the Node.js backend at `http://127.0.0.1:3000`. Public website listeners 80 and 443 are separate from that API endpoint unless the owner deliberately sets up an HTTPS management reverse proxy.
+
+The control-plane endpoint `/api` returns a 302 redirect to `/api/`. The Android app intentionally does not follow redirects with credentials, so the health probe must request **`/api/` directly**. This regression is fixed in alpha.4, with automated tests for the API root, login, 2FA and traffic paths.
 
 ## Management connection and port 81
 
@@ -27,11 +33,11 @@ Examples:
 
 **Transport is not silently changed.** NPMi normally serves port 81 over **HTTP**. An HTTPS URL uses TLS on port 81 and requires an HTTPS-enabled management listener, rather than silently exposing credentials over HTTP. If HTTPS on port 81 isn't configured, enter an appropriate HTTP URL and explicitly acknowledge the cleartext risk, preferably only from a trusted LAN/VPN.
 
-The app probes \`GET /api\` on the resolved management port before saving a new or edited profile. Existing alpha profiles without an explicit management port are migrated to port 81 on app startup; their former-origin access tokens are removed to avoid sending credentials to an unexpected origin.
+The app probes \`GET /api/\` on the resolved management port before saving a new or edited profile. Existing alpha profiles without an explicit management port are migrated to port 81 on app startup; their former-origin access tokens are removed to avoid sending credentials to an unexpected origin.
 
 ## Security
 
-Prefer `https://` with a trusted certificate. For users managing LAN-only instances by IP, **HTTP is allowed only for RFC1918/private IPv4 or loopback**, and must be explicitly acknowledged when adding the server. HTTP transmits session and password traffic without TLS; it is not safe on untrusted networks. Public internet HTTP is rejected. TLS certificate verification is never disabled. Network redirects are disabled to prevent token forwarding to another origin.
+Prefer `https://` with a trusted certificate. For users managing LAN-only instances by IP, HTTP requires explicit unencrypted-transport acknowledgement before connection. HTTP transmits session and password traffic without TLS; it is not safe on untrusted networks. Public internet HTTP is rejected. TLS certificate verification is never disabled. Network redirects are disabled to prevent token forwarding to another origin.
 
 App data backups are disabled. The Android Keystore protects tokens at rest; sessions are separate per server. A 401 clears the active server's token only.
 

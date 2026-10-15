@@ -60,7 +60,7 @@ jobs:
       - name: Upload test APK
         uses: actions/upload-artifact@v4
         with:
-          name: NPMi-Android-v0.1.0-alpha.3-debug
+          name: NPMi-Android-v0.1.0-alpha.4-debug
           path: |
             android/app/build/outputs/versioned/*.apk
             android/app/build/outputs/versioned/SHA256SUMS
@@ -88,6 +88,7 @@ jobs:
           Native Kotlin / Jetpack Compose alpha for testing. **No WebView.**
 
           Includes one-field automatic management-port-81 targeting for any hostname/IP,
+          canonical /api/ health checks without credential-following redirects,
           actionable TLS diagnostics, multi-server accounts, NPMi login and 2FA, Keystore encrypted tokens,
           proxy host management, node-local traffic intelligence, and manual node-wide
           IP/user-agent blocking with explicit confirmation.
