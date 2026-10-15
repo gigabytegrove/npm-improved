@@ -157,71 +157,101 @@ private fun ServerForm(vm: NpmViewModel) {
     var name by remember(editing?.id) { mutableStateOf(editing?.name.orEmpty()) }
     var address by remember(editing?.id) { mutableStateOf(editing?.url.orEmpty()) }
     var confirmHttp by remember(editing?.id) { mutableStateOf(false) }
-    // Preview uses acknowledgement only to parse; saving still requires an explicit opt-in.
-    val preview = remember(address) { runCatching { NetworkPolicy.normalize(address, true) }.getOrNull() }
+    val preview = remember(address) {
+        runCatching { NetworkPolicy.normalize(address, true) }.getOrNull()
+    }
     val isHttp = preview?.insecureLan == true
     Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState())
-        .padding(horizontal = 20.dp, vertical = 26.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        .padding(horizontal = 20.dp, vertical = 22.dp),
+        verticalArrangement = Arrangement.spacedBy(17.dp)) {
         BrandWordmark()
-        PageIntro("Server connection",
-            if (editing == null) "Connect your server" else "Edit server connection",
-            "Enter your server hostname or IP once. The app automatically uses NPM Improved's management API on port 81.")
-        ElevatedCard(shape = RoundedCornerShape(22.dp)) {
-            Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                OutlinedTextField(name, { name = it }, label = { Text("Connection name") },
-                    placeholder = { Text("Home proxy") }, modifier = Modifier.fillMaxWidth(),
-                    singleLine = true)
+        PageIntro("Connection setup",
+            if (editing == null) "Add a management node" else "Edit management node",
+            "Identify your NPM Improved server, then verify its API before saving the connection.")
+        ElevatedCard(shape = RoundedCornerShape(20.dp)) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text("01  SERVER DETAILS",
+                    style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary)
+                OutlinedTextField(name, { name = it },
+                    label = { Text("Display name") },
+                    placeholder = { Text("Proxy 1") },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    shape = RoundedCornerShape(13.dp))
                 OutlinedTextField(address, { address = it },
-                    label = { Text("Server URL or IP address") },
-                    placeholder = { Text("https://proxy.example.com or 192.168.1.20") },
-                    supportingText = { Text("Management API port 81 is selected automatically.") },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true)
-                if (preview != null) {
-                    Surface(color = MaterialTheme.colorScheme.surfaceVariant,
-                        shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("API ENDPOINT", style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(preview.baseUrl + "api/",
-                                style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                        }
+                    label = { Text("Hostname or IP address") },
+                    placeholder = { Text("proxy1.example.com or 192.168.1.20") },
+                    supportingText = { Text("NPMi management requests use port 81 unless you specify another port.") },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    shape = RoundedCornerShape(13.dp))
+            }
+        }
+        ElevatedCard(shape = RoundedCornerShape(20.dp)) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text("02  VERIFY MANAGEMENT API",
+                    style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary)
+                Text("The app verifies the Control Center before saving anything.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Surface(shape = RoundedCornerShape(13.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant) {
+                    Column(Modifier.fillMaxWidth().padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("RESOLVED API ADDRESS",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(preview?.baseUrl?.plus("api/") ?: "Enter a valid server address above",
+                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.bodyMedium)
                     }
                 }
                 if (isHttp) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = confirmHttp, onCheckedChange = { confirmHttp = it })
-                        Text("I understand HTTP credentials are unencrypted",
-                            style = MaterialTheme.typography.bodySmall)
+                    Surface(shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.errorContainer) {
+                        Column(Modifier.fillMaxWidth().padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("HTTP management is not encrypted",
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodyMedium)
+                            Text("Use this only on a trusted LAN or VPN. Login credentials and API tokens otherwise travel in plaintext.",
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodySmall)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(checked = confirmHttp,
+                                    onCheckedChange = { confirmHttp = it })
+                                Text("I understand and accept this risk",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer)
+                            }
+                        }
                     }
                 }
-                if (vm.error.isNotBlank()) InlineIssue(vm.error)
                 if (!isHttp && address.isNotBlank()) {
                     TextButton(onClick = {
                         runCatching { NetworkPolicy.insecureAlternative(address) }
                             .onSuccess { address = it; confirmHttp = false; vm.clearError() }
-                    }, modifier = Modifier.fillMaxWidth()) {
-                        Text("Use default HTTP management connection (:81)")
-                    }
-                    Text("HTTP sends passwords and session tokens unencrypted. Only use it on a trusted LAN/VPN and acknowledge the risk before connecting.",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall)
+                    }) { Text("Switch to the default HTTP port-81 listener") }
                 }
+                if (vm.error.isNotBlank()) InlineIssue(vm.error)
                 Button(onClick = { vm.addServer(name, address, confirmHttp) },
-                    enabled = !vm.loading && name.isNotBlank() && address.isNotBlank(),
+                    enabled = !vm.loading && name.isNotBlank() && preview != null &&
+                        (!isHttp || confirmHttp),
                     modifier = Modifier.fillMaxWidth().height(52.dp),
-                    shape = RoundedCornerShape(14.dp)) {
-                    Text(if (vm.loading) "Checking port 81…" else "Verify API and save")
+                    shape = RoundedCornerShape(13.dp)) {
+                    Text(if (vm.loading) "Verifying NPMi API…" else "Verify and save connection")
                 }
                 if (vm.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-                if (vm.profiles.isNotEmpty()) {
-                    TextButton(onClick = vm::cancelServerEdit, modifier = Modifier.fillMaxWidth()) {
-                        Text("Cancel")
-                    }
-                }
             }
         }
-        ConnectionHelp(isHttp)
+        if (vm.profiles.isNotEmpty()) {
+            OutlinedButton(onClick = vm::cancelServerEdit,
+                modifier = Modifier.fillMaxWidth()) { Text("Cancel") }
+        }
+        Text("An HTTPS URL requires working TLS and a trusted certificate on its configured port. NPMi's default port 81 uses HTTP.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall)
     }
 }
 
