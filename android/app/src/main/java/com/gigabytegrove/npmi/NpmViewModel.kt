@@ -37,10 +37,8 @@ class NpmViewModel(application: Application): AndroidViewModel(application) {
     var challenge by mutableStateOf<String?>(null)
         private set
     var liveHostId by mutableStateOf<Int?>(null)
-        private set
     var liveMinutes by mutableStateOf(15)
     var live by mutableStateOf<LiveTraffic?>(null)
-        private set
     var liveError by mutableStateOf("")
         private set
     var blockDraft by mutableStateOf(BlockDraft("ip", ""))
