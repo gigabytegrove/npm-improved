@@ -25,7 +25,7 @@
 
 > **Current release**
 >
-> NPM Improved **v1.2.4** gives the Control Center a quieter, denser administration layout while preserving the existing workflows and feature set. The `develop` branch remains the active integration branch.
+> NPM Improved **v1.6.10** makes the Control Center more usable on mobile phones with responsive host cards, reachable management actions, mobile navigation, and scrollable host editors. The `develop` branch remains the active integration branch.
 
 ## What is NPM Improved?
 
