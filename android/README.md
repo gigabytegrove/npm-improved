@@ -24,7 +24,7 @@ Analytics and security operations require the server's own permissions. NPMX rea
 
 ## Build
 
-Requires JDK 17, Gradle 9.4 and Android SDK platform 37.
+Requires JDK 17, Gradle 9.6 and Android SDK platform 37.
 
 ```bash
 cd android
