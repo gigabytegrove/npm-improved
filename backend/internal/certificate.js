@@ -28,6 +28,7 @@ import userModel from "../models/user.js";
 import internalAuditLog from "./audit-log.js";
 import internalHost from "./host.js";
 import internalNginx from "./nginx.js";
+import { getServingNodeHostname } from "../lib/node-identity.js";
 
 const letsencryptConfig = "/etc/letsencrypt.ini";
 const certbotCommand = "certbot";
@@ -95,6 +96,11 @@ const internalCertificate = {
 			]);
 
 			for (const certificate of certificates) {
+				// In a shared NPMX database, a node only holds its own ACME
+				// management cert files. Never renew another physical node's
+				// hostname certificate through the wrong instance.
+				if (certificate.meta?.management_node &&
+					certificate.meta.management_node !== getServingNodeHostname()?.toLowerCase()) continue;
 				if ((usageMap.get(certificate.id) || 0) === 0) {
 					logger.info(`Skipping renewal for unused Cert #${certificate.id}`);
 					continue;
