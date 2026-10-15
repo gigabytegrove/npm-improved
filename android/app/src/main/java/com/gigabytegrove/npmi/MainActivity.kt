@@ -231,64 +231,110 @@ private fun SignIn(vm: NpmViewModel) {
     var email by remember(server.id) { mutableStateOf("") }
     var password by remember(server.id) { mutableStateOf("") }
     var code by remember(server.id) { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+    var serverSwitcher by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState())
-        .padding(horizontal = 20.dp, vertical = 26.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        .padding(horizontal = 20.dp, vertical = 22.dp),
+        verticalArrangement = Arrangement.spacedBy(17.dp)) {
         BrandWordmark()
-        PageIntro("Secure management",
-            if (vm.challenge == null) "Welcome back" else "Verify your identity",
-            if (vm.challenge == null) "Sign in with your existing NPM Improved administrator account."
-            else "Use your authenticator's six-digit code or an eight-character recovery code.")
-        ElevatedCard(shape = RoundedCornerShape(22.dp)) {
-            Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text(server.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text(server.url, style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (server.insecureLan) {
-                    Text("HTTP management connection · port 81",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error)
+        PageIntro("Management login",
+            if (vm.challenge == null) "Welcome back" else "Two-factor verification",
+            if (vm.challenge == null) "Sign in to manage your reverse proxy securely."
+                else "Enter the verification code from your authenticator or a recovery code.")
+        ElevatedCard(shape = RoundedCornerShape(20.dp)) {
+            Column(Modifier.fillMaxWidth().padding(17.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
+                Text("CONNECTING TO", style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(38.dp).background(MaterialTheme.colorScheme.primaryContainer,
+                        RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Dns, contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary)
+                    }
+                    Spacer(Modifier.width(11.dp))
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(server.name, style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold)
+                        Text(server.url, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Box {
+                        TextButton(onClick = { serverSwitcher = true }) { Text("Change") }
+                        DropdownMenu(expanded = serverSwitcher, onDismissRequest = { serverSwitcher = false }) {
+                            vm.profiles.forEach { profile ->
+                                DropdownMenuItem(text = { Text(profile.name) },
+                                    onClick = { serverSwitcher = false; vm.switch(profile.id) })
+                            }
+                            HorizontalDivider()
+                            DropdownMenuItem(text = { Text("Add another server") },
+                                onClick = { serverSwitcher = false; vm.addingServer = true })
+                        }
+                    }
                 }
-                HorizontalDivider()
+                if (server.insecureLan) {
+                    Surface(shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.errorContainer) {
+                        Text("HTTP connection · Credentials are unencrypted. Use a trusted LAN/VPN only.",
+                            modifier = Modifier.padding(12.dp),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 if (vm.challenge == null) {
-                    OutlinedTextField(email, { email = it }, label = { Text("Account email") },
+                    Text("Administrator account", style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold)
+                    OutlinedTextField(email, { email = it },
+                        label = { Text("Email address") },
                         placeholder = { Text("admin@example.com") },
-                        modifier = Modifier.fillMaxWidth(), singleLine = true)
-                    OutlinedTextField(password, { password = it }, label = { Text("Password") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth(), singleLine = true)
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        modifier = Modifier.fillMaxWidth(), singleLine = true,
+                        shape = RoundedCornerShape(13.dp))
+                    OutlinedTextField(password, { password = it },
+                        label = { Text("Password") },
+                        visualTransformation = if (passwordVisible)
+                            androidx.compose.ui.text.input.VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            TextButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Text(if (passwordVisible) "Hide" else "Show")
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true,
+                        shape = RoundedCornerShape(13.dp))
                     Button(onClick = {
                         vm.signIn(email, password)
                         password = ""
+                        passwordVisible = false
                     }, enabled = !vm.loading && email.isNotBlank() && password.isNotBlank(),
                         modifier = Modifier.fillMaxWidth().height(52.dp),
-                        shape = RoundedCornerShape(14.dp)) { Text("Sign in to NPMi") }
+                        shape = RoundedCornerShape(13.dp)) { Text("Sign in") }
                 } else {
-                    OutlinedTextField(code, { code = it }, label = { Text("Authentication code") },
+                    OutlinedTextField(code, { code = it },
+                        label = { Text("Authenticator or recovery code") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-                        modifier = Modifier.fillMaxWidth(), singleLine = true)
+                        modifier = Modifier.fillMaxWidth(), singleLine = true,
+                        shape = RoundedCornerShape(13.dp))
                     Button(onClick = { vm.verifyTwoFactor(code); code = "" },
                         enabled = !vm.loading && code.isNotBlank(),
                         modifier = Modifier.fillMaxWidth().height(52.dp),
-                        shape = RoundedCornerShape(14.dp)) { Text("Verify and continue") }
-                    TextButton(onClick = vm::cancelChallenge) { Text("Back to password") }
+                        shape = RoundedCornerShape(13.dp)) { Text("Verify and continue") }
+                    TextButton(onClick = vm::cancelChallenge,
+                        modifier = Modifier.fillMaxWidth()) { Text("Back to sign in") }
                 }
-                if (vm.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                if (vm.loading) {
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                    Text("Contacting your NPM Improved management API…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 if (vm.error.isNotBlank()) InlineIssue(vm.error)
-                OutlinedButton(onClick = { vm.editServer(server.id) },
-                    modifier = Modifier.fillMaxWidth()) {
-                    Text("Change API address / HTTP or HTTPS")
-                }
             }
         }
-        ConnectionHelp(server.insecureLan)
-        TextButton(onClick = { vm.addingServer = true },
-            modifier = Modifier.fillMaxWidth()) { Text("Connect another server") }
-        vm.profiles.filter { it.id != server.id }.forEach { other ->
-            OutlinedButton(onClick = { vm.switch(other.id) }, modifier = Modifier.fillMaxWidth()) {
-                Text("Switch to " + other.name)
-            }
-        }
+        OutlinedButton(onClick = { vm.editServer(server.id) },
+            modifier = Modifier.fillMaxWidth()) { Text("Edit management connection") }
+        Text("Your password is only sent to your selected server and is never saved by the app.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
