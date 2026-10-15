@@ -1,5 +1,5 @@
 import express from "express";
-import { getManagementCertificateStatus, requestManagementCertificate, releaseManagementCertificate } from "../lib/management-hostname-certificate.js";
+import { getManagementCertificateStatus, requestManagementCertificate, releaseManagementCertificate, setManagementHttps } from "../lib/management-hostname-certificate.js";
 import internalSetting from "../internal/setting.js";
 import jwtdecode from "../lib/express/jwt-decode.js";
 import apiValidator from "../lib/validator/api.js";
@@ -58,6 +58,16 @@ router.route("/management-certificate")
             }
             req.setTimeout(900000);
             res.status(200).send(await requestManagementCertificate(res.locals.access, req.body.hostname));
+        } catch (err) { next(err); }
+    })
+    .put(jwtdecode(), async (req, res, next) => {
+        try {
+            if (!req.body || typeof req.body.enabled !== "boolean" ||
+                Object.keys(req.body).some(key => key !== "enabled")) {
+                res.status(400).json({ error: { code: 400, message: "Specify enabled as true or false." } });
+                return;
+            }
+            res.status(200).send(await setManagementHttps(res.locals.access, req.body.enabled));
         } catch (err) { next(err); }
     })
     .delete(jwtdecode(), async (_req, res, next) => {
