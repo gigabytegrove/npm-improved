@@ -163,7 +163,7 @@ export function getHostTrafficIntelligence(hostId, minutes = 15) {
     timeline, paths, browsers, suspicious_ips: readCandidates(db, "client_ip", hostId, startMinute, minutes),
     suspicious_agents: readCandidates(db, "user_agent", hostId, startMinute, minutes),
     recent,
-    geography: { available: false, reason: "No local GeoIP enrichment database is configured. Geography cannot be inferred reliably from IP alone." },
+    geography: { available: false, reason: "Geographic enrichment is not yet implemented. Country, region, city and ASN cannot be inferred reliably from the recorded request fields." },
     limitations: {
       attribution: "Source IP addresses may represent shared networks, VPNs, or gateways. Browser and crawler names are unverified user-agent claims.",
       detection: "The signals below are investigative indicators, not proof of malicious intent. No action is automated.",
