@@ -12,7 +12,7 @@ import {
 	IconShieldLock,
 	IconUsers,
 } from "@tabler/icons-react";
-import React from "react";
+import React, { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { HasPermission } from "src/components";
 import { T } from "src/locale";
@@ -188,19 +188,28 @@ function MenuGroup({
 	);
 }
 
-export function SiteMenu() {
+export function SiteMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
 	const navigate = useNavigate();
 
-	const closeMenu = () => {
-		const menu = document.querySelector<HTMLElement>("#navbar-menu");
-		const toggler = document.querySelector<HTMLElement>("[data-npmi-menu-toggle]");
-		if (window.innerWidth < 768 && menu?.classList.contains("show")) {
-			toggler?.click();
-		}
-	};
+	const closeMenu = onClose;
+
+	useEffect(() => {
+		if (!open) return;
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") onClose();
+		};
+		document.addEventListener("keydown", onKeyDown);
+		document.body.classList.add("npmi-mobile-nav-open");
+		return () => {
+			document.removeEventListener("keydown", onKeyDown);
+			document.body.classList.remove("npmi-mobile-nav-open");
+		};
+	}, [open, onClose]);
 
 	return (
-		<aside id="navbar-menu" className={`${styles.sidebar} collapse d-md-flex`}>
+		<>
+			{open ? <button type="button" className={styles.backdrop} onClick={onClose} aria-label="Close navigation" /> : null}
+			<aside id="navbar-menu" className={`${styles.sidebar} ${open ? styles.mobileOpen : ""}`}>
 			<div className={styles.inner}>
 				<a
 					href="/"
@@ -236,6 +245,7 @@ export function SiteMenu() {
 					<div className={styles.footerLabel}>NPM Improved</div>
 				</div>
 			</div>
-		</aside>
+			</aside>
+		</>
 	);
 }

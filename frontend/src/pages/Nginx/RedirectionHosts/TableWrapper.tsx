@@ -80,15 +80,13 @@ export default function TableWrapper() {
 									<IconHelp size={20} />
 								</Button>
 								<HasPermission section={REDIRECTION_HOSTS} permission={MANAGE} hideError>
-									{data?.length ? (
-										<Button
+									<Button
 											size="sm"
 											className="btn-yellow"
 											onClick={() => showRedirectionHostModal("new")}
 										>
 											<T id="object.add" tData={{ object: "redirection-host" }} />
 										</Button>
-									) : null}
 								</HasPermission>
 							</div>
 						</div>

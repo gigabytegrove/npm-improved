@@ -78,11 +78,9 @@ export default function TableWrapper() {
 									<IconHelp size={20} />
 								</Button>
 								<HasPermission section={DEAD_HOSTS} permission={MANAGE} hideError>
-									{data?.length ? (
-										<Button size="sm" className="btn-red" onClick={() => showDeadHostModal("new")}>
+									<Button size="sm" className="btn-red" onClick={() => showDeadHostModal("new")}>
 											<T id="object.add" tData={{ object: "dead-host" }} />
 										</Button>
-									) : null}
 								</HasPermission>
 							</div>
 						</div>
