@@ -147,6 +147,16 @@ const internalCertificate = {
 				usageMap.set(certificateId, (usageMap.get(certificateId) || 0) + count);
 			}
 		}
+		// Reserved node-management hostname certificates remain in use even when
+		// no proxy host references them. Retain and automatically renew them.
+		const managementRows = await certificateModel.query()
+			.select("id", "meta", "domain_names").where("is_deleted", 0);
+		for (const row of managementRows) {
+			if (row.meta?.management_node && row.meta?.management_hostname &&
+				row.domain_names?.includes(row.meta.management_hostname)) {
+				usageMap.set(row.id, (usageMap.get(row.id) || 0) + 1);
+			}
+		}
 		return usageMap;
 	},
 
@@ -589,7 +599,7 @@ const internalCertificate = {
 		const usageCount = usageMap.get(row.id) || 0;
 		if (usageCount > 0) {
 			throw new error.ValidationError(
-				`Certificate is still referenced by ${usageCount} host${usageCount === 1 ? "" : "s"}`,
+				`Certificate is still referenced by ${usageCount} host or management-node reservation${usageCount === 1 ? "" : "s"}`,
 			);
 		}
 
