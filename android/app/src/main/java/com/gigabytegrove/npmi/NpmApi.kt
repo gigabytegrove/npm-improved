@@ -15,6 +15,21 @@ import java.util.concurrent.TimeUnit
 
 class ApiFailure(val statusCode: Int, message: String): IOException(message)
 
+/**
+ * Control-plane /api redirects to /api/. Build the canonical endpoint
+ * directly; do not follow HTTP redirects with authentication credentials.
+ */
+internal fun managementApiUrl(
+    baseUrl: String, path: String, query: Map<String, String> = emptyMap()
+): HttpUrl {
+    val builder = baseUrl.toHttpUrl().newBuilder().addPathSegment("api")
+    val parts = path.trim('/').split('/').filter(String::isNotEmpty)
+    if (parts.isEmpty()) builder.addPathSegment("")
+    else parts.forEach { builder.addPathSegment(it) }
+    query.forEach { (name, value) -> builder.addQueryParameter(name, value) }
+    return builder.build()
+}
+
 /** Never follow redirects with bearer credentials or weaken TLS verification. */
 class NpmApi(private val profile: ServerProfile, private val auth: () -> String?) {
     private val client = OkHttpClient.Builder()
@@ -23,12 +38,8 @@ class NpmApi(private val profile: ServerProfile, private val auth: () -> String?
         .readTimeout(20, TimeUnit.SECONDS)
         .build()
 
-    private fun endpoint(path: String, query: Map<String, String> = emptyMap()): HttpUrl {
-        val builder = profile.url.toHttpUrl().newBuilder().addPathSegment("api")
-        path.trim('/').split('/').filter(String::isNotEmpty).forEach { builder.addPathSegment(it) }
-        query.forEach { (name, value) -> builder.addQueryParameter(name, value) }
-        return builder.build()
-    }
+    private fun endpoint(path: String, query: Map<String, String> = emptyMap()): HttpUrl =
+        managementApiUrl(profile.url, path, query)
 
     private suspend fun request(
         method: String, path: String, body: JSONObject? = null,
