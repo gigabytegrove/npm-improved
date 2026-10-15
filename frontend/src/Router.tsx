@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import {
 	ErrorNotFound,
@@ -49,6 +49,7 @@ function Router() {
 	const health = useHealth();
 	const { authenticated, logout } = useAuthState();
 	const session = useUser("me", { enabled: authenticated, retry: false });
+	const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
 	// Losing authentication must show Login immediately, even while the
 	// health check is loading or the updater is restarting the backend.
@@ -96,9 +97,9 @@ function Router() {
 		<BrowserRouter>
 			<Page>
 				<div className="npmi-shell">
-					<SiteMenu />
+					<SiteMenu open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
 					<div className="npmi-workspace">
-						<SiteHeader />
+						<SiteHeader menuOpen={mobileMenuOpen} onToggleMenu={() => setMobileMenuOpen((open) => !open)} />
 						<SiteContainer>
 							<Suspense fallback={<LoadingPage noLogo />}>
 								<Routes>

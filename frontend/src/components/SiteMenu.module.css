@@ -198,3 +198,25 @@ a.brand:focus-visible {
 	outline: 2px solid #38bdf8;
 	outline-offset: 2px;
 }
+
+/* React-controlled mobile navigation does not rely on Bootstrap collapse. */
+.backdrop { display: none; }
+@media (max-width: 767.98px) {
+	.sidebar {
+		transform: translateX(-105%);
+		visibility: hidden;
+		pointer-events: none;
+		transition: transform 180ms ease, visibility 180ms ease;
+		overscroll-behavior: contain;
+	}
+	.mobileOpen { transform: translateX(0); visibility: visible; pointer-events: auto; }
+	.backdrop {
+		display: block;
+		position: fixed;
+		inset: 60px 0 0;
+		z-index: 1045;
+		border: 0;
+		background: rgba(2, 8, 23, 0.53);
+	}
+}
+@media (prefers-reduced-motion: reduce) { .sidebar { transition: none; } }
