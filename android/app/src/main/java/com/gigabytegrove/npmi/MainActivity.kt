@@ -130,7 +130,7 @@ private fun ConnectionHelp(isHttp: Boolean) {
             Text(if (isHttp)
                 "NPMi normally serves /api over HTTP on port 81. This connection is unencrypted. For access outside a trusted LAN or VPN, configure a secure management endpoint."
             else
-                "The app uses your entered hostname on port 81, not the website listener on 443. HTTPS requires TLS to be configured on that management port. NPMi's default port-81 listener is HTTP, not HTTPS.",
+                "Port 81 uses HTTP by default. An explicit HTTPS URL requires TLS on that port. If you have an HTTPS management gateway on port 443 that forwards /api/ to port 81, enter https://hostname:443 explicitly.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -183,7 +183,7 @@ private fun ServerForm(vm: NpmViewModel) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text("API ENDPOINT", style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(preview.baseUrl + "api",
+                            Text(preview.baseUrl + "api/",
                                 style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                         }
                     }
@@ -196,6 +196,17 @@ private fun ServerForm(vm: NpmViewModel) {
                     }
                 }
                 if (vm.error.isNotBlank()) InlineIssue(vm.error)
+                if (!isHttp && address.isNotBlank()) {
+                    TextButton(onClick = {
+                        runCatching { NetworkPolicy.insecureAlternative(address) }
+                            .onSuccess { address = it; confirmHttp = false; vm.clearError() }
+                    }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Use default HTTP management connection (:81)")
+                    }
+                    Text("HTTP sends passwords and session tokens unencrypted. Only use it on a trusted LAN/VPN and acknowledge the risk before connecting.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall)
+                }
                 Button(onClick = { vm.addServer(name, address, confirmHttp) },
                     enabled = !vm.loading && name.isNotBlank() && address.isNotBlank(),
                     modifier = Modifier.fillMaxWidth().height(52.dp),
@@ -266,7 +277,7 @@ private fun SignIn(vm: NpmViewModel) {
                 if (vm.error.isNotBlank()) InlineIssue(vm.error)
                 OutlinedButton(onClick = { vm.editServer(server.id) },
                     modifier = Modifier.fillMaxWidth()) {
-                    Text("Edit server URL / IP")
+                    Text("Change API address / HTTP or HTTPS")
                 }
             }
         }

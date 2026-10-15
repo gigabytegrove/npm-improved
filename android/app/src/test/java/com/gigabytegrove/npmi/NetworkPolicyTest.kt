@@ -11,8 +11,8 @@ class NetworkPolicyTest {
         assertEquals("https://proxy.gigabytegrove.net:81/",
             NetworkPolicy.normalize("https://proxy.gigabytegrove.net/", false).baseUrl)
         assertEquals("https://proxy.gigabytegrove.net:81/",
-            NetworkPolicy.normalize("proxy.gigabytegrove.net", false).baseUrl)
-        assertEquals("https://proxy.example.org:81/",
+            NetworkPolicy.normalize("https://proxy.gigabytegrove.net", false).baseUrl)
+        assertEquals("https://proxy.example.org:443/",
             NetworkPolicy.normalize("https://proxy.example.org:443/api", false).baseUrl)
         assertEquals("http://192.168.20.5:81/",
             NetworkPolicy.normalize("192.168.20.5", true).baseUrl)
@@ -21,10 +21,23 @@ class NetworkPolicyTest {
     }
 
     @Test fun deliberateAlternatePublishedManagementPortIsSupported() {
+        assertEquals("https://proxy1.gigabytegrove.net:443/",
+            NetworkPolicy.normalize("https://proxy1.gigabytegrove.net:443/", false).baseUrl)
         assertEquals("https://proxy.example.org:8443/",
             NetworkPolicy.normalize("https://proxy.example.org:8443/api", false).baseUrl)
         assertEquals("http://192.168.10.1:8181/",
             NetworkPolicy.normalize("192.168.10.1:8181", true).baseUrl)
+    }
+
+    @Test fun hostnameDefaultsToControlPlaneHttpWithExplicitConsent() {
+        assertEquals("http://proxy1.gigabytegrove.net:81/",
+            NetworkPolicy.normalize("proxy1.gigabytegrove.net", true).baseUrl)
+        try {
+            NetworkPolicy.normalize("proxy1.gigabytegrove.net", false)
+            fail("HTTP must require explicit consent")
+        } catch (_: IllegalArgumentException) { }
+        assertEquals("http://proxy1.gigabytegrove.net:81",
+            NetworkPolicy.insecureAlternative("https://proxy1.gigabytegrove.net"))
     }
 
     @Test fun noSilentTlsDowngrades() {
@@ -36,7 +49,7 @@ class NetworkPolicyTest {
             fail("Cleartext requires an explicit acknowledgement")
         } catch (_: IllegalArgumentException) { }
         assertEquals("http://proxy.gigabytegrove.net:81/",
-            NetworkPolicy.normalize("http://proxy.gigabytegrove.net", true).baseUrl)
+            NetworkPolicy.normalize("proxy.gigabytegrove.net", true).baseUrl)
     }
 
     private fun rejects(url: String) {
