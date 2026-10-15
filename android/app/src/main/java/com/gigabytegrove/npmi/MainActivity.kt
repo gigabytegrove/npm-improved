@@ -183,7 +183,7 @@ private fun ServerForm(vm: NpmViewModel) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text("API ENDPOINT", style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(preview.baseUrl + "api",
+                            Text(preview.baseUrl + "api/",
                                 style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                         }
                     }
