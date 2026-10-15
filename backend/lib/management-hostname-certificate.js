@@ -100,3 +100,21 @@ export async function requestManagementCertificate(access, hostname) {
         pending.delete(node);
     }
 }
+
+/** Forget only this node's optional designation; retain the issued certificate. */
+export async function releaseManagementCertificate(access) {
+    await access.can("settings:get");
+    const node = getServingNodeHostname()?.toLowerCase();
+    if (!node) throw new errs.ValidationError("Physical node hostname unavailable.");
+    if (pending.has(node)) {
+        throw new errs.ValidationError("Wait until the certificate request finishes.");
+    }
+    const certificate = await boundCertificate(node);
+    if (!certificate) return { released: true, certificateRetained: true };
+    await access.can("certificates:update", { id: certificate.id });
+    const meta = { ...certificate.meta };
+    delete meta.management_node;
+    delete meta.management_hostname;
+    await certificateModel.query().patchAndFetchById(certificate.id, { meta });
+    return { released: true, certificateRetained: true };
+}

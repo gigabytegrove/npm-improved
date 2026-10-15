@@ -33,6 +33,7 @@ export default function ManagementCertificateSettings() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
+    const [confirmRelease, setConfirmRelease] = useState(false);
 
     const load = async (updateInput = false) => {
         const response = (await api.get({ url: "/settings/management-certificate" })) as CertificateStatus;
@@ -77,6 +78,19 @@ export default function ManagementCertificateSettings() {
         } catch (err) {
             setError(err instanceof Error ? err.message : "Certificate request failed.");
         } finally { setBusy(false); }
+    }
+
+    async function releaseCertificate() {
+        setBusy(true);
+        setError("");
+        setSuccess("");
+        try {
+            await api.del({ url: "/settings/management-certificate" });
+            setConfirmRelease(false);
+            await load(true);
+            setSuccess("The optional management reservation was removed. The certificate remains in Certificates.");
+        } catch (err) { setError(err instanceof Error ? err.message : "Cannot release certificate."); }
+        finally { setBusy(false); }
     }
 
     if (loading) return <div className="card-body"><Loading noLogo /></div>;
@@ -143,6 +157,27 @@ export default function ManagementCertificateSettings() {
                     on port 81 or 443, switch the Go management listener, or modify proxy-host routes.
                     The certificate is retained for standard renewal. HTTPS termination must be configured separately.
                 </Alert>
+                {assigned && (
+                    <div className="border rounded p-3 mb-3">
+                        <div className="fw-semibold mb-1">Change this optional assignment</div>
+                        <p className="text-secondary small mb-2">
+                            Releasing only removes the node association. The actual SSL certificate is retained
+                            in Certificates and is not revoked or deleted.
+                        </p>
+                        {!confirmRelease ? (
+                            <button type="button" className="btn btn-outline-secondary btn-sm" disabled={busy}
+                                onClick={() => setConfirmRelease(true)}>Release management certificate assignment</button>
+                        ) : (
+                            <div className="d-flex flex-wrap align-items-center gap-2">
+                                <span className="small">Keep the certificate but release its management assignment?</span>
+                                <button type="button" className="btn btn-danger btn-sm" disabled={busy}
+                                    onClick={releaseCertificate}>Confirm release</button>
+                                <button type="button" className="btn btn-outline-secondary btn-sm" disabled={busy}
+                                    onClick={() => setConfirmRelease(false)}>Cancel</button>
+                            </div>
+                        )}
+                    </div>
+                )}
                 {!status?.available && (
                     <Alert variant="warning">
                         The physical server hostname is unavailable. Configure NPM_NODE_HOSTNAME

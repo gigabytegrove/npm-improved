@@ -1,5 +1,5 @@
 import express from "express";
-import { getManagementCertificateStatus, requestManagementCertificate } from "../lib/management-hostname-certificate.js";
+import { getManagementCertificateStatus, requestManagementCertificate, releaseManagementCertificate } from "../lib/management-hostname-certificate.js";
 import internalSetting from "../internal/setting.js";
 import jwtdecode from "../lib/express/jwt-decode.js";
 import apiValidator from "../lib/validator/api.js";
@@ -59,6 +59,10 @@ router.route("/management-certificate")
             req.setTimeout(900000);
             res.status(200).send(await requestManagementCertificate(res.locals.access, req.body.hostname));
         } catch (err) { next(err); }
+    })
+    .delete(jwtdecode(), async (_req, res, next) => {
+        try { res.status(200).send(await releaseManagementCertificate(res.locals.access)); }
+        catch (err) { next(err); }
     });
 
 /**

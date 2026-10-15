@@ -1002,7 +1002,7 @@ const internalInstanceSync = {
 			if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
 			// Per-node certificate issuance modifies only this node's ACME assets.
 			// It does not change NPMX-synchronized proxy configuration.
-			if (req.method === "POST" && req.path === "/settings/management-certificate") return next();
+			if (["POST", "DELETE"].includes(req.method) && req.path === "/settings/management-certificate") return next();
 			const prefixes = [
 				"/nginx/", "/settings", "/users", "/disaster-recovery", "/config-history",
 			];
