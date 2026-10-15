@@ -122,17 +122,26 @@ export function getHostTrafficIntelligence(hostId, minutes = 15) {
     label: row.label, requests: Number(row.requests),
     errors: Number(row.errors), probes: Number(row.probes),
   }));
-  const agents = db.prepare(
-    "SELECT user_agent AS value, COUNT(*) AS requests FROM analytics_event " +
-    "WHERE host_id=? AND occurred_at>=? GROUP BY user_agent ORDER BY requests DESC LIMIT 1000"
-  ).all(...args);
-  const browsersMap = new Map();
-  for (const row of agents) {
-    const browser = classifyBrowserFamily(row.value);
-    browsersMap.set(browser, (browsersMap.get(browser) || 0) + Number(row.requests));
-  }
-  const browsers = [...browsersMap.entries()].map(([label, requests]) => ({ label, requests }))
-    .sort((a, b) => b.requests - a.requests);
+  // Classify every retained event in SQLite rather than grouping only the
+  // 1,000 most common full UA strings (which would undercount noisy clients).
+  const browserCase = [
+    "CASE WHEN user_agent IS NULL OR trim(user_agent) = '' THEN 'Unknown'",
+    "WHEN lower(user_agent) LIKE '%bot%' OR lower(user_agent) LIKE '%crawler%' OR lower(user_agent) LIKE '%spider%' OR lower(user_agent) LIKE '%slurp%' OR lower(user_agent) LIKE '%headless%' THEN 'Claimed bot / crawler'",
+    "WHEN lower(user_agent) LIKE '%edg/%' OR lower(user_agent) LIKE '%edgios/%' OR lower(user_agent) LIKE '%edga/%' THEN 'Edge (claimed)'",
+    "WHEN lower(user_agent) LIKE '%opr/%' OR lower(user_agent) LIKE '%opera/%' THEN 'Opera (claimed)'",
+    "WHEN lower(user_agent) LIKE '%samsungbrowser/%' THEN 'Samsung Internet (claimed)'",
+    "WHEN lower(user_agent) LIKE '%firefox/%' OR lower(user_agent) LIKE '%fxios/%' THEN 'Firefox (claimed)'",
+    "WHEN lower(user_agent) LIKE '%chrome/%' OR lower(user_agent) LIKE '%crios/%' THEN 'Chrome (claimed)'",
+    "WHEN lower(user_agent) LIKE '%safari/%' THEN 'Safari (claimed)'",
+    "WHEN lower(user_agent) LIKE '%trident/%' OR lower(user_agent) LIKE '%msie %' THEN 'Internet Explorer (claimed)'",
+    "WHEN lower(user_agent) LIKE '%curl/%' OR lower(user_agent) LIKE '%wget/%' OR lower(user_agent) LIKE '%python-requests%' OR lower(user_agent) LIKE '%go-http-client%' OR lower(user_agent) LIKE '%scrapy%' OR lower(user_agent) LIKE '%httpclient%' THEN 'Script / API client (claimed)'",
+    "ELSE 'Other / unknown' END",
+  ].join(" ");
+  const browsers = db.prepare(
+    "SELECT " + browserCase + " AS label, COUNT(*) AS requests " +
+    "FROM analytics_event WHERE host_id=? AND occurred_at>=? " +
+    "GROUP BY label ORDER BY requests DESC"
+  ).all(...args).map((row) => ({ label: row.label, requests: Number(row.requests) }));
   const recent = db.prepare(
     "SELECT id,occurred_at,occurred_at_ms,method,path,status,client_ip,user_agent,bot_class," +
     "block_reason,bytes_out,request_id,connection_id FROM analytics_event " +
