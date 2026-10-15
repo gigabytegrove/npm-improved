@@ -43,6 +43,7 @@ export default function HostDetailPage() {
     </div>
     {detail.error?<div className="alert alert-danger">{detail.error.message}</div>:null}
     {!d?<div className="card card-body text-secondary">Loading routing source analytics…</div>:<>
+      <div className="mb-3"><Link className="btn btn-outline-primary" to={"/analytics/hosts/live?source=" + source}>Inspect live traffic and suspicious clients</Link></div>
       <div className="row row-cards mb-3">
         <SummaryCard label="Requests" value={formatNumber(d.requests)} sub="Handled on this node"/>
         <SummaryCard label="Outbound traffic" value={formatBytes(d.bytesOut)} sub="HTTP responses"/>

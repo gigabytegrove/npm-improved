@@ -39,3 +39,18 @@ Raw IP and user-agent data is sensitive operational telemetry. Restrict administ
 
 The Analytics Center uses a persistent section navigation grouped into Reporting, Investigation and Security, with responsive scrolling on narrow screens. The root path remains a landing page but is not the only content view. Page-level modules load only when their route is visited. An explicit data-coverage footer shows the retention scope and node identity.
 
+
+
+## Near-real-time per-route investigation (development branch)
+
+The new **Live Host Traffic** view is reached from **HTTP Routes → Live traffic**, **Route analytics → Inspect live traffic**, or **Proxy Host Analytics → Live traffic & threats**. It is a separate source-scoped API and page, shared conceptually with the planned Android client. It does not replace the existing reporting pages.
+
+- 5-, 15-, or 60-minute windows; retained structured log events; 10-second ingestion and 10-second foreground refresh (pausable).
+- Per-minute request volume, bytes served, HTTP error counts, unique source IPs, recently denied requests, path totals and recent timestamped requests.
+- Browser and client families are inferred from the **claimed** user-agent header, not verified browser identity.
+- Candidate IP addresses and user agents are ranked using recorded sensitive-path probes, high volumes of 404 responses, elevated request rates and previously denied requests. A user agent merely calling itself YandexBot or another crawler is **not** automatically malicious.
+- Each client can be investigated through the existing full IP/UA profiles. The current **prepare block** workflow is intentionally labeled **node-wide**: existing Nginx deny rules affect every HTTP host served by the node. Enforcement stays manual, admin-only and requires confirmation.
+- Geographic enrichment is explicitly unavailable until a local, privacy-preserving GeoIP source has been configured. No guessed country, city or map location is rendered.
+- This feature reads completed ingested requests, not active sockets, TCP packets, raw application payloads or unrecorded traffic.
+
+High-confidence host-specific deny rules, reversible temporary blocks, trusted bot verification, ASN/country enrichment and remote multi-node aggregation require additional security and performance work; they are not part of this initial live view.

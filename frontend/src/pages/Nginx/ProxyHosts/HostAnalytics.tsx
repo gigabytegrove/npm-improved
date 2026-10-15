@@ -153,6 +153,9 @@ export default function HostAnalytics() {
             <div className="text-secondary text-break">{host?.domainNames.join(", ") || `Proxy Host #${id}`}</div>
           </div>
           <div className="d-flex flex-wrap gap-2 align-items-center">
+            {valid ? <Link className="btn btn-outline-primary" to={"/analytics/hosts/live?source=" + id}>
+              Live traffic & threats
+            </Link> : null}
             <label htmlFor="npmi-analytics-range" className="form-label mb-0">Period</label>
             <select id="npmi-analytics-range" className="form-select w-auto"
               value={hours} onChange={(event) => { setHours(Number(event.target.value)); setOffset(0); }}>

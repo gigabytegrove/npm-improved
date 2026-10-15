@@ -1,5 +1,6 @@
 import express from "express";
 import { getNodeProfile } from "../internal/analytics-profiles.js";
+import { getHostTrafficIntelligence } from "../internal/host-traffic-intelligence.js";
 import os from "node:os";
 import { getServingNodeHostname } from "../lib/node-identity.js";
 import jwtdecode from "../lib/express/jwt-decode.js";
@@ -43,6 +44,7 @@ const reportFilters = (query) => ({
   ip: query.ip,
   user_agent: query.user_agent,
   bot: query.bot,
+  path: query.path,
   connection_id: query.connection_id,
 });
 
@@ -95,6 +97,21 @@ router.get("/node", async (req, res, next) => {
         };
       }),
     });
+  } catch (err) { next(err); }
+});
+
+/**
+ * Short-window, source-scoped live investigation. The same admin-level
+ * authorization as node reports prevents exposure of other users' hosts.
+ */
+router.get("/node/hosts/:source/live", async (req, res, next) => {
+  try {
+    await authorize(res);
+    const source = Number(req.params.source);
+    const minutes = req.query.minutes === undefined ? 15 : Number(req.query.minutes);
+    if (req.params.source.trim() !== String(source) || !Number.isSafeInteger(minutes))
+      throw new RangeError("Invalid traffic window or analytics source");
+    res.status(200).send(getHostTrafficIntelligence(source, minutes));
   } catch (err) { next(err); }
 });
 
