@@ -10,7 +10,7 @@ You can still create a hostname, point it at an app, turn on HTTPS, and move on.
 
 ## Project status
 
-NPM Improved **v1.2.4** refines the Control Center into a quieter, more conventional administration interface without changing the underlying workflows.
+NPM Improved **v1.6.10** improves mobile Control Center navigation, host lists, and scrollable host editors. Existing server behavior and host-management permissions remain unchanged.
 
 The active integration branch is:
 

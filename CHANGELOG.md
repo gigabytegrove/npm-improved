@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.6.10] - 2026-10-14
+
+### Mobile Control Center improvements
+
+- Replace Bootstrap-dependent small-screen navigation collapse with a phone drawer, dismissible backdrop and keyboard Escape support.
+- Present host listings as labeled, vertically scrolling mobile cards with accessible per-row Actions menus.
+- Keep Add Host controls available on Proxy, Redirection, Stream and 404 Host pages, including empty lists.
+- Fix scrolling and horizontal tab accessibility in the host editor dialogs and keep Save and Cancel reachable on narrow screens.
+- Prevent Save buttons from prematurely dismissing host editors before the backend confirms success.
+- Preserve existing API endpoints, user permissions, server behavior, Nginx configuration safety, and desktop layout.
+
+### Verification
+
+- Pull request #79 passed frontend tests, lint, production build, Docker validation and repository health checks.
+- This release does not include the optional Android companion application.
+
+
 ## [1.2.4] - 2026-09-28
 
 NPM Improved v1.2.4 is a visual restraint pass for the Control Center.
