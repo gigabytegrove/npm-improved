@@ -69,6 +69,7 @@ export default function HostsPage() {
             <td className="text-end">{formatNumber(row.errors)}</td>
             <td><div className="d-flex flex-wrap gap-2">
               <Link to={`/analytics/hosts/detail?source=${row.hostId}`}>Deep dive</Link>
+              <Link to={`/analytics/hosts/live?source=${row.hostId}`}>Live traffic</Link>
               {row.kind==="proxy" && row.configured?<Link to={`/nginx/proxy/${row.routeId}/analytics`}>Host Analytics</Link>:null}
             </div></td>
           </tr>)}

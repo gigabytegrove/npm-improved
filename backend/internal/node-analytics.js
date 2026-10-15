@@ -217,6 +217,7 @@ export function getNodeAnalyticsRequests(filters, limit = 50, offset = 0) {
   const ip = filters.ip || null;
   const userAgent = filters.userAgent || filters.user_agent || null;
   const bot = filters.bot || null;
+  const pathFilter = filters.path || null;
   const connectionId = filters.connectionId || filters.connection_id || null;
   if (![1,24,168,720,2160].includes(hours) || !Number.isInteger(limit) || limit < 1 || limit > 100 ||
     !Number.isInteger(offset) || offset < 0 || offset > 10000)
@@ -227,6 +228,9 @@ export function getNodeAnalyticsRequests(filters, limit = 50, offset = 0) {
     throw new RangeError("Invalid user-agent filter");
   if (bot !== null && (typeof bot !== "string" || bot.length > 50))
     throw new RangeError("Invalid bot filter");
+  if (pathFilter !== null && (typeof pathFilter !== "string" || pathFilter.length > 512 ||
+    !pathFilter.startsWith("/") || pathFilter.includes("?") || pathFilter.includes("#")))
+    throw new RangeError("Invalid sanitized request path filter");
   if (connectionId !== null && (typeof connectionId !== "string" || !/^\d{1,18}$/.test(connectionId)))
     throw new RangeError("Invalid connection identifier");
   const db = getAnalyticsDatabase();
@@ -242,6 +246,7 @@ export function getNodeAnalyticsRequests(filters, limit = 50, offset = 0) {
   if (ip !== null) { conditions.push("client_ip = ?"); args.push(ip); }
   if (userAgent !== null) { conditions.push("user_agent = ?"); args.push(userAgent); }
   if (bot !== null) { conditions.push("bot_class = ?"); args.push(bot); }
+  if (pathFilter !== null) { conditions.push("path = ?"); args.push(pathFilter); }
   if (connectionId !== null) { conditions.push("connection_id = ?"); args.push(connectionId); }
   const where = conditions.join(" AND ");
   const total = db.prepare(`SELECT COUNT(*) AS n FROM analytics_event WHERE ${where}`).get(...args).n;
@@ -267,10 +272,12 @@ export function exportNodeAnalyticsCsv(filters) {
   const ip = filters.ip || null;
   const userAgent = filters.userAgent || filters.user_agent || null;
   const bot = filters.bot || null;
+  const pathFilter = filters.path || null;
   const connectionId = filters.connectionId || filters.connection_id || null;
   if (ip !== null) { conditions.push("client_ip=?"); args.push(ip); }
   if (userAgent !== null) { conditions.push("user_agent=?"); args.push(userAgent); }
   if (bot !== null) { conditions.push("bot_class=?"); args.push(bot); }
+  if (pathFilter !== null) { conditions.push("path=?"); args.push(pathFilter); }
   if (connectionId !== null) { conditions.push("connection_id=?"); args.push(connectionId); }
   // Match exactly the validated explorer filters; do not accept arbitrary SQL.
   getNodeAnalyticsRequests(filters, 1, 0);

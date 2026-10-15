@@ -13,11 +13,16 @@ export default function RequestsPage() {
   const [agentFilter, setAgentFilter] = useState(searchParams.get("userAgent") || "");
   const [botFilter, setBotFilter] = useState(searchParams.get("bot") || "");
   const [connectionFilter, setConnectionFilter] = useState(searchParams.get("connectionId") || "");
+  const [pathFilter, setPathFilter] = useState(searchParams.get("path") || "");
+  const sourceParam = searchParams.get("source");
+  const sourceFromUrl = sourceParam && /^-?\d+$/.test(sourceParam) ? Number(sourceParam) : null;
+  const sourceId = sourceFromUrl !== null && Number.isSafeInteger(sourceFromUrl) && sourceFromUrl !== 0
+    ? sourceFromUrl : filters.hostId;
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
   const requestFilters: NodeFilters = {
-    ...filters, ip: sourceIp || null, userAgent: agentFilter || null,
-    bot: botFilter || null, connectionId: connectionFilter || null,
+    ...filters, hostId: sourceId, ip: sourceIp || null, userAgent: agentFilter || null,
+    bot: botFilter || null, path: pathFilter || null, connectionId: connectionFilter || null,
   };
   const recent = useQuery({
     queryKey: ["node-analytics-requests-page", requestFilters, offset],
@@ -36,6 +41,7 @@ export default function RequestsPage() {
   return <section className="npmi-center-page" aria-label="Request and connection history">
     <p className="text-secondary">A timestamped, filterable history of recorded HTTP requests. Select an address,
       user agent or connection ID to investigate related activity on this node. <Link to="/analytics/connections">Connection explorer</Link></p>
+    {sourceFromUrl !== null ? <div className="alert alert-info small">Filtering requests to routing source #{sourceId}. <Link to="/analytics/hosts">Choose another route</Link>.</div> : null}
     <div className="card">
           <div className="card-body">
             <div className="row g-2 align-items-end">
@@ -51,13 +57,16 @@ export default function RequestsPage() {
                   <option value="">All classifications</option>
                   {data.bots.map((entry) => <option key={entry.label} value={entry.label}>{entry.label}</option>)}
                 </select></div>
+              <div className="col-lg-3"><label htmlFor="analytics-filter-path" className="form-label">Exact sanitized URL path</label>
+                <input id="analytics-filter-path" className="form-control" value={pathFilter}
+                  onChange={(e) => { setPathFilter(e.target.value); changed(); }} maxLength={512} placeholder="/wp-login.php"/></div>
               <div className="col-lg-2"><label htmlFor="analytics-filter-connection" className="form-label">Connection ID</label>
                 <input id="analytics-filter-connection" className="form-control" value={connectionFilter}
                   onChange={(e) => { setConnectionFilter(e.target.value); changed(); }}/></div>
             </div>
             <div className="d-flex gap-2 mt-2">
               <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => {
-                setSourceIp(""); setAgentFilter(""); setBotFilter(""); setConnectionFilter(""); changed();
+                setSourceIp(""); setAgentFilter(""); setBotFilter(""); setPathFilter(""); setConnectionFilter(""); changed();
               }}>Clear filters</button>
               <span className="small text-secondary">Timestamps, source addresses, and user agents are stored for retained raw requests on this node.</span>
             </div>

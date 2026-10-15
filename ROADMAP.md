@@ -208,3 +208,42 @@ The web Control Center must work on a phone without horizontal page scrolling or
 A native Android app is an optional second management client, **not** a replacement for a functioning mobile web UI. It should support multiple explicitly registered NPM Improved instance URLs, independent authenticated sessions, and per-instance read-only status views before introducing writes. Target features include node health, routes, certificates, expiring cert alerts, recent logs, and guarded creation/editing of routing rules.
 
 Security requirements: HTTPS with normal certificate verification, no acceptance of invalid certificates by default, tokens isolated per instance and stored via OS-protected storage, enforced permissions and two-factor authentication, explicit confirmation for destructive operations, and no central service holding credentials for all instances. The app must use documented NPM Improved APIs rather than scraping web pages. Do not expose the recovery console, updater, Docker control or unscoped administrative operations to the companion app.
+
+
+## Advanced Traffic Intelligence and Android management client
+
+### Product direction
+
+Offer a consistent investigative experience on the Control Center and a native Kotlin/Jetpack Compose Android client that securely stores separate sessions for multiple NPMi instances.
+
+For each proxy, redirect, 404 or default HTTP route, administrators should be able to inspect:
+- Near-real-time requests and byte rates, latency and error patterns, requested URL paths, methods, protocols, upstream status and complete sanitized request timelines.
+- Full source IP and user-agent directories with search, time windows and drilldown, claimed browsers/devices/crawler families, and approximate country/region/ASN when a trusted local GeoIP database is installed.
+- Signals for sensitive-path probing, suspicious 404 concentration, bursts, repeated denies and anomalous activity. Always show the exact evidence and the threshold used. Never claim that a string such as YandexBot proves actual crawler identity or criminal intent.
+- Filtered history and export subject to existing admin permissions and raw-event retention.
+- Explicit local node identity; multi-node data must never be silently combined or double counted.
+
+### Blocking policy direction
+
+Build on the existing Nginx-tested, rollback-safe IP/CIDR, user-agent substring and known-scanner rules; separate **viewing suspicious activity** from **enforcing** a rule.
+
+Before adding a scoped block, implement and test:
+- Per-host rules that cannot affect another host or NPMX node accidentally; selectors must use canonical internal route IDs rather than untrusted Host headers.
+- Exact IP / bounded CIDR, guarded UA patterns and opt-in client-class categories with clear matching semantics. No free-form administrator-controlled Nginx expressions.
+- Rule preview including affected hosts, matching recorded traffic, legitimate-traffic risk and an explicit confirmation.
+- Temporary durations, automatic expiry, allowlists, one-click reversal, audit history, false-positive reporting and simulation/dry run.
+- Verified activation after nginx -t and reload with automatic rollback, test cases for shared listeners, HTTP/HTTPS, bypass paths, trusted real-IP configuration and synchronizing nodes.
+- Existing node-wide rules must remain explicitly labeled and must not be represented as per-host rules.
+
+### Data quality and privacy
+
+Retain strict X-Forwarded-For trust boundaries, do not persist query strings, cookies or request bodies, keep bounded raw retention and disk limits, use locally installed GeoIP data without sending visitors' addresses to third-party lookups, report missing enrichment instead of fabricating locations, and mark browser/bot identities as heuristic unless independently verified. A 403/404 alone is not proof of attack. Do not automatically block Yandex, Google, or Bing based only on claimed UA strings.
+
+### Android release phases
+
+1. Per-instance sign-in and 2FA, status and readable host/certificate dashboards, source-node selection and securely stored independent tokens.
+2. Per-host near-real-time traffic views, request investigation, browser and geo breakdowns where available, actionable anomaly evidence, notifications and deep links.
+3. Permission-checked host editing and guarded block previews/confirmations after host-scoped enforcement is implemented and tested.
+4. Performance improvements and optional opt-in multi-instance intelligence without central credential storage.
+
+The Android app is not part of the v1.6.10 mobile-web release.

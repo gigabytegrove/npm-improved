@@ -42,6 +42,8 @@ export default function NodeInvestigation({
     setError("");
   };
   const apply = async () => {
+    if (!target.trim()) return;
+    if (!window.confirm("Activate this " + (blockType === "ip" ? "IP/CIDR" : "user-agent substring") + " block for ALL HTTP hosts on this NPMi node? Other sites and legitimate clients may be affected.")) return;
     setBusy(true); setMessage(""); setError("");
     try {
       await addNodeBlock(blockType, target, note);
