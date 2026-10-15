@@ -922,36 +922,88 @@ private fun ClientSection(title: String, type: String, entries: List<ClientSigna
 private fun SecurityScreen(vm: NpmViewModel) {
     val draft = vm.blockDraft
     var removeRule by remember { mutableStateOf<BlockRule?>(null) }
+    var showComposer by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Security & enforcement", style = MaterialTheme.typography.headlineSmall)
-        Text("Blocks in NPMi v1.6.11 apply to ALL HTTP hosts on THIS NODE. They do not automatically synchronize across NPMX nodes. Review the affected traffic before changing rules.",
-            color = MaterialTheme.colorScheme.error)
-        Text("Prepare a node-wide deny", style = MaterialTheme.typography.titleMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = draft.type == "ip",
-                onClick = { vm.blockDraft = draft.copy(type = "ip", target = "") }, label = { Text("IP / CIDR") })
-            FilterChip(selected = draft.type == "user_agent",
-                onClick = { vm.blockDraft = draft.copy(type = "user_agent", target = "") },
-                label = { Text("User-agent substring") })
+        verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        SectionHeading("Security", "Node-wide enforcement and existing deny rules")
+        Surface(color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = RoundedCornerShape(15.dp)) {
+            Row(Modifier.fillMaxWidth().padding(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(11.dp),
+                verticalAlignment = Alignment.Top) {
+                Icon(Icons.Default.Security, contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                Text("Rules here affect ALL HTTP hosts on this node, not just one proxy host. NPMX does not automatically synchronize these rules. Review scope before activating anything.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
-        OutlinedTextField(draft.target, { vm.blockDraft = vm.blockDraft.copy(target = it.take(160)) },
-            label = { Text("Match target") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(draft.note, { vm.blockDraft = vm.blockDraft.copy(note = it.take(256)) },
-            label = { Text("Reason / audit note") }, modifier = Modifier.fillMaxWidth())
-        Button(onClick = { vm.blockConfirmation = true },
-            enabled = !vm.loading && draft.target.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
-            Text("Review node-wide block")
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Active deny rules", style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold)
+                Text(vm.rules.size.toString() + " reported on this node",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall)
+            }
+            OutlinedButton(onClick = { showComposer = !showComposer },
+                enabled = !vm.loading) {
+                Text(if (showComposer) "Close editor" else "New rule")
+            }
         }
-        Text("Active local deny rules", style = MaterialTheme.typography.titleLarge)
-        if (vm.rules.isEmpty()) Text("No deny rules reported (or your account does not have access).",
-            style = MaterialTheme.typography.bodySmall)
-        vm.rules.forEach { rule ->
-            ElevatedCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(14.dp)) {
-                    Text(rule.type + " · " + rule.target, fontWeight = FontWeight.Bold)
-                    Text(rule.note, style = MaterialTheme.typography.bodySmall)
-                    TextButton(onClick = { removeRule = rule }) { Text("Remove rule") }
+        if (vm.rules.isEmpty()) {
+            ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+                Text("No active deny rules reported. Your account may also lack permission to view them.",
+                    modifier = Modifier.padding(18.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else {
+            vm.rules.forEach { rule ->
+                ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+                    Row(Modifier.fillMaxWidth().padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Text(rule.target, fontWeight = FontWeight.SemiBold,
+                                style = MaterialTheme.typography.bodyMedium)
+                            Text(rule.type + if (rule.note.isNotBlank()) " · " + rule.note else "",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall)
+                        }
+                        TextButton(onClick = { removeRule = rule },
+                            enabled = !vm.loading) { Text("Remove") }
+                    }
+                }
+            }
+        }
+        if (showComposer || draft.target.isNotBlank()) {
+            ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(17.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Prepare a node-wide deny", style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(selected = draft.type == "ip",
+                            onClick = { vm.blockDraft = draft.copy(type = "ip", target = "") },
+                            label = { Text("IP / CIDR") })
+                        FilterChip(selected = draft.type == "user_agent",
+                            onClick = { vm.blockDraft = draft.copy(type = "user_agent", target = "") },
+                            label = { Text("User-agent") })
+                    }
+                    OutlinedTextField(draft.target,
+                        { vm.blockDraft = vm.blockDraft.copy(target = it.take(160)) },
+                        label = { Text("Match target") },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true,
+                        shape = RoundedCornerShape(13.dp))
+                    OutlinedTextField(draft.note,
+                        { vm.blockDraft = vm.blockDraft.copy(note = it.take(256)) },
+                        label = { Text("Audit note (optional)") },
+                        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(13.dp))
+                    Button(onClick = { vm.blockConfirmation = true },
+                        enabled = !vm.loading && draft.target.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                        Text("Review before activating")
+                    }
                 }
             }
         }
@@ -961,21 +1013,19 @@ private fun SecurityScreen(vm: NpmViewModel) {
         title = { Text("Block traffic on ALL hosts on this node?") },
         text = {
             Text("Rule: " + draft.type + " = " + draft.target +
-                "\nThis can block legitimate visitors across every site served by this NPMi node. " +
-                "It does not apply only to the host being investigated. Nginx will validate and reload the policy; there is no automatic expiry.")
+                "\nThis can block legitimate visitors across every site served by this node. " +
+                "It does not apply only to the host under investigation. Nginx will validate and reload the policy. There is no automatic expiry.")
         },
-        confirmButton = {
-            TextButton(onClick = vm::addBlock) { Text("Activate node-wide deny") }
-        },
-        dismissButton = {
-            TextButton(onClick = { vm.blockConfirmation = false }) { Text("Cancel") }
-        }
+        confirmButton = { TextButton(onClick = vm::addBlock) { Text("Activate node-wide deny") } },
+        dismissButton = { TextButton(onClick = { vm.blockConfirmation = false }) { Text("Cancel") } }
     )
     removeRule?.let { rule ->
         AlertDialog(onDismissRequest = { removeRule = null },
             title = { Text("Remove node-wide block?") },
             text = { Text("Unblock " + rule.target + " on this NPMi node?") },
-            confirmButton = { TextButton(onClick = { vm.removeBlock(rule); removeRule = null }) { Text("Unblock") } },
+            confirmButton = { TextButton(onClick = { vm.removeBlock(rule); removeRule = null }) {
+                Text("Remove deny rule")
+            } },
             dismissButton = { TextButton(onClick = { removeRule = null }) { Text("Cancel") } })
     }
 }
