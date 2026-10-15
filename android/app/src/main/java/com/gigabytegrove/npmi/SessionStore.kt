@@ -33,10 +33,25 @@ class SessionStore(context: Context) {
 
     fun profiles(): List<ServerProfile> = try {
         val array = JSONArray(preferences.getString("profiles", "[]"))
-        (0 until array.length()).map { index ->
+        var needsMigration = false
+        val results = (0 until array.length()).map { index ->
             val o = array.getJSONObject(index)
-            ServerProfile(o.getString("id"), o.getString("name"), o.getString("url"), o.optBoolean("lan", false))
+            val id = o.getString("id")
+            val previousUrl = o.getString("url")
+            // Older alphas stored scheme://hostname/ (HTTPS defaulted to 443).
+            // Move those profiles onto port 81 automatically, preserving the
+            // chosen transport. Any old session token is discarded on origin change.
+            val updated = runCatching { NetworkPolicy.normalize(previousUrl, true) }.getOrNull()
+            if (updated != null && updated.baseUrl != previousUrl) {
+                o.put("url", updated.baseUrl)
+                o.put("lan", updated.insecureLan)
+                preferences.edit().remove("auth_" + id).apply()
+                needsMigration = true
+            }
+            ServerProfile(id, o.getString("name"), o.getString("url"), o.optBoolean("lan", false))
         }
+        if (needsMigration) preferences.edit().putString("profiles", array.toString()).apply()
+        results
     } catch (_: Exception) { emptyList() }
 
     fun selectedId(): String? = preferences.getString("active", null)
