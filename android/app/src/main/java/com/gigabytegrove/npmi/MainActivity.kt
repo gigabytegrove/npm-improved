@@ -983,40 +983,77 @@ private fun SecurityScreen(vm: NpmViewModel) {
 @Composable
 private fun ServersScreen(vm: NpmViewModel) {
     var removeId by remember { mutableStateOf<String?>(null) }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Managed servers", style = MaterialTheme.typography.headlineSmall)
-        Text("Each connection has an independent encrypted session.",
-            style = MaterialTheme.typography.bodySmall)
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+        .padding(horizontal = 16.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        TextButton(onClick = { vm.screen = "dashboard" }) { Text("← Back to overview") }
+        SectionHeading("Servers & account", "Connections are stored separately on this device")
         vm.profiles.forEach { profile ->
-            ElevatedCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                    Text(profile.name, style = MaterialTheme.typography.titleMedium)
-                    Text(profile.url, style = MaterialTheme.typography.bodySmall)
-                    if (profile.insecureLan) Text("Unencrypted private LAN",
-                        color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { vm.switch(profile.id) },
-                            enabled = vm.selectedId != profile.id) {
-                            Text(if (vm.selectedId == profile.id) "Current" else "Switch")
+            var menuOpen by remember(profile.id) { mutableStateOf(false) }
+            ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                Column(Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(13.dp)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(39.dp).background(MaterialTheme.colorScheme.primaryContainer,
+                            RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Dns, contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary)
                         }
-                        TextButton(onClick = { removeId = profile.id }) { Text("Remove") }
+                        Spacer(Modifier.width(11.dp))
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(profile.name, fontWeight = FontWeight.SemiBold,
+                                style = MaterialTheme.typography.titleMedium)
+                            Text(if (profile.id == vm.selectedId) "Current connection" else "Saved connection",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Box {
+                            IconButton(onClick = { menuOpen = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "Server actions")
+                            }
+                            DropdownMenu(expanded = menuOpen,
+                                onDismissRequest = { menuOpen = false }) {
+                                DropdownMenuItem(text = { Text("Switch to server") },
+                                    enabled = profile.id != vm.selectedId,
+                                    onClick = { menuOpen = false; vm.switch(profile.id) })
+                                DropdownMenuItem(text = { Text("Edit connection") },
+                                    onClick = { menuOpen = false; vm.editServer(profile.id) })
+                                DropdownMenuItem(text = { Text("Remove from device") },
+                                    onClick = { menuOpen = false; removeId = profile.id })
+                            }
+                        }
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Text(profile.url, style = MaterialTheme.typography.bodyMedium)
+                    Text(if (profile.insecureLan) "HTTP · Unencrypted management connection"
+                        else "HTTPS · Certificate verified",
+                        color = if (profile.insecureLan) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall)
+                    if (profile.id != vm.selectedId) {
+                        OutlinedButton(onClick = { vm.switch(profile.id) },
+                            modifier = Modifier.fillMaxWidth()) { Text("Switch to " + profile.name) }
                     }
                 }
             }
         }
-        Button(onClick = { vm.addingServer = true }, modifier = Modifier.fillMaxWidth()) {
-            Text("Add another server")
-        }
-        OutlinedButton(onClick = vm::logout, modifier = Modifier.fillMaxWidth()) {
-            Text("Sign out of this server")
-        }
+        Button(onClick = { vm.addingServer = true },
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RoundedCornerShape(14.dp)) { Text("Add another server") }
+        OutlinedButton(onClick = vm::logout,
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RoundedCornerShape(14.dp)) { Text("Sign out of current server") }
+        Text("Deleting a saved connection only removes its locally stored profile and encrypted token. It never changes NPMi's server configuration.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall)
     }
     removeId?.let { id ->
         AlertDialog(onDismissRequest = { removeId = null },
-            title = { Text("Remove this server?") },
-            text = { Text("The locally stored connection and encrypted token will be erased. NPMi itself is not modified.") },
-            confirmButton = { TextButton(onClick = { vm.deleteServer(id); removeId = null }) { Text("Remove server") } },
+            title = { Text("Remove saved server?") },
+            text = { Text("Erase this connection and its locally encrypted token? The actual NPMi server will not be changed.") },
+            confirmButton = {
+                TextButton(onClick = { vm.deleteServer(id); removeId = null }) { Text("Remove") }
+            },
             dismissButton = { TextButton(onClick = { removeId = null }) { Text("Cancel") } })
     }
 }
