@@ -84,6 +84,12 @@ class NpmApi(private val profile: ServerProfile, private val auth: () -> String?
             ver.optString("display"), response.optString("status") == "OK")
     }
 
+    /** Validate a returned session independently of admin-only host/analytics endpoints. */
+    suspend fun verifySession() {
+        val me = obj("users/me")
+        if (me.optInt("id") <= 0) throw IOException("The management API did not return an authenticated user.")
+    }
+
     suspend fun login(identity: String, password: String): LoginResult {
         val response = JSONObject(request("POST", "tokens",
             JSONObject().put("identity", identity).put("secret", password), authenticated = false))

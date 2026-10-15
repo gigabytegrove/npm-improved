@@ -196,6 +196,17 @@ private fun ServerForm(vm: NpmViewModel) {
                     }
                 }
                 if (vm.error.isNotBlank()) InlineIssue(vm.error)
+                if (!isHttp && address.isNotBlank()) {
+                    TextButton(onClick = {
+                        runCatching { NetworkPolicy.insecureAlternative(address) }
+                            .onSuccess { address = it; confirmHttp = false; vm.clearError() }
+                    }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Use default HTTP management connection (:81)")
+                    }
+                    Text("HTTP sends passwords and session tokens unencrypted. Only use it on a trusted LAN/VPN and acknowledge the risk before connecting.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall)
+                }
                 Button(onClick = { vm.addServer(name, address, confirmHttp) },
                     enabled = !vm.loading && name.isNotBlank() && address.isNotBlank(),
                     modifier = Modifier.fillMaxWidth().height(52.dp),
@@ -266,7 +277,7 @@ private fun SignIn(vm: NpmViewModel) {
                 if (vm.error.isNotBlank()) InlineIssue(vm.error)
                 OutlinedButton(onClick = { vm.editServer(server.id) },
                     modifier = Modifier.fillMaxWidth()) {
-                    Text("Edit server URL / IP")
+                    Text("Change API address / HTTP or HTTPS")
                 }
             }
         }
