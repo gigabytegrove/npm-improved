@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.6.11] - 2026-10-14
+
+### Per-host near-real-time traffic intelligence
+
+- Add an administrator-only live investigation view accessible from HTTP Routes and Proxy Host Analytics.
+- Display 5-, 15- and 60-minute traffic windows, minute-by-minute request counts, outbound bytes, response errors, recently denied requests and unique source IPs.
+- Refresh live investigation data approximately every 10 seconds, with manual refresh and an option to pause automatic refresh.
+- Inspect sanitized request paths, recent completed requests and claimed browser/client families from the existing structured Nginx analytics collector.
+- Flag potentially suspicious source IPs and user-agent strings using recorded sensitive-path probes, unusually high 404 counts, elevated request rates and recorded deny events.
+- Connect client and path investigation to source-filtered Request History and matching CSV export.
+- Keep existing blocking policy node-wide and require explicit confirmation before activation; this release does not add untested per-host blocking.
+
+### Data quality and safeguards
+
+- NPMX analytics remain node-local. Claims of crawler or browser identity rely on unverified user-agent strings, and threat-review signals are not a finding of malicious activity.
+- Geographic and ASN enrichment are not yet implemented; no locations are guessed.
+- The existing analytics retention policy, Nginx rollback behavior, authentication permissions and database deployment modes are preserved.
+- Add regression tests for route scope, sanitized paths, signal classification and export filters.
+
+### Verification
+
+- Pull request #81 passed backend tests, frontend tests, production build, Docker integration and all required repository checks.
+
+
 ## [1.6.10] - 2026-10-14
 
 ### Mobile Control Center improvements
