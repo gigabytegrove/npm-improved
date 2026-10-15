@@ -60,7 +60,7 @@ jobs:
       - name: Upload test APK
         uses: actions/upload-artifact@v4
         with:
-          name: NPMi-Android-v0.1.0-alpha.5-debug
+          name: NPMi-Android-v0.1.0-alpha.6-debug
           path: |
             android/app/build/outputs/versioned/*.apk
             android/app/build/outputs/versioned/SHA256SUMS
@@ -90,7 +90,9 @@ jobs:
           Includes one-field automatic management-port-81 targeting for any hostname/IP,
           verified password and 2FA sessions, correct default HTTP management-port transport,
           canonical /api/ health checks without credential-following redirects,
-          actionable TLS diagnostics, multi-server accounts, NPMi login and 2FA, Keystore encrypted tokens,
+          actionable TLS diagnostics, streamlined 3-tab navigation, integrated server switcher,
+          structured dashboard and host search, live-traffic investigation sections,
+          multi-server accounts, NPMi login and 2FA, Keystore encrypted tokens,
           proxy host management, node-local traffic intelligence, and manual node-wide
           IP/user-agent blocking with explicit confirmation.
 
