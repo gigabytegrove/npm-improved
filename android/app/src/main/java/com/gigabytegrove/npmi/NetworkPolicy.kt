@@ -27,8 +27,33 @@ object NetworkPolicy {
             require(acknowledgedLanHttp) { "Acknowledge that local HTTP sends credentials without encryption." }
         }
         require(uri.port == -1 || uri.port in 1..65535) { "Invalid port." }
-        val port = if (uri.port == -1) "" else ":" + uri.port
+        val port = if (uri.port == -1 && localHttp) ":81" else if (uri.port == -1) "" else ":" + uri.port
         return Endpoint(scheme + "://" + host + port + "/", localHttp)
+    }
+
+    /**
+     * NPMi's control-plane (and /api) defaults to port 81 over HTTP.
+     * This mode never guesses that port 81 is a TLS listener.
+     */
+    fun directLan(input: String, acknowledged: Boolean): Endpoint {
+        val raw = input.trim()
+        require(raw.isNotBlank()) { "Enter the private IP address of your NPMi server." }
+        require(!raw.contains("://") || raw.startsWith("http://", ignoreCase = true)) {
+            "Direct management uses HTTP on port 81. Select HTTPS gateway for TLS connections."
+        }
+        val candidate = if (raw.startsWith("http://", ignoreCase = true)) raw else "http://" + raw
+        val endpoint = normalize(candidate, acknowledged)
+        require(endpoint.insecureLan) { "Use a private LAN IP for direct management." }
+        return endpoint
+    }
+
+    /** HTTPS gateways must explicitly proxy /api to the NPMi control plane on port 81. */
+    fun secureGateway(input: String): Endpoint {
+        val raw = input.trim()
+        val address = if (raw.contains("://")) raw else "https://" + raw
+        val endpoint = normalize(address, false)
+        require(!endpoint.insecureLan) { "Select Direct LAN for port 81 HTTP connections." }
+        return endpoint
     }
 
     private fun isPrivateIpv4(host: String): Boolean {
