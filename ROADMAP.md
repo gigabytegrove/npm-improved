@@ -190,3 +190,21 @@ v1.1.0 implementation requirements:
 - update progress survives browser refresh and reconnect;
 - update, restart, and rollback actions are audited;
 - automated tests cover successful update, failed-health rollback, preserved deployment configuration, interrupted browser session, and update locking.
+
+
+## Mobile Control Center (in development)
+
+The web Control Center must work on a phone without horizontal page scrolling or access to a desktop computer. The mobile UI is not a separate restricted-mode dashboard: it must preserve the existing user permissions, validation, confirmation flows and transactional host changes.
+
+- Navigation uses a scrollable, dismissible phone drawer and keeps the page and user menu accessible.
+- Host tables render as readable mobile cards with visible edit, enable/disable, logs and delete actions.
+- Proxy, redirection, stream and 404 host creation must be reachable directly from the list header, including when no hosts exist.
+- Host editors must scroll inside the dialog while the header, tabs and Save/Cancel controls remain accessible. Never close the editor on submission before the backend confirms success.
+- Certificate, access-list, user, logging and Settings pages also need phone-width verification before considering mobile support complete.
+- Test keyboard navigation, touch, 320px/375px/430px widths, portrait/landscape, and long host forms on Android Chrome and iOS Safari.
+
+### Potential Android companion app
+
+A native Android app is an optional second management client, **not** a replacement for a functioning mobile web UI. It should support multiple explicitly registered NPM Improved instance URLs, independent authenticated sessions, and per-instance read-only status views before introducing writes. Target features include node health, routes, certificates, expiring cert alerts, recent logs, and guarded creation/editing of routing rules.
+
+Security requirements: HTTPS with normal certificate verification, no acceptance of invalid certificates by default, tokens isolated per instance and stored via OS-protected storage, enforced permissions and two-factor authentication, explicit confirmation for destructive operations, and no central service holding credentials for all instances. The app must use documented NPM Improved APIs rather than scraping web pages. Do not expose the recovery console, updater, Docker control or unscoped administrative operations to the companion app.

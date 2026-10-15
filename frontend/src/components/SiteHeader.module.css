@@ -268,3 +268,15 @@
     font-size: 0.68rem;
   }
 }
+
+@media (max-width: 575.98px) {
+	/* Keep the page title, menu and user controls visible on narrow phones. */
+	.nodePill { display: none; }
+	.header { gap: 0.35rem; }
+	.pageTitle {
+		max-width: 42vw;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+}

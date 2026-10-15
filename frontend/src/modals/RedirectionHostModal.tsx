@@ -56,7 +56,7 @@ const RedirectionHostModal = EasyModal.create(({ id, visible, remove }: Props) =
 	};
 
 	return (
-		<Modal show={visible} onHide={remove}>
+		<Modal show={visible} onHide={remove} scrollable>
 			{!isLoading && error && (
 				<Alert variant="danger" className="m-3">
 					{error?.message || "Unknown error"}
@@ -349,7 +349,6 @@ const RedirectionHostModal = EasyModal.create(({ id, visible, remove }: Props) =
 									type="submit"
 									actionType="primary"
 									className="ms-auto bg-yellow"
-									data-bs-dismiss="modal"
 									isLoading={isSubmitting}
 									disabled={isSubmitting}
 								>

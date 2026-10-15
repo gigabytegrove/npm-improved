@@ -57,7 +57,7 @@ const resolveTitle = (pathname: string, search = "") => {
 	return routeTitles.find(([pattern]) => pattern.test(pathname)) || ["", "NPM Improved", "Administration"];
 };
 
-export function SiteHeader() {
+export function SiteHeader({ menuOpen, onToggleMenu }: { menuOpen: boolean; onToggleMenu: () => void }) {
 	const { data: currentUser } = useUser("me");
 	const health = useHealth();
 	const node = useBackendNode();
@@ -76,12 +76,10 @@ export function SiteHeader() {
 				<button
 					className={styles.menuButton}
 					type="button"
-					data-bs-toggle="collapse"
-					data-bs-target="#navbar-menu"
 					aria-controls="navbar-menu"
-					aria-expanded="false"
-					aria-label="Toggle navigation"
-					data-npmi-menu-toggle
+					aria-expanded={menuOpen}
+					aria-label={menuOpen ? "Close navigation" : "Open navigation"}
+					onClick={onToggleMenu}
 				>
 					<IconMenu2 size={22} />
 				</button>
