@@ -25,7 +25,7 @@
 
 > **Current release**
 >
-> NPM Improved **v1.6.10** makes the Control Center more usable on mobile phones with responsive host cards, reachable management actions, mobile navigation, and scrollable host editors. The `develop` branch remains the active integration branch.
+> NPM Improved **v1.6.11** adds near-real-time per-host traffic investigation, source-IP/user-agent review signals, exact request-path drilldowns, and guarded existing node-wide blocking. Mobile Control Center improvements from v1.6.10 remain included. The `develop` branch remains the active integration branch.
 
 ## What is NPM Improved?
 
