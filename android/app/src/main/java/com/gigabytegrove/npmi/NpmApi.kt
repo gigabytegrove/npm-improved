@@ -65,6 +65,9 @@ class NpmApi(private val profile: ServerProfile, private val auth: () -> String?
         val response = JSONObject(request("GET", "", authenticated = false))
         val node = response.optJSONObject("node") ?: JSONObject()
         val ver = response.optJSONObject("version") ?: JSONObject()
+        require(response.optString("status") == "OK" && response.has("version")) {
+            "This address is not an NPM Improved management API. Use the control plane on port 81."
+        }
         fun field(name: String) = node.optString(name).takeUnless { it == "null" }.orEmpty()
         return NodeStatus(field("hostname"), field("name"), field("role"),
             ver.optString("display"), response.optString("status") == "OK")

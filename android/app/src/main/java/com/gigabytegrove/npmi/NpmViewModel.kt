@@ -51,18 +51,61 @@ class NpmViewModel(application: Application): AndroidViewModel(application) {
 
     fun clearError() { error = ""; message = "" }
 
-    fun addServer(name: String, url: String, acknowledgeHttp: Boolean) {
-        try {
-            require(name.isNotBlank() && name.length <= 80) { "Give this server a name (up to 80 characters)." }
-            val endpoint = NetworkPolicy.normalize(url, acknowledgeHttp)
-            val profile = store.upsert(name.trim(), endpoint)
-            profiles.clear()
-            profiles.addAll(store.profiles())
-            selectedId = profile.id
-            resetState()
-            addingServer = false
-            if (signedIn) refresh()
-        } catch (e: Exception) { error = e.message ?: "Invalid server address." }
+    var editingId by mutableStateOf<String?>(null)
+        private set
+    val editing: ServerProfile? get() = profiles.firstOrNull { it.id == editingId }
+
+    fun editServer(id: String) {
+        if (profiles.none { it.id == id }) return
+        editingId = id
+        addingServer = true
+        clearError()
+    }
+
+    fun cancelServerEdit() {
+        editingId = null
+        addingServer = profiles.isEmpty()
+        clearError()
+    }
+
+    /**
+     * Probe /api before storing the connection. This avoids persisting a data-plane
+     * 443 endpoint in place of the port-81 management API, even if it answers HTTP.
+     */
+    fun addServer(name: String, url: String, mode: String, acknowledgeHttp: Boolean) {
+        val editing = editingId
+        val endpoint = try {
+            require(name.isNotBlank() && name.length <= 80) {
+                "Give this server a name (up to 80 characters)."
+            }
+            if (mode == "direct") NetworkPolicy.directLan(url, acknowledgeHttp)
+            else NetworkPolicy.secureGateway(url)
+        } catch (e: Exception) {
+            error = e.message ?: "Invalid management address."
+            return
+        }
+        viewModelScope.launch {
+            loading = true
+            clearError()
+            try {
+                val probe = ServerProfile("probe", name.trim(), endpoint.baseUrl, endpoint.insecureLan)
+                NpmApi(probe) { null }.status()
+                val profile = store.upsert(name.trim(), endpoint, editing)
+                profiles.clear()
+                profiles.addAll(store.profiles())
+                selectedId = profile.id
+                resetState()
+                editingId = null
+                addingServer = false
+                message = "Management API verified on " + endpoint.baseUrl
+                if (signedIn) refresh()
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                error = ConnectionDiagnostics.explain(e, endpoint.baseUrl)
+            } finally {
+                loading = false
+            }
+        }
     }
 
     fun switch(id: String) {
@@ -71,6 +114,7 @@ class NpmViewModel(application: Application): AndroidViewModel(application) {
         selectedId = id
         resetState()
         addingServer = false
+        editingId = null
         if (signedIn) refresh()
     }
 
@@ -81,6 +125,7 @@ class NpmViewModel(application: Application): AndroidViewModel(application) {
         selectedId = store.selectedId()
         resetState()
         addingServer = profiles.isEmpty()
+        editingId = null
         if (signedIn) refresh()
     }
 
@@ -126,7 +171,7 @@ class NpmViewModel(application: Application): AndroidViewModel(application) {
                     }
                 }
             } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { if (selectedId == profile.id) error = e.message ?: "Sign-in failed." }
+            catch (e: Exception) { if (selectedId == profile.id) error = ConnectionDiagnostics.explain(e, profile.url) }
             finally { loading = false }
         }
     }
@@ -149,7 +194,7 @@ class NpmViewModel(application: Application): AndroidViewModel(application) {
                     refresh()
                 }
             } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { if (selectedId == profile.id) error = e.message ?: "Two-factor verification failed." }
+            catch (e: Exception) { if (selectedId == profile.id) error = ConnectionDiagnostics.explain(e, profile.url) }
             finally { loading = false }
         }
     }
@@ -197,7 +242,7 @@ class NpmViewModel(application: Application): AndroidViewModel(application) {
                     } else error = e.message ?: "Server request failed."
                 }
             } catch (e: Exception) {
-                if (selectedId == profile.id) error = e.message ?: "Unable to reach this server."
+                if (selectedId == profile.id) error = ConnectionDiagnostics.explain(e, profile.url)
             } finally { loading = false }
         }
     }

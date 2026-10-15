@@ -10,8 +10,36 @@ class NetworkPolicyTest {
         assertEquals("https://proxy.example.org/", NetworkPolicy.normalize("https://proxy.example.org", false).baseUrl)
         assertEquals("https://proxy.example.org:8443/", NetworkPolicy.normalize("https://proxy.example.org:8443/api", false).baseUrl)
         assertEquals("http://192.168.0.18:8080/", NetworkPolicy.normalize("http://192.168.0.18:8080", true).baseUrl)
-        assertEquals("http://172.31.1.5/", NetworkPolicy.normalize("http://172.31.1.5", true).baseUrl)
-        assertEquals("http://10.0.2.2/", NetworkPolicy.normalize("http://10.0.2.2", true).baseUrl)
+        assertEquals("http://172.31.1.5:81/", NetworkPolicy.normalize("http://172.31.1.5", true).baseUrl)
+        assertEquals("http://10.0.2.2:81/", NetworkPolicy.normalize("http://10.0.2.2", true).baseUrl)
+    }
+
+    @Test fun directManagementDefaultsTo81() {
+        assertEquals("http://192.168.20.5:81/",
+            NetworkPolicy.directLan("192.168.20.5", true).baseUrl)
+        assertEquals("http://10.10.1.15:8181/",
+            NetworkPolicy.directLan("10.10.1.15:8181", true).baseUrl)
+        assertEquals("http://172.18.5.10:81/",
+            NetworkPolicy.directLan("http://172.18.5.10/api", true).baseUrl)
+        assertEquals("https://admin.example.com/",
+            NetworkPolicy.secureGateway("admin.example.com").baseUrl)
+        assertEquals("https://admin.example.com:9443/",
+            NetworkPolicy.secureGateway("https://admin.example.com:9443").baseUrl)
+        try {
+            NetworkPolicy.directLan("proxy.example.com", true)
+            fail("Public HTTP must never be accepted.")
+        } catch (_: IllegalArgumentException) { }
+        try {
+            NetworkPolicy.directLan("192.168.20.5", false)
+            fail("LAN HTTP requires acknowledgment.")
+        } catch (_: IllegalArgumentException) { }
+    }
+
+    @Test fun tlsProblemsProduceManagementGuidance() {
+        val error = IllegalStateException("TLSV1_ALERT_UNRECOGNIZED_NAME")
+        val text = ConnectionDiagnostics.explain(error, "https://proxy.example.org/")
+        assertTrue(text.contains("443"))
+        assertTrue(text.contains("81"))
     }
 
     private fun rejects(url: String, acknowledge: Boolean = true) {
