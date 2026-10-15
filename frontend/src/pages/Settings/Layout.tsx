@@ -11,6 +11,7 @@ import type { ElementType } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useCheckVersion } from "src/hooks";
 import CertificateLifecycle from "./CertificateLifecycle";
+import ManagementCertificateSettings from "./ManagementCertificateSettings";
 import Database from "./Database";
 import DefaultSite from "./DefaultSite";
 import DisasterRecovery from "./DisasterRecovery";
@@ -22,6 +23,7 @@ import styles from "./Layout.module.css";
 type SettingsPage =
 	| "default-site"
 	| "certificate-lifecycle"
+	| "management-certificate"
 	| "protection"
 	| "database"
 	| "instance-sync"
@@ -41,6 +43,12 @@ const sections: SettingsSection[] = [
 		label: "Default Site",
 		description: "Fallback behavior and custom templates",
 		icon: IconHome,
+	},
+	{
+		id: "management-certificate",
+		label: "Management SSL",
+		description: "Optional certificate for this server's hostname",
+		icon: IconCertificate,
 	},
 	{
 		id: "certificate-lifecycle",
@@ -98,6 +106,8 @@ export default function Layout() {
 
 	const renderPage = () => {
 		switch (page) {
+			case "management-certificate":
+				return <ManagementCertificateSettings />;
 			case "certificate-lifecycle":
 				return <CertificateLifecycle />;
 			case "protection":
