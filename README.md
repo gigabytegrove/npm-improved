@@ -9,7 +9,9 @@
   Publish your self-hosted apps, manage HTTPS, add failover, recover from bad changes, and keep multiple proxy servers in sync from one friendly control center.
 </p>
 
+<!-- GIGABYTE GROVE REPOSITORY BADGES START -->
 <p align="center">
+  <a href="https://github.com/gigabytegrove/npm-improved"><img alt="GitHub repository" src="https://img.shields.io/badge/GitHub-Repository-181717?logo=github&logoColor=white"></a>
   <a href="https://github.com/gigabytegrove/npm-improved/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/gigabytegrove/npm-improved?style=flat&logo=github&label=Stars"></a>
   <a href="https://github.com/gigabytegrove/npm-improved/forks"><img alt="GitHub forks" src="https://img.shields.io/github/forks/gigabytegrove/npm-improved?style=flat&logo=github&label=Forks"></a>
   <a href="https://github.com/gigabytegrove/npm-improved/issues"><img alt="Open issues" src="https://img.shields.io/github/issues/gigabytegrove/npm-improved?style=flat&logo=github&label=Issues"></a>
@@ -17,6 +19,10 @@
   <a href="https://github.com/gigabytegrove/npm-improved/blob/develop/LICENSE"><img alt="License" src="https://img.shields.io/github/license/gigabytegrove/npm-improved?style=flat&label=License"></a>
   <a href="https://paypal.me/gigabytegrove"><img alt="Donate via PayPal" src="https://img.shields.io/badge/Donate-PayPal-0070BA?logo=paypal&logoColor=white"></a>
 </p>
+<p align="center">
+  <a href="https://github.com/gigabytegrove/npm-improved">Repository</a> · <a href="https://github.com/gigabytegrove/npm-improved/stargazers">Stars</a> · <a href="https://github.com/gigabytegrove/npm-improved/forks">Forks</a> · <a href="https://github.com/gigabytegrove/npm-improved/issues">Issues</a> · <a href="https://github.com/gigabytegrove/npm-improved/releases">Releases</a> · <a href="https://paypal.me/gigabytegrove">Donate via PayPal</a>
+</p>
+<!-- GIGABYTE GROVE REPOSITORY BADGES END -->
 
 <p align="center">
   <a href="https://www.gigabytegrove.com/projects">Project page</a>
