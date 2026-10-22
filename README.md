@@ -10,6 +10,15 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/gigabytegrove/npm-improved/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/gigabytegrove/npm-improved?style=flat&logo=github&label=Stars"></a>
+  <a href="https://github.com/gigabytegrove/npm-improved/forks"><img alt="GitHub forks" src="https://img.shields.io/github/forks/gigabytegrove/npm-improved?style=flat&logo=github&label=Forks"></a>
+  <a href="https://github.com/gigabytegrove/npm-improved/issues"><img alt="Open issues" src="https://img.shields.io/github/issues/gigabytegrove/npm-improved?style=flat&logo=github&label=Issues"></a>
+  <a href="https://github.com/gigabytegrove/npm-improved/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/gigabytegrove/npm-improved?style=flat&label=Release"></a>
+  <a href="https://github.com/gigabytegrove/npm-improved/blob/develop/LICENSE"><img alt="License" src="https://img.shields.io/github/license/gigabytegrove/npm-improved?style=flat&label=License"></a>
+  <a href="https://paypal.me/gigabytegrove"><img alt="Donate via PayPal" src="https://img.shields.io/badge/Donate-PayPal-0070BA?logo=paypal&logoColor=white"></a>
+</p>
+
+<p align="center">
   <a href="https://www.gigabytegrove.com/projects">Project page</a>
   ·
   <a href="https://github.com/gigabytegrove/npm-improved">GitHub</a>
