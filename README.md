@@ -25,7 +25,7 @@
 
 > **Current release**
 >
-> NPM Improved **v1.6.11** adds near-real-time per-host traffic investigation, source-IP/user-agent review signals, exact request-path drilldowns, and guarded existing node-wide blocking. Mobile Control Center improvements from v1.6.10 remain included. The `develop` branch remains the active integration branch.
+> NPM Improved **[v1.6.13](https://github.com/gigabytegrove/npm-improved/releases/tag/v1.6.13)** is the latest published stable release (October 15, 2026). It adds an explicit opt-in Management HTTPS activation workflow for each physical node, building on certificate setup introduced in v1.6.12. The separate port 81 HTTP recovery listener remains available and must be protected by a firewall or VPN. Earlier v1.6.11 traffic investigation and mobile Control Center capabilities remain included. The `develop` branch remains the active integration branch.
 
 ## What is NPM Improved?
 
@@ -601,11 +601,13 @@ Changes should be submitted through pull requests and must pass the repository's
 
 If you are changing behavior, include or update the matching documentation so users do not have to discover the feature from source code.
 
-## Upstream project and license
+## Origins, independent maintenance, and licensing
 
-NPM Improved is based on [Nginx Proxy Manager](https://github.com/NginxProxyManager/nginx-proxy-manager) and would not exist without the work of its maintainers and contributors.
+NPM Improved originated as a fork of [Nginx Proxy Manager](https://github.com/NginxProxyManager/nginx-proxy-manager). We gratefully acknowledge its developers and contributors for the original foundation.
 
-The upstream project is licensed under the MIT License, and NPM Improved retains the applicable upstream attribution and MIT licensing in this repository.
+NPM Improved has since undergone extensive development at **Gigabyte Grove**, including its current interface, resilience, high-availability, synchronization, recovery, and management capabilities. It is an **independently maintained project**, not an official upstream release, and is not affiliated with or endorsed by the Nginx Proxy Manager maintainers. For NPM Improved issues, please use [this repository's issue tracker](https://github.com/gigabytegrove/npm-improved/issues).
+
+The upstream MIT copyright and license notice is preserved in [LICENSE](LICENSE). The current NPM Improved visual identity uses separately established Gigabyte Grove artwork, including `docs/src/public/npm-improved-logo.webp` and `frontend/public/images/npm-improved-logo.webp`. See [Origins and Credits](CREDITS.md) for acknowledgment and licensing details.
 
 ---
 
