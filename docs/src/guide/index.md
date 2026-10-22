@@ -197,3 +197,10 @@ Before upgrading a v1.x system, keep a current backup and verify the important p
 NPM Improved is based on [Nginx Proxy Manager](https://github.com/NginxProxyManager/nginx-proxy-manager) and retains the applicable upstream MIT license and attribution.
 
 Project page: [Gigabyte Grove Projects](https://www.gigabytegrove.com/projects)
+
+
+## Origins and brand identity
+
+NPM Improved is an independently maintained Gigabyte Grove project that originated as a fork of [Nginx Proxy Manager](https://github.com/NginxProxyManager/nginx-proxy-manager). It is not an official upstream release and is not affiliated with or endorsed by the upstream maintainers.
+
+Current NPM Improved visual branding is distinct from the upstream project's imagery. We acknowledge the original developers and contributors and retain applicable MIT license notices for inherited software. See the repository's [Origins and Credits](https://github.com/gigabytegrove/npm-improved/blob/develop/CREDITS.md) and [LICENSE](https://github.com/gigabytegrove/npm-improved/blob/develop/LICENSE) for details.

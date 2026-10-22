@@ -601,11 +601,13 @@ Changes should be submitted through pull requests and must pass the repository's
 
 If you are changing behavior, include or update the matching documentation so users do not have to discover the feature from source code.
 
-## Upstream project and license
+## Origins, independent maintenance, and licensing
 
-NPM Improved is based on [Nginx Proxy Manager](https://github.com/NginxProxyManager/nginx-proxy-manager) and would not exist without the work of its maintainers and contributors.
+NPM Improved originated as a fork of [Nginx Proxy Manager](https://github.com/NginxProxyManager/nginx-proxy-manager). We gratefully acknowledge its developers and contributors for the original foundation.
 
-The upstream project is licensed under the MIT License, and NPM Improved retains the applicable upstream attribution and MIT licensing in this repository.
+NPM Improved has since undergone extensive development at **Gigabyte Grove**, including its current interface, resilience, high-availability, synchronization, recovery, and management capabilities. It is an **independently maintained project**, not an official upstream release, and is not affiliated with or endorsed by the Nginx Proxy Manager maintainers. For NPM Improved issues, please use [this repository's issue tracker](https://github.com/gigabytegrove/npm-improved/issues).
+
+The upstream MIT copyright and license notice is preserved in [LICENSE](LICENSE). The current NPM Improved visual identity uses separately established Gigabyte Grove artwork, including `docs/src/public/npm-improved-logo.webp` and `frontend/public/images/npm-improved-logo.webp`. See [Origins and Credits](CREDITS.md) for acknowledgment and licensing details.
 
 ---
 
