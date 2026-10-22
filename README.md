@@ -25,7 +25,7 @@
 
 > **Current release**
 >
-> NPM Improved **v1.6.11** adds near-real-time per-host traffic investigation, source-IP/user-agent review signals, exact request-path drilldowns, and guarded existing node-wide blocking. Mobile Control Center improvements from v1.6.10 remain included. The `develop` branch remains the active integration branch.
+> NPM Improved **[v1.6.13](https://github.com/gigabytegrove/npm-improved/releases/tag/v1.6.13)** is the latest published stable release (October 15, 2026). It adds an explicit opt-in Management HTTPS activation workflow for each physical node, building on certificate setup introduced in v1.6.12. The separate port 81 HTTP recovery listener remains available and must be protected by a firewall or VPN. Earlier v1.6.11 traffic investigation and mobile Control Center capabilities remain included. The `develop` branch remains the active integration branch.
 
 ## What is NPM Improved?
 

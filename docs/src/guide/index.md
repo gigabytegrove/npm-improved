@@ -10,7 +10,7 @@ You can still create a hostname, point it at an app, turn on HTTPS, and move on.
 
 ## Project status
 
-NPM Improved **v1.6.11** adds near-real-time per-host traffic and suspicious-client investigation. Existing responsive host management and mobile navigation remain available. Existing server behavior and host-management permissions remain unchanged.
+NPM Improved **[v1.6.13](https://github.com/gigabytegrove/npm-improved/releases/tag/v1.6.13)** is the latest published stable release (October 15, 2026). It introduces explicit, opt-in Management HTTPS activation for an exact node hostname; the separate plain HTTP recovery listener on port 81 remains available and should be restricted to a trusted network. Earlier per-host traffic investigation, responsive host management, and mobile navigation remain available. Existing server behavior and host-management permissions remain unchanged.
 
 The active integration branch is:
 
