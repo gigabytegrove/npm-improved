@@ -35,6 +35,8 @@ def main():
         processing = data / (".host-update-processing-" + str(os.getpid()) + ".json")
         queue.replace(processing)
         try:
+            if processing.stat().st_size > 16384:
+                raise ValueError("Request file too large")
             request = json.loads(processing.read_text(encoding="utf-8"))
             if not isinstance(request, dict):
                 raise ValueError("Invalid request")
