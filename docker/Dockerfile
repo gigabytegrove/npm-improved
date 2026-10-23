@@ -53,7 +53,7 @@ COPY --from=geoip2-builder /src/nginx/objs/ngx_stream_geoip2_module.so /usr/lib/
 RUN set -eux; \
     mkdir -p /etc/nginx/modules; \
     find /etc/nginx/modules -maxdepth 1 -type f -name '*.conf' -delete; \
-    printf '%s\\n' 'load_module /usr/lib/nginx/modules/ngx_http_geoip2_module.so;' \
+    printf '%s\n' 'load_module /usr/lib/nginx/modules/ngx_http_geoip2_module.so;' \
       'load_module /usr/lib/nginx/modules/ngx_stream_geoip2_module.so;' \
       > /etc/nginx/modules/20-geoip2.conf; \
     /usr/sbin/nginx -v 2>&1 | grep -F 'nginx/1.31.8'
