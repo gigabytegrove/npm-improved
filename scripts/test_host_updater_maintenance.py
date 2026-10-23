@@ -61,6 +61,36 @@ class HostUpdaterBundleTests(unittest.TestCase):
                 module.verify_and_extract("1.4.2", self.sums(tarball), tarball,
                                           Path(dirname))
 
+
+    def test_duplicate_archive_entry_rejected(self):
+        payload = io.BytesIO()
+        with tarfile.open(fileobj=payload, mode="w:gz") as tar:
+            for name in module.PROGRAMS + (module.PROGRAMS[0],):
+                content = b"1.4.2\n" if name == ".version" else b"test"
+                member = tarfile.TarInfo(name)
+                member.size = len(content)
+                tar.addfile(member, io.BytesIO(content))
+        package = payload.getvalue()
+        with tempfile.TemporaryDirectory() as dirname:
+            with self.assertRaisesRegex(ValueError, "unexpected"):
+                module.verify_and_extract("1.4.2", self.sums(package), package,
+                                          Path(dirname))
+
+    def test_expanded_archive_size_cap(self):
+        payload = io.BytesIO()
+        with tarfile.open(fileobj=payload, mode="w:gz") as tar:
+            for idx, name in enumerate(module.PROGRAMS):
+                content = (b"x" * (module.MAX_PACKAGE_BYTES // len(module.PROGRAMS) + 4)
+                           if idx else b"1.4.2\n")
+                member = tarfile.TarInfo(name)
+                member.size = len(content)
+                tar.addfile(member, io.BytesIO(content))
+        package = payload.getvalue()
+        with tempfile.TemporaryDirectory() as dirname:
+            with self.assertRaisesRegex(ValueError, "expands beyond"):
+                module.verify_and_extract("1.4.2", self.sums(package), package,
+                                          Path(dirname))
+
     def test_host_dns_failures_are_explained_without_raw_tracebacks(self):
         failure = URLError(socket.gaierror(-3, "Temporary failure in name resolution"))
         message = module.explain_maintenance_error(failure)
