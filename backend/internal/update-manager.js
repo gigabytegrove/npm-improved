@@ -224,6 +224,19 @@ const startReleaseOperation = async (access, release, password, { reinstall = fa
 		throw new errs.ValidationError("The published release tag is not a supported stable version.");
 	}
 
+	// Older host-updater programs cannot retain an immutable rollback image or
+	// safely refresh their own scripts for a reused tag. Fail closed until the
+	// host's verified updater bundle matches the release being reapplied.
+	if (reinstall) {
+		const caps = capabilities();
+		const releaseVersion = release.latest.slice(1);
+		if (!caps.host_updater_automatic_maintenance || caps.host_updater_version !== releaseVersion) {
+			throw new errs.ValidationError(
+				`Reinstall requires the verified native host updater for ${release.latest}. Upgrade or refresh the host updater before reinstalling.`,
+			);
+		}
+	}
+
 	const sourceVersion = release.current;
 	const targetVersion = release.latest;
 	const initiatedBy = access.token.getUserId(0);
