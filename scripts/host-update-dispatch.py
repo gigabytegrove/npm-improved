@@ -85,10 +85,10 @@ def main():
             app_release = version if action == "update" else source
             if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", app_release.lstrip("v")):
                 try:
-                    subprocess.run(
-                        [str(maintenance), str(root), "--version", app_release.lstrip("v")],
-                        check=True, timeout=110,
-                    )
+                    command = [str(maintenance), str(root), "--version", app_release.lstrip("v")]
+                    if reinstall:
+                        command.append("--force")
+                    subprocess.run(command, check=True, timeout=110)
                 except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
                     print(f"Native updater will retry maintenance: {error}", file=sys.stderr)
         except (ValueError, TypeError, OSError, json.JSONDecodeError) as error:
