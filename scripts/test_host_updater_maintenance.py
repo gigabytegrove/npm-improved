@@ -95,7 +95,7 @@ class HostUpdaterBundleTests(unittest.TestCase):
             root_info["project_dir"] = str(root)
             def download(url):
                 return self.sums(tarball) if url.endswith("SHA256SUMS.txt") else tarball
-            with mock.patch.object(module, "read_ready", return_value=root_info), \\
+            with mock.patch.object(module, "read_ready", return_value=root_info), \
                  mock.patch.object(module.subprocess, "run") as installer:
                 self.assertFalse(module.maintain(root, "1.4.2", downloader=download))
                 installer.assert_not_called()
