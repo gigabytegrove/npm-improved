@@ -80,6 +80,17 @@ jobs:
         if: steps.version.outputs.release_exists == 'true'
         run: echo "v${{ steps.version.outputs.version }} already exists; no release work is required."
 
+      - name: Validate native updater and release security contracts
+        if: steps.version.outputs.release_exists != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s scripts -p 'test_*.py' -v
+          python3 -m py_compile scripts/host-update-dispatch.py scripts/host-update-maintenance.py
+          bash -n scripts/install-host-updater scripts/audit-deployment-security
+          sh -n scripts/update-handoff.sh
+          python3 scripts/ci/check-release-contract.py
+
       - name: Set up QEMU
         if: steps.version.outputs.release_exists != 'true'
         uses: docker/setup-qemu-action@v3
