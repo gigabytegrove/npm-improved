@@ -207,14 +207,19 @@ def main():
                            "error": explain_maintenance_error(error)}, handle)
                 handle.write("\n")
                 temporary = Path(handle.name)
-            temporary.chmod(0o644)
+            temporary.chmod(0o600)
             temporary.replace(status)
         return 1
     status = root / "data/host-updater-maintenance.json"
     if status.parent.is_dir():
-        status.write_text(json.dumps(
-            {"status": "current", "target_version": version, "updated": changed}
-        ) + "\n", encoding="utf-8")
+        with tempfile.NamedTemporaryFile(
+            mode="w", dir=status.parent, prefix=".maintenance-", delete=False
+        ) as handle:
+            json.dump({"status": "current", "target_version": version, "updated": changed}, handle)
+            handle.write("\n")
+            temporary = Path(handle.name)
+        temporary.chmod(0o600)
+        temporary.replace(status)
     print(f"Native updater {'refreshed' if changed else 'current'} at {version}")
     return 0
 
