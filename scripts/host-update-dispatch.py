@@ -35,9 +35,13 @@ def main():
         processing = data / (".host-update-processing-" + str(os.getpid()) + ".json")
         queue.replace(processing)
         try:
-            if processing.stat().st_size > 16384:
-                raise ValueError("Request file too large")
-            request = json.loads(processing.read_text(encoding="utf-8"))
+            file_flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+            fd = os.open(processing, file_flags)
+            with os.fdopen(fd, "r", encoding="utf-8") as request_file:
+                metadata = os.fstat(request_file.fileno())
+                if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > 16384:
+                    raise ValueError("Native updater request must be a bounded regular file")
+                request = json.load(request_file)
             if not isinstance(request, dict):
                 raise ValueError("Invalid request")
             action = request.get("action")
