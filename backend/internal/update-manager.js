@@ -185,7 +185,7 @@ const verifyCurrentPassword = async (access, password) => {
  * systemd.path watches this queue on the Docker host and performs Compose
  * actions directly. No helper container or Docker Hub dependency.
  */
-const launchHandoff = async ({ action, targetImage, sourceVersion, targetVersion, initiatedBy }) => {
+const launchHandoff = async ({ action, targetImage, sourceVersion, targetVersion, initiatedBy, reinstall = false }) => {
 	const caps = capabilities();
 	if (!caps.enabled) {
 		throw new errs.ValidationError(caps.reason || "The native host updater is unavailable.");
@@ -201,19 +201,24 @@ const launchHandoff = async ({ action, targetImage, sourceVersion, targetVersion
 		source_version: sourceVersion || "unknown",
 		target_version: targetVersion || "unknown",
 		initiated_by: String(initiatedBy || ""),
+		reinstall: Boolean(reinstall),
 	};
 	writeJsonFile(HOST_REQUEST_FILE, request);
 	return { handoff_source: "native-host-service", queued: true };
 };
 
-const startUpdate = async (access, release, password) => {
+const startReleaseOperation = async (access, release, password, { reinstall = false } = {}) => {
 	await access.can("settings:update");
 	await verifyCurrentPassword(access, password);
 	assertIdle();
 	const safety = await verifyOperationalSafety(access);
 
-	if (!release?.latest || !release.update_available) {
-		throw new errs.ValidationError("No newer stable NPM Improved release is available.");
+	if (!release?.latest || (!reinstall && !release.update_available)) {
+		throw new errs.ValidationError(
+			reinstall
+				? "No published stable NPM Improved release is available to reinstall."
+				: "No newer stable NPM Improved release is available.",
+		);
 	}
 	if (!/^v\d+\.\d+\.\d+$/.test(release.latest)) {
 		throw new errs.ValidationError("The published release tag is not a supported stable version.");
@@ -228,7 +233,9 @@ const startUpdate = async (access, release, password) => {
 	writeJsonFile(STATUS_FILE, {
 		state: "preflight",
 		action: "update",
-		message: `Preparing update from ${sourceVersion} to ${targetVersion}.`,
+		message: reinstall
+			? `Preparing a clean reinstallation of the published ${targetVersion} release.`
+			: `Preparing update from ${sourceVersion} to ${targetVersion}.`,
 		started_at: startedAt,
 		completed_at: null,
 		source_version: sourceVersion,
@@ -248,9 +255,10 @@ const startUpdate = async (access, release, password) => {
 			sourceVersion,
 			targetVersion,
 			initiatedBy,
+			reinstall,
 		});
 		await internalAuditLog.add(access, {
-			action: "update_started",
+			action: reinstall ? "reinstall_started" : "update_started",
 			object_type: "system",
 			meta: {
 				source_version: sourceVersion,
@@ -258,6 +266,7 @@ const startUpdate = async (access, release, password) => {
 				target_image: targetImage,
 				handoff_source: hostService.handoff_source,
 				preflight: safety,
+				reinstall,
 			},
 		});
 		return { ...getStatus(), host_service: hostService };
@@ -272,6 +281,11 @@ const startUpdate = async (access, release, password) => {
 		throw err;
 	}
 };
+
+const startUpdate = (access, release, password) => startReleaseOperation(access, release, password);
+
+const reinstallRelease = (access, release, password) =>
+	startReleaseOperation(access, release, password, { reinstall: true });
 
 const rollback = async (access, password) => {
 	await access.can("settings:update");
@@ -400,6 +414,7 @@ export default {
 	getStatus,
 	clearFailedStatus,
 	startUpdate,
+	reinstallRelease,
 	rollback,
 	restart,
 	reconcileAudit,
