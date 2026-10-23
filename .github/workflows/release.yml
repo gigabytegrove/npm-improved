@@ -66,6 +66,11 @@ jobs:
             echo "Manual stable release publication must run from develop." >&2
             exit 1
           fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; refusing to replace its artifacts." >&2
+            exit 1
+          fi
+          RELEASE_EXISTS=false
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "notes=$NOTES" >> "$GITHUB_OUTPUT"
           echo "build_date=$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
