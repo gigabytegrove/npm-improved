@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.6.15] - 2026-10-23
+
+### October 21 Node.js security maintenance
+- Replace the inherited Node.js application runtime with upstream Node.js 24.22.1, fixing the October 21 Node.js security advisories including the DNS and TLS validation issues.
+- Add a Docker build-time assertion and image-level security check that verify the actual Node.js executable, not only the build-stage version.
+- Preserve NGINX 1.31.8 and GeoIP2 security compatibility introduced in v1.6.14.
+- No changes to NPMX synchronization, SQLite/MySQL migrations, Control Center routes, proxy hosts or the built-in update/rollback contract.
+- Installed instances remain on the old image until their administrator applies this update.
+
+
 ## [1.6.14] - 2026-10-23
 
 ### October 2026 NGINX security maintenance
