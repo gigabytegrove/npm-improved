@@ -232,7 +232,7 @@ const startReleaseOperation = async (access, release, password, { reinstall = fa
 
 	writeJsonFile(STATUS_FILE, {
 		state: "preflight",
-		action: "update",
+		action: reinstall ? "reinstall" : "update",
 		message: reinstall
 			? `Preparing a clean reinstallation of the published ${targetVersion} release.`
 			: `Preparing update from ${sourceVersion} to ${targetVersion}.`,
