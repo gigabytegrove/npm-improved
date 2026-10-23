@@ -97,6 +97,9 @@ jobs:
       - name: Build production image
         run: docker build --pull --progress=plain -f docker/Dockerfile -t npm-improved:ci .
 
+      - name: Assert patched NGINX security build and module compatibility
+        run: bash scripts/ci/assert-nginx-security npm-improved:ci
+
       - name: Verify native in-place Update manager restart
         shell: bash
         run: |
