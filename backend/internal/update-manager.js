@@ -224,6 +224,10 @@ const startReleaseOperation = async (access, release, password, { reinstall = fa
 		throw new errs.ValidationError("The published release tag is not a supported stable version.");
 	}
 
+	if (reinstall && release.current !== release.latest && !release.update_available) {
+		throw new errs.ValidationError("Reinstall cannot downgrade this installation. Use the supported rollback process instead.");
+	}
+
 	// Older host-updater programs cannot retain an immutable rollback image or
 	// safely refresh their own scripts for a reused tag. Fail closed until the
 	// host's verified updater bundle matches the release being reapplied.
