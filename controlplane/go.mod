@@ -1,3 +1,3 @@
 module github.com/gigabytegrove/npm-improved/controlplane
 
-go 1.23
+go 1.27.3
