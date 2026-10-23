@@ -5,6 +5,24 @@ ARG BASE_IMAGE=ghcr.io/gigabytegrove/npm-improved:v1.4.0
 # image contains OpenResty; overlaying application files alone cannot fix it.
 FROM nginx:1.31.8-trixie AS patched-nginx
 
+# Patched Node.js runtime: fixes the October 21, 2026 Node.js advisories.
+FROM node:24.22.1-bookworm-slim AS patched-node
+
+# Recompile the native control plane; the old v1.4 base Go binary cannot
+# receive crypto/x509 fixes by overlaying only the NGINX executable.
+FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine AS patched-controlplane
+ARG TARGETOS
+ARG TARGETARCH
+ARG TARGETVARIANT
+WORKDIR /src
+COPY controlplane/go.mod ./
+COPY controlplane/*.go ./
+RUN CGO_ENABLED=0 go test ./...
+RUN set -eux; \
+    if [ "$TARGETARCH" = "arm" ] && [ -n "${TARGETVARIANT:-}" ]; then export GOARM="${TARGETVARIANT#v}"; fi; \
+    CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
+      go build -trimpath -ldflags="-s -w" -o /out/npm-improved-control-plane .
+
 # Node.js 24.22.1 includes the October 21, 2026 security fixes.
 # Replace the executable in the inherited application runtime, not just the
 # frontend build-stage runtime. The base image's Node may be outdated.
@@ -31,15 +49,13 @@ RUN set -eux; \
     test -s objs/ngx_http_geoip2_module.so; \
     test -s objs/ngx_stream_geoip2_module.so
 
-# NPM Improved v1.5.0 production runtime patch build.
-# Inherits the verified, already-published NPMi v1.4.0 multi-architecture
-# runtime, native control-plane binary, nginx templates and trusted CA.
-# The base runtime is trusted and unchanged; updated Node and Nginx files
-# are overlaid into the runtime. This avoids
-# Docker Hub dependencies and rebuilds of unchanged Nginx/Go components.
-# Future releases that change Go or base OS must restore the full builder.
+# NPM Improved v1.6.15 security runtime refresh.
+# Preserve the battle-tested NPMi base and NGINX 1.31.8 module configuration,
+# while replacing both the Node.js executable and native Go control plane.
 
 FROM --platform=$BUILDPLATFORM ${BASE_IMAGE} AS frontend-builder
+COPY --from=patched-node /usr/local/bin/node /usr/local/bin/node
+RUN node --version | grep -Fx 'v24.22.1'
 ENV NODE_ENV=development NODE_OPTIONS=--openssl-legacy-provider
 WORKDIR /build/frontend
 COPY frontend/package.json frontend/yarn.lock ./
