@@ -29,6 +29,7 @@ docker run --rm --entrypoint /bin/sh "$IMAGE" -ec '
   cat > "$tmp" <<"NGINX"
 load_module /usr/lib/nginx/modules/ngx_http_geoip2_module.so;
 load_module /usr/lib/nginx/modules/ngx_stream_geoip2_module.so;
+user npm;
 worker_processes 1;
 pid /tmp/npmi-security-check.pid;
 error_log stderr;
