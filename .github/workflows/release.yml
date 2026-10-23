@@ -69,11 +69,15 @@ jobs:
           # Distinguish an absent release (HTTP 404) from an API/network error.
           # Fail closed on ambiguous GitHub API failures.
           status="$(gh api -i "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" 2>&1 | head -n 1 || true)"
-          case "$status" in
-            "HTTP/2 404"*|"HTTP/1.1 404"*) ;;
-            "HTTP/2 200"*|"HTTP/1.1 200"*) echo "Release $TAG already exists; refusing to replace its artifacts." >&2; exit 1 ;;
-            *) echo "Unable to verify release absence: $status" >&2; exit 1 ;;
-          esac
+          if [[ "$status" =~ ^HTTP/[0-9.]+[[:space:]]404([[:space:]]|$) ]]; then
+            : # Verified not found
+          elif [[ "$status" =~ ^HTTP/[0-9.]+[[:space:]]200([[:space:]]|$) ]]; then
+            echo "Release $TAG already exists; refusing to replace its artifacts." >&2
+            exit 1
+          else
+            echo "Unable to verify release absence: $status" >&2
+            exit 1
+          fi
           RELEASE_EXISTS=false
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "notes=$NOTES" >> "$GITHUB_OUTPUT"
