@@ -1,34 +1,15 @@
 # Changelog
 
-## [1.6.16] - 2026-10-23
-
-### Security-patched native control plane
-- Rebuild NPM Improved's native Go control plane using Go 1.27.3, incorporating the October 19 crypto/x509 fix (CVE-2026-111943).
-- Preserve the original bind capability needed for the independent control-plane listener, including restricted PUID deployments.
-- Keep the already-released NGINX 1.31.8 and Node.js 24.22.1 patches from v1.6.14/v1.6.15.
-- Preserve NPMX replication, SQLite/MySQL migrations and the native in-place updater/rollback contract; require Docker regression validation before publication.
-- Installed nodes must apply the new release to receive the rebuilt executable.
-
-
-## [1.6.15] - 2026-10-23
-
-### October 21 Node.js security maintenance
-- Replace the inherited Node.js application runtime with upstream Node.js 24.22.1, fixing the October 21 Node.js security advisories including the DNS and TLS validation issues.
-- Add a Docker build-time assertion and image-level security check that verify the actual Node.js executable, not only the build-stage version.
-- Preserve NGINX 1.31.8 and GeoIP2 security compatibility introduced in v1.6.14.
-- No changes to NPMX synchronization, SQLite/MySQL migrations, Control Center routes, proxy hosts or the built-in update/rollback contract.
-- Installed instances remain on the old image until their administrator applies this update.
-
-
 ## [1.6.14] - 2026-10-23
 
-### October 2026 NGINX security maintenance
-- Replace the outdated inherited OpenResty proxy executable with NGINX 1.31.8, including upstream security fixes for CVE-2026-15176, CVE-2026-93479, CVE-2026-97205, CVE-2026-95101 and CVE-2026-97629.
-- Rebuild the GeoIP2 modules against the pinned NGINX source and validate HTTP/stream module compatibility.
-- Fail production image validation and AMD64/ARM64 release packaging unless the actual container executable and required modules pass the security test.
-- Retain the independent control-plane, host updater/rollback, NPMX logic, and existing proxy-management UI. No automatic changes to installed deployments.
-- Note that custom third-party OpenResty/Lua directives require compatibility review when upgrading to standard NGINX.
-
+### October 2026 consolidated security update
+- **NGINX 1.31.8:** Replace the inherited OpenResty binary with a patched upstream NGINX binary to address CVE-2026-15176, CVE-2026-93479, CVE-2026-97205, CVE-2026-95101, and CVE-2026-97629.
+- Rebuild and verify GeoIP2 HTTP and stream dynamic modules against the exact NGINX 1.31.8 source.
+- **Node.js 24.22.1:** Replace the runtime executable with the patched October 21 Node.js security release, and assert the actual executable version in the production image.
+- **Go 1.27.3:** Rebuild the native NPMi control-plane executable with the patched Go crypto/x509 standard library (CVE-2026-111943) and restore its original low-port bind capability.
+- Validate the complete Docker image on AMD64 and ARM64, along with management API health, native host-updater/rollback, NPMX pairing/synchronization, and SQLite/MySQL migrations.
+- Retain the application's existing proxy-host settings, certificates, storage, management UI, permissions, and configuration without a schema reset.
+- **Consolidation note:** The complete security baseline was republished under v1.6.14. Instances originally installed from the first v1.6.14 build must explicitly redeploy the updated image, as the equal-version in-app update check cannot detect a republished version.
 
 ## [1.6.11] - 2026-10-14
 
