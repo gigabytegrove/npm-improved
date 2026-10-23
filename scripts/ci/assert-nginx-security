@@ -24,6 +24,11 @@ docker run --rm --entrypoint /bin/sh "$IMAGE" -ec '
     }
   done
   test -s /etc/nginx/modules/20-geoip2.conf
+  # The production entrypoint provisions these paths before launching NGINX.
+  # This isolated binary/module test intentionally skips that entrypoint.
+  mkdir -p /var/log/nginx /var/cache/nginx/client_temp \
+    /var/cache/nginx/proxy_temp /var/cache/nginx/fastcgi_temp \
+    /var/cache/nginx/uwsgi_temp /var/cache/nginx/scgi_temp
   tmp="$(mktemp)"
   trap "rm -f \"$tmp\"" EXIT
   cat > "$tmp" <<"NGINX"
