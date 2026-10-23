@@ -5,6 +5,11 @@ ARG BASE_IMAGE=ghcr.io/gigabytegrove/npm-improved:v1.4.0
 # image contains OpenResty; overlaying application files alone cannot fix it.
 FROM nginx:1.31.8-trixie AS patched-nginx
 
+# Node.js 24.22.1 includes the October 21, 2026 security fixes.
+# Replace the executable in the inherited application runtime, not just the
+# frontend build-stage runtime. The base image's Node may be outdated.
+FROM node:24.22.1-bookworm-slim AS patched-node
+
 # Build GeoIP2 for the *same* NGINX core so that the NPMi configuration
 # and optional MaxMind/stream integrations do not load an incompatible .so.
 FROM debian:trixie-slim AS geoip2-builder
@@ -43,6 +48,13 @@ COPY frontend/ ./
 RUN yarn build
 
 FROM ${BASE_IMAGE}
+# Secure the live application Node.js runtime. The official Node executable
+# is copied into the image and verified immediately, failing the build if
+# runtime dependencies or the expected security version are unavailable.
+COPY --from=patched-node /usr/local/bin/node /usr/local/bin/node
+RUN set -eux; \
+    node -v; \
+    test "$(node -p 'process.versions.node')" = '24.22.1'
 # Replace the actual reverse-proxy executable and its dynamic modules. This is
 # deliberately distinct from the application overlay and is required for the
 # 2026-10 NGINX fixes to reach running installations.
