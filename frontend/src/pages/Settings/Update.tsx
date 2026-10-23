@@ -14,6 +14,7 @@ import ReactMarkdown from "react-markdown";
 import {
 	getUpdateManager,
 	restartManagedInstance,
+	reinstallManagedRelease,
 	rollbackManagedUpdate,
 	startManagedUpdate,
 } from "src/api/backend";
@@ -77,7 +78,7 @@ const badgeClass = (state?: string) => {
 };
 
 
-type AuthAction = "update" | "rollback" | "restart";
+type AuthAction = "update" | "reinstall" | "rollback" | "restart";
 
 export default function Update() {
 	const initialStatusLoad = useRef(true);
@@ -107,6 +108,11 @@ export default function Update() {
 	const active = ACTIVE_STATES.has(data?.status?.state || "");
 	const updateAvailable = Boolean(data?.release?.updateAvailable);
 	const updaterReady = Boolean(data?.capabilities?.enabled);
+	const reinstallHostReady = Boolean(
+		data?.capabilities?.hostUpdaterAutomaticMaintenance &&
+		data?.capabilities?.hostUpdaterVersion === data?.release?.latest?.replace(/^v/, ""),
+	);
+	const canReinstall = updaterReady && reinstallHostReady && Boolean(data?.release?.latest) && !data?.releaseError && (data?.release?.latest === data?.release?.current || updateAvailable);
 	const rolling = Boolean(data?.coordination?.instanceSyncEnabled);
 	const canRollback = Boolean(data?.status?.previousImage);
 	const progress = UPDATE_PROGRESS[data?.status?.state || "idle"] ?? 0;
@@ -156,16 +162,20 @@ export default function Update() {
 	const actionTitle =
 		authAction === "update"
 			? `Update to ${data?.release?.latest || "latest"}`
-			: authAction === "rollback"
-				? `Roll back to ${data?.status?.previousVersion || "previous version"}`
-				: "Restart NPM Improved";
+			: authAction === "reinstall"
+				? `Reinstall Current Release (${data?.release?.latest || "latest"})`
+				: authAction === "rollback"
+					? `Roll back to ${data?.status?.previousVersion || "previous version"}`
+					: "Restart NPM Improved";
 
 	const actionDescription =
 		authAction === "update"
 			? "NPM Improved will update this node, verify health, and automatically roll back on failure. Upgrade the other NPMX node separately once this node is healthy."
-			: authAction === "rollback"
-				? "NPM Improved will restore the previously recorded application image and verify that it becomes healthy."
-				: "NPM Improved will restart the application container and verify that it returns healthy.";
+			: authAction === "reinstall"
+				? "Re-download and reapply the latest stable release published on GitHub, even if its version matches the installed version. Your proxy configuration, data, and certificates are preserved. This briefly replaces the app container and uses health verification with automatic rollback. Reinstall NPMX nodes individually."
+				: authAction === "rollback"
+					? "NPM Improved will restore the previously recorded application image and verify that it becomes healthy."
+					: "NPM Improved will restart the application container and verify that it returns healthy.";
 
 	const runAuthenticatedAction = async () => {
 		if (!authAction || !password) return;
@@ -174,9 +184,11 @@ export default function Update() {
 		const fn =
 			action === "update"
 				? startManagedUpdate
-				: action === "rollback"
-					? rollbackManagedUpdate
-					: restartManagedInstance;
+				: action === "reinstall"
+					? reinstallManagedRelease
+					: action === "rollback"
+						? rollbackManagedUpdate
+						: restartManagedInstance;
 
 		setRunningAction(action);
 		setActionError("");
@@ -453,6 +465,13 @@ export default function Update() {
 							Restart NPM Improved
 						</Button>
 						<Button
+							onClick={() => openAuth("reinstall")}
+							disabled={!canReinstall || active || runningAction !== null}
+						>
+							<IconDownload size={16} />
+							Reinstall Current Release
+						</Button>
+						<Button
 							actionType="danger"
 							onClick={() => openAuth("rollback")}
 							disabled={!updaterReady || !canRollback || active || runningAction !== null}
@@ -461,9 +480,18 @@ export default function Update() {
 							Roll back to {data?.status?.previousVersion || "previous version"}
 						</Button>
 					</div>
+					{updaterReady && !reinstallHostReady && data?.release?.latest ? (
+						<Alert variant="warning" className="mt-3 mb-0">
+							Reinstall is available after the native host updater has been refreshed to
+							{" "}{data.release.latest}. Complete the normal update or its one-time host updater
+							{" "}maintenance before using this option.
+						</Alert>
+					) : null}
 					<div className="text-secondary small mt-3">
-						No permanent update-worker container is used. Lifecycle actions create only a temporary,
-						self-cleaning handoff while the application container is being replaced or restarted.
+						Reinstall fetches the currently published stable release from GitHub and recreates
+						the application even when the version number is unchanged. Administrator password
+						and a valid release check are required. NPMX nodes must be reinstalled one at a time.
+						The native host updater handles health checks and rollback; no updater container is created.
 					</div>
 				</div>
 			</div>
@@ -514,7 +542,7 @@ export default function Update() {
 						isLoading={runningAction === authAction}
 						disabled={!password || Boolean(runningAction)}
 					>
-						{authAction === "update" ? <IconDownload size={16} /> : null}
+						{(authAction === "update" || authAction === "reinstall") ? <IconDownload size={16} /> : null}
 						{authAction === "restart" ? <IconRotateClockwise2 size={16} /> : null}
 						{authAction === "rollback" ? <IconHistory size={16} /> : null}
 						{actionTitle}

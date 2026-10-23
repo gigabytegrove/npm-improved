@@ -2,6 +2,9 @@
 set -eu
 
 ACTION="${1:-}"
+REINSTALL="${NPM_UPDATE_REINSTALL:-0}"
+DISPLAY_ACTION="$ACTION"
+[ "$REINSTALL" = "1" ] && DISPLAY_ACTION="reinstall"
 TARGET_IMAGE="${2:-}"
 MODE="${3:-sqlite}"
 SOURCE_VERSION="${4:-unknown}"
@@ -46,7 +49,7 @@ write_status() {
 	cat >"$tmp" <<EOF
 {
   "state": "$(json_escape "$state")",
-  "action": "$(json_escape "$ACTION")",
+  "action": "$(json_escape "$DISPLAY_ACTION")",
   "message": "$(json_escape "$message")",
   "started_at": "$(json_escape "${STARTED_AT:-$(date -u '+%Y-%m-%dT%H:%M:%SZ')}")",
   "completed_at": "$(json_escape "$completed")",
@@ -83,10 +86,11 @@ get_env() {
 set_env() {
 	key="$1"
 	value="$2"
-	if grep -q "^$key=" "$ENV_FILE"; then
-		sed -i "s|^$key=.*|$key=$value|" "$ENV_FILE"
+	file="${3:-$ENV_FILE}"
+	if grep -q "^$key=" "$file"; then
+		sed -i "s|^$key=.*|$key=$value|" "$file"
 	else
-		printf '%s=%s\n' "$key" "$value" >>"$ENV_FILE"
+		printf '%s=%s\n' "$key" "$value" >>"$file"
 	fi
 }
 
@@ -259,11 +263,38 @@ case "$ACTION" in
 			exit 1
 		fi
 
+		# A same-tag reinstall must retain the previous IMAGE ID, not a
+		# mutable tag that the incoming docker pull/load will replace.
+		if [ "$REINSTALL" = "1" ] && [ "${SOURCE_VERSION#v}" = "${TARGET_VERSION#v}" ]; then
+			OLD_CID="$(compose ps -q app 2>/dev/null || true)"
+			OLD_IMAGE_ID="$(docker inspect --format '{{.Image}}' "$OLD_CID" 2>/dev/null || true)"
+			if [ -z "$OLD_IMAGE_ID" ] || ! docker image inspect "$OLD_IMAGE_ID" >/dev/null 2>&1; then
+				write_status "failed" "Reinstall preflight failed." "Cannot identify the running container image for safe rollback." "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+				exit 1
+			fi
+			if ! docker image tag "$OLD_IMAGE_ID" "npm-improved:local"; then
+				write_status "failed" "Reinstall preflight failed." "Cannot snapshot the previous image under the supported local rollback tag." "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+				exit 1
+			fi
+			PREVIOUS_IMAGE="npm-improved:local"
+		fi
+
 		write_status "pulling" "Downloading $TARGET_VERSION."
 		PULL_LOG="$ROOT/data/update-pull.log"
 		rm -f "$PULL_LOG"
 		PULL_DETAIL=""
-		if docker pull "$TARGET_IMAGE" >"$PULL_LOG" 2>&1; then
+		if [ "$REINSTALL" = "1" ]; then
+			# Reinstall prioritizes the exact architecture bundle attached to
+			# the current GitHub Release, verified against published SHA256SUMS.
+			if load_release_bundle "$TARGET_VERSION" "$TARGET_IMAGE"; then
+				UPDATE_SOURCE="verified GitHub Release bundle"
+			elif docker pull "$TARGET_IMAGE" >"$PULL_LOG" 2>&1; then
+				UPDATE_SOURCE="GitHub Container Registry (release bundle unavailable)"
+			else
+				write_status "failed" "Reinstall image unavailable." "Could not download the verified GitHub Release bundle or its official GHCR image: ${RELEASE_BUNDLE_ERROR:-unknown}" "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+				exit 1
+			fi
+		elif docker pull "$TARGET_IMAGE" >"$PULL_LOG" 2>&1; then
 			UPDATE_SOURCE="GitHub Container Registry"
 		else
 			PULL_DETAIL="$(tail -n 20 "$PULL_LOG" 2>/dev/null || true)"
@@ -288,6 +319,11 @@ case "$ACTION" in
 		TARGET_DIGEST="$(docker image inspect --format '{{if .RepoDigests}}{{index .RepoDigests 0}}{{else}}{{.Id}}{{end}}' "$TARGET_IMAGE" 2>/dev/null || true)"
 		cp "$ENV_FILE" "$PREVIOUS_ENV"
 		chmod 600 "$PREVIOUS_ENV" 2>/dev/null || true
+		# Pin the pre-reinstall image in the rollback environment rather than
+		# writing the newly fetched, identical semver tag there.
+		if [ "$REINSTALL" = "1" ] && [ "$PREVIOUS_IMAGE" = "npm-improved:local" ]; then
+			set_env NPM_IMAGE "$PREVIOUS_IMAGE" "$PREVIOUS_ENV"
+		fi
 		set_env NPM_IMAGE "$TARGET_IMAGE"
 
 		write_status "staging" "The update image is ready from ${UPDATE_SOURCE:-the official release channel}. Preparing the replacement container."
@@ -338,7 +374,12 @@ case "$ACTION" in
 			exit 1
 		fi
 
-		write_status "completed" "Updated successfully to $TARGET_VERSION." "" "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "$TARGET_DIGEST" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+		if [ "$REINSTALL" = "1" ]; then
+			SUCCESS_MESSAGE="Reinstalled $TARGET_VERSION successfully from the published release."
+		else
+			SUCCESS_MESSAGE="Updated successfully to $TARGET_VERSION."
+		fi
+		write_status "completed" "$SUCCESS_MESSAGE" "" "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "$TARGET_DIGEST" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 		;;
 
 	rollback)

@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.6.15] - 2026-10-23
+
+### Full October security bundle and reinstall maintenance action
+
+- Includes the complete October 2026 NGINX, Node.js and Go security baseline: NGINX 1.31.8, Node.js 24.22.1, and Go 1.27.3.
+- Exposes the combined security bundle as v1.6.15 so clients already running v1.6.14 receive a regular semantic-version update.
+- Adds **Reinstall Current Release** to Maintenance & Recovery: download and reapply the latest published stable GitHub release, even when the installed version number matches.
+- Keep administrator reauthentication, same-node operation locking, NPMX sequential-update preflight, native host updater, health verification and automatic rollback.
+- For same-version reinstalls, save an immutable copy of the running image before repulling the release tag, so rollback cannot accidentally restore the new image.
+- Existing proxy hosts, volumes, certificates, credentials and databases are preserved.
+
 ## [1.6.14] - 2026-10-23
 
 ### October 2026 consolidated security update

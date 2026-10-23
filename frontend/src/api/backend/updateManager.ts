@@ -75,6 +75,13 @@ export async function startManagedUpdate(password: string): Promise<UpdateStatus
 	});
 }
 
+export async function reinstallManagedRelease(password: string): Promise<UpdateStatus> {
+	return await api.post({
+		url: "/version/update/reinstall",
+		data: { password },
+	});
+}
+
 export async function rollbackManagedUpdate(password: string): Promise<UpdateStatus> {
 	return await api.post({
 		url: "/version/update/rollback",

@@ -87,6 +87,22 @@ class HostUpdaterBundleTests(unittest.TestCase):
             loader.assert_called_once()
             sleep.assert_not_called()
 
+    def test_explicit_reinstall_refreshes_same_version_host_updater(self):
+        tarball = self.archive()
+        root_info = {"mode": "native-host-service", "component_version": "1.4.2"}
+        with tempfile.TemporaryDirectory() as dirname:
+            root = Path(dirname)
+            root_info["project_dir"] = str(root)
+            def download(url):
+                return self.sums(tarball) if url.endswith("SHA256SUMS.txt") else tarball
+            with mock.patch.object(module, "read_ready", return_value=root_info), \
+                 mock.patch.object(module.subprocess, "run") as installer:
+                self.assertFalse(module.maintain(root, "1.4.2", downloader=download))
+                installer.assert_not_called()
+                self.assertTrue(module.maintain(root, "1.4.2", downloader=download, force=True))
+                installer.assert_called_once()
+                self.assertEqual(installer.call_args.args[0][0], "/bin/bash")
+
     def test_only_forward_versions_install(self):
         self.assertTrue(module.newer_than("1.4.2", "1.4.1"))
         self.assertFalse(module.newer_than("1.4.2", "1.4.2"))
