@@ -7,6 +7,8 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
 maintenance = (ROOT / "scripts/host-update-maintenance.py").read_text(encoding="utf-8")
+dispatch = (ROOT / "scripts/host-update-dispatch.py").read_text(encoding="utf-8")
+handoff = (ROOT / "scripts/update-handoff.sh").read_text(encoding="utf-8")
 issues = []
 def require(condition, message):
     if not condition:
@@ -33,6 +35,14 @@ require("len(members) != len(PROGRAMS)" in maintenance and "sum(member.size for 
 require("MAX_PACKAGE_BYTES" in maintenance and "member.isfile()" in maintenance,
         "Host updater archive path and type guards missing")
 
+require("O_NOFOLLOW" in dispatch and "stat.S_ISREG" in dispatch,
+        "Native queued request must be opened without following symlinks")
+require("Requested image tag and version do not match" in dispatch,
+        "Native updater must reject image-version mismatches")
+require('if [ -L "$stage_dir" ]' in handoff and 'gzip -t "$bundle"' in handoff,
+        "Release fallback must reject symlink staging and test gzip integrity")
+require("temporary.chmod(0o600)" in maintenance,
+        "Updater maintenance status must not be world-readable")
 if issues:
     for issue in issues:
         print("FAIL:", issue, file=sys.stderr)
