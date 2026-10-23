@@ -8,12 +8,6 @@ on:
       - ".version"
       - ".github/workflows/release.yml"
   workflow_dispatch:
-    inputs:
-      republish_current:
-        description: "Deliberately replace this version's verified release assets without changing its number"
-        type: boolean
-        required: true
-        default: false
 
 permissions:
   contents: write
@@ -72,17 +66,6 @@ jobs:
             echo "Manual stable release publication must run from develop." >&2
             exit 1
           fi
-          REPUBLISH=false
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.republish_current }}" == "true" ]]; then
-            REPUBLISH=true
-          fi
-          if gh release view "$TAG" >/dev/null 2>&1 && [[ "$REPUBLISH" != "true" ]]; then
-            RELEASE_EXISTS=true
-          else
-            RELEASE_EXISTS=false
-          fi
-
-          echo "republish=$REPUBLISH" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "notes=$NOTES" >> "$GITHUB_OUTPUT"
           echo "build_date=$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
@@ -215,16 +198,9 @@ jobs:
 
           TAG="v${VERSION}"
 
-          if [[ "${{ steps.version.outputs.republish }}" == "true" ]] && gh release view "$TAG" >/dev/null 2>&1; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git tag -f "$TAG" "$GITHUB_SHA"
-            git push --force origin "refs/tags/$TAG"
-            gh release edit "$TAG" --target "$GITHUB_SHA" --title "NPM Improved $TAG" --notes-file "$NOTES" --latest
-            gh release upload "$TAG" release-assets/* --clobber
-          else
-            gh release create "$TAG" --target "$GITHUB_SHA" --title "NPM Improved $TAG" --notes-file "$NOTES" release-assets/*
-          fi
+          # Release tags and their assets are immutable after publication.
+          # Publish a new semantic version for every changed build.
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "NPM Improved $TAG" --notes-file "$NOTES" release-assets/*
 
           for asset in "npm-improved-$TAG-host-updater.tar.gz" "npm-improved-$TAG-linux-amd64.tar.gz" "npm-improved-$TAG-linux-arm64.tar.gz" "npm-improved-$TAG-SHA256SUMS.txt"; do
             gh release view "$TAG" --json assets --jq '.assets[].name' | grep -Fxq "$asset" || {
