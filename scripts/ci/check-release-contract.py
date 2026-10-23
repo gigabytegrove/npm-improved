@@ -9,6 +9,7 @@ workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
 maintenance = (ROOT / "scripts/host-update-maintenance.py").read_text(encoding="utf-8")
 dispatch = (ROOT / "scripts/host-update-dispatch.py").read_text(encoding="utf-8")
 handoff = (ROOT / "scripts/update-handoff.sh").read_text(encoding="utf-8")
+api = (ROOT / "backend/app.js").read_text(encoding="utf-8")
 issues = []
 def require(condition, message):
     if not condition:
@@ -44,6 +45,10 @@ require('if [ -L "$stage_dir" ]' in handoff and 'gzip -t "$bundle"' in handoff,
 require("Native host updater downgrade is not permitted" in maintenance, "Forced native updater downgrades must fail")
 require("temporary.chmod(0o600)" in maintenance,
         "Updater maintenance status must not be world-readable")
+require('(req.baseUrl + req.path).includes("nginx/certificates")' not in api,
+        "Certificate endpoints must not unconditionally expose error stacks")
+require('process.env.NPM_ALLOW_DEBUG_ERROR_DETAILS === "true"' in api,
+        "Verbose API errors must require explicit opt-in")
 if issues:
     for issue in issues:
         print("FAIL:", issue, file=sys.stderr)
