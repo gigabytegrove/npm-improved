@@ -80,7 +80,7 @@ class HostUpdaterBundleTests(unittest.TestCase):
         payload = io.BytesIO()
         with tarfile.open(fileobj=payload, mode="w:gz") as tar:
             for idx, name in enumerate(module.PROGRAMS):
-                content = (b"x" * (module.MAX_PACKAGE_BYTES // len(module.PROGRAMS) + 4)
+                content = (b"x" * (module.MAX_PACKAGE_BYTES // 2)
                            if idx else b"1.4.2\n")
                 member = tarfile.TarInfo(name)
                 member.size = len(content)
