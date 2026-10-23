@@ -61,12 +61,20 @@ jobs:
           fi
 
           TAG="v${VERSION}"
-          if gh release view "$TAG" >/dev/null 2>&1; then
+          # A one-time explicitly titled merge reissues the same semver with
+          # all three security toolchains; ordinary releases stay immutable.
+          REISSUE=false
+          if [[ "$VERSION" == "1.6.14" && "$(git log -1 --pretty=%s)" == "release: consolidate v1.6.14 security baseline" ]]; then
+            REISSUE=true
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1 && [[ "$REISSUE" != "true" ]]; then
             RELEASE_EXISTS=true
           else
             RELEASE_EXISTS=false
           fi
 
+          echo "reissue=$REISSUE" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "notes=$NOTES" >> "$GITHUB_OUTPUT"
           echo "build_date=$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
@@ -199,7 +207,24 @@ jobs:
 
           TAG="v${VERSION}"
 
-          gh release create "$TAG"             --target "$GITHUB_SHA"             --title "NPM Improved $TAG"             --notes-file "$NOTES"             release-assets/*
+          if [[ "${{ steps.version.outputs.reissue }}" == "true" ]]; then
+            # All multiarch images and checksum-verified bundles are built by
+            # this point. Retarget the existing tag before replacing assets.
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -f "$TAG" "$GITHUB_SHA"
+            git push --force origin "refs/tags/$TAG"
+            gh release edit "$TAG" --target "$GITHUB_SHA" --title "NPM Improved $TAG" --notes-file "$NOTES" --latest
+            gh release upload "$TAG" release-assets/* --clobber
+          else
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "NPM Improved $TAG" --notes-file "$NOTES" release-assets/*
+          fi
+
+          # Never succeed unless ALL four assets exist under the consolidated version.
+          for asset in "npm-improved-$TAG-host-updater.tar.gz" "npm-improved-$TAG-linux-amd64.tar.gz" "npm-improved-$TAG-linux-arm64.tar.gz" "npm-improved-$TAG-SHA256SUMS.txt"; do
+            gh release view "$TAG" --json assets --jq '.assets[].name' | grep -Fxq "$asset" || { echo "Missing release asset: $asset" >&2; exit 1; }
+          done
+          echo "Verified complete release assets for $TAG"
 
       - name: Verify public GitHub Release fallback
         if: steps.version.outputs.release_exists != 'true'
@@ -222,3 +247,56 @@ jobs:
 
           echo "::error::The public GitHub Release update bundle channel could not be verified."
           exit 1
+
+      - name: Remove superseded GitHub releases and tags
+        if: steps.version.outputs.reissue == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          # Only do this AFTER public consolidated release and bundle checks.
+          for old in v1.6.15 v1.6.16; do
+            if gh release view "$old" >/dev/null 2>&1; then
+              gh release delete "$old" --yes --cleanup-tag
+            else
+              if git ls-remote --tags origin "refs/tags/$old" | grep -q .; then
+                git push origin ":refs/tags/$old"
+              fi
+            fi
+            if gh release view "$old" >/dev/null 2>&1 || git ls-remote --tags origin "refs/tags/$old" | grep -q .; then
+              echo "FAIL: superseded release/tag remains: $old" >&2
+              exit 1
+            fi
+            echo "Removed superseded GitHub release and git tag $old"
+          done
+
+      - name: Remove exclusive GHCR tags for superseded releases
+        if: steps.version.outputs.reissue == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          package="orgs/gigabytegrove/packages/container/npm-improved"
+          if ! versions="$(gh api --paginate "$package/versions?per_page=100" --jq '.[] | {id: .id, tags: .metadata.container.tags}' 2>&1)"; then
+            echo "::warning::Could not list GHCR package versions; old image tags require separately authorized removal: $versions"
+            exit 0
+          fi
+          while IFS= read -r item; do
+            [[ -n "$item" ]] || continue
+            if ! echo "$item" | jq -e '.tags | any(. == "v1.6.15" or . == "1.6.15" or . == "v1.6.16" or . == "1.6.16")' >/dev/null; then
+              continue
+            fi
+            version_id="$(echo "$item" | jq -r '.id')"
+            unexpected="$(echo "$item" | jq -r '[.tags[]? | select(. != "v1.6.15" and . != "1.6.15" and . != "v1.6.16" and . != "1.6.16")] | join(",")')"
+            if [[ -n "$unexpected" ]]; then
+              echo "::warning::GHCR version $version_id has shared tags ($unexpected); will not delete unrelated tags."
+              continue
+            fi
+            if gh api --method DELETE "$package/versions/$version_id"; then
+              echo "Deleted superseded exclusive GHCR package version $version_id"
+            else
+              echo "::warning::Unable to delete GHCR package version $version_id with this token."
+            fi
+          done <<< "$versions"
