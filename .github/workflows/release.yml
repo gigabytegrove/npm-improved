@@ -114,6 +114,8 @@ jobs:
           context: .
           file: docker/Dockerfile
           push: true
+          provenance: mode=max
+          sbom: true
           platforms: linux/amd64,linux/arm64
           tags: |
             ghcr.io/gigabytegrove/npm-improved:v${{ steps.version.outputs.version }}
