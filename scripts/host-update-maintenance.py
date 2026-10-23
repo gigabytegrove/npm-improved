@@ -156,7 +156,7 @@ def newer_than(version, current):
         map(int, current.split("."))) if VERSION_PATTERN.fullmatch(current) else True
 
 
-def maintain(root, version, downloader=fetch):
+def maintain(root, version, downloader=fetch, force=False):
     root = Path(root).resolve()
     if not VERSION_PATTERN.fullmatch(version):
         raise ValueError("Untrusted or unsupported requested release version")
@@ -164,7 +164,7 @@ def maintain(root, version, downloader=fetch):
     if ready.get("mode") != "native-host-service" or ready.get("project_dir") != str(root):
         raise ValueError("Host updater is not initialized for this project")
     current = ready.get("component_version", "0.0.0")
-    if not newer_than(version, current):
+    if not force and not newer_than(version, current):
         return False
     base = f"{RELEASE_BASE}/v{version}"
     asset = f"npm-improved-v{version}-host-updater.tar.gz"
@@ -189,11 +189,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("project")
     parser.add_argument("--version", default=None)
+    parser.add_argument("--force", action="store_true", help="Reapply verified updater assets for the installed version")
     args = parser.parse_args()
     root = Path(args.project).resolve()
     version = args.version or app_version(root)
     try:
-        changed = maintain(root, version)
+        changed = maintain(root, version, force=args.force)
     except Exception as error:
         message = f"Host updater maintenance: {explain_maintenance_error(error)}"
         print(message, file=sys.stderr)
