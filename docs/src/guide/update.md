@@ -106,6 +106,30 @@ If startup or verification fails, the handoff restores the previous image settin
 
 The final state and exact failure reason are saved to the Update page.
 
+## Reinstall Current Release
+
+Under **Settings → Update → Maintenance & Recovery**, choose **Reinstall Current Release** when you want to reapply the **latest stable release currently published on GitHub**, even if the installed version number is identical. This is an explicit manual action, not a background update.
+
+- An administrator must enter their current password. The backend refreshes GitHub release metadata and accepts **only** the official stable NPMi release tag.
+- NPMi enforces the same safety preflight as normal updates: no concurrent update, active database migration or restore; Shared MySQL mode is blocked; NPMX nodes are handled sequentially.
+- The native root-owned host updater first downloads the architecture-specific **GitHub Release image bundle and verifies its published SHA-256 checksum**. If the release bundle is unavailable, it falls back to the official GHCR tag.
+- The container is replaced **in place**, keeping the existing Compose configuration, data, certificates, port assignments, networks and database volumes. NGINX, the management API and control-plane health are rechecked.
+- When reinstalling an unchanged semantic version, the updater snapshots the **running image ID** under its supported local rollback tag *before* pulling the republished tag. This prevents automatic rollback from pointing back to the same newly downloaded image.
+- After the application is healthy, the native updater refreshes its own scripts from the published checksum-verified host-updater bundle, even for the same version. Regular periodic host-updater maintenance still skips unchanged versions.
+- Reinstall uses the same status progress and audit history as Update and displays the final result or rollback outcome.
+
+**Availability:** The native host updater must itself be updated to support safe same-version reinstalls. Complete a normal release upgrade (and ensure automatic native host-updater maintenance succeeds) before trying Reinstall Current Release.
+
+**NPMX:** Reinstall the secondary node, verify proxy routing and synchronization, then reinstall the primary separately. Never reinstall both nodes simultaneously.
+
+This option is useful when a security build is republished under an unchanged version number. The regular automatic version checker still only detects **newer semantic versions**. Reinstall is the explicit way to apply new bytes under the same tag; the UI reporting the same version does not prove a reinstallation took place.
+
+### Republishing an existing version (maintainers)
+
+Reinstall can retrieve changed release bytes under an unchanged version number, but the release must first be intentionally republished. Maintainers can open GitHub **Actions → Release → Run workflow**, choose the `develop` branch, and explicitly set **republish_current** to **true**. The publisher rebuilds the multi-architecture images, replaces the official release bundles and checksums, verifies the published downloads, and updates the existing release tag. Ordinary pushes remain immutable if a release already exists. Normal users cannot trigger this publishing operation from the NPMi Control Center.
+
+On the installed system, **Reinstall Current Release** is then the explicit way to obtain and apply the refreshed image. Do not infer that software has changed just because the displayed version is unchanged; use the Update status image digest and a runtime check to confirm the replacement.
+
 ## Restart
 
 **Restart NPM Improved** restarts only the application service using the existing deployment and then waits for it to become healthy again.

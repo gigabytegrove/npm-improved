@@ -39,6 +39,9 @@ def main():
             version = request.get("target_version")
             target = request.get("target_image", "")
             initiator = str(request.get("initiated_by", ""))
+            reinstall = request.get("reinstall", False)
+            if not isinstance(reinstall, bool) or (reinstall and action != "update"):
+                raise ValueError("Invalid reinstall request")
             stable = r"ghcr\.io/gigabytegrove/npm-improved:v[0-9]+\.[0-9]+\.[0-9]+"
             if action not in {"update", "restart", "rollback"}:
                 raise ValueError("Unsupported operation")
@@ -66,6 +69,7 @@ def main():
                 NPM_UPDATE_PROJECT_DIR=str(root),
                 NPM_UPDATE_STATUS_FILE=str(data / "update-status.json"),
                 NPM_UPDATE_INITIATED_BY=initiator,
+                NPM_UPDATE_REINSTALL="1" if reinstall else "0",
             )
             result = subprocess.run(
                 [str(script), action, target, mode, source, version],
@@ -81,10 +85,10 @@ def main():
             app_release = version if action == "update" else source
             if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", app_release.lstrip("v")):
                 try:
-                    subprocess.run(
-                        [str(maintenance), str(root), "--version", app_release.lstrip("v")],
-                        check=True, timeout=110,
-                    )
+                    command = [str(maintenance), str(root), "--version", app_release.lstrip("v")]
+                    if reinstall:
+                        command.append("--force")
+                    subprocess.run(command, check=True, timeout=110)
                 except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
                     print(f"Native updater will retry maintenance: {error}", file=sys.stderr)
         except (ValueError, TypeError, OSError, json.JSONDecodeError) as error:
