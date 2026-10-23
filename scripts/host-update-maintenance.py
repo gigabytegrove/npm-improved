@@ -93,8 +93,10 @@ def verify_and_extract(version, checksum_text, package, dest):
     with tarfile.open(fileobj=io.BytesIO(package), mode="r:gz") as archive:
         members = archive.getmembers()
         found = {member.name for member in members}
-        if found != set(PROGRAMS) or any(not member.isfile() for member in members):
+        if len(members) != len(PROGRAMS) or found != set(PROGRAMS) or any(not member.isfile() for member in members):
             raise ValueError("Host updater package has unexpected paths or entries")
+        if sum(member.size for member in members) > MAX_PACKAGE_BYTES:
+            raise ValueError("Host updater archive expands beyond its size limit")
         for member in members:
             value = archive.extractfile(member)
             if value is None or member.size > MAX_PACKAGE_BYTES:
