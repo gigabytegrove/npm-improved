@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.6.14] - 2026-10-23
+
+### October 2026 NGINX security maintenance
+- Replace the outdated inherited OpenResty proxy executable with NGINX 1.31.8, including upstream security fixes for CVE-2026-15176, CVE-2026-93479, CVE-2026-97205, CVE-2026-95101 and CVE-2026-97629.
+- Rebuild the GeoIP2 modules against the pinned NGINX source and validate HTTP/stream module compatibility.
+- Fail production image validation and AMD64/ARM64 release packaging unless the actual container executable and required modules pass the security test.
+- Retain the independent control-plane, host updater/rollback, NPMX logic, and existing proxy-management UI. No automatic changes to installed deployments.
+- Note that custom third-party OpenResty/Lua directives require compatibility review when upgrading to standard NGINX.
+
+
 ## [1.6.11] - 2026-10-14
 
 ### Per-host near-real-time traffic intelligence

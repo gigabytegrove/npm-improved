@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Security regression check for the NPMi reverse-proxy data plane.
+# This checks the ACTUAL executable inside the release image, not a package
+# manifest, .version file, base-image label, or UI-reported version.
+set -Eeuo pipefail
+
+IMAGE="${1:-}"
+[[ -n "$IMAGE" ]] || { echo "Usage: $0 IMAGE" >&2; exit 2; }
+command -v docker >/dev/null || { echo "Docker is required" >&2; exit 2; }
+
+docker image inspect "$IMAGE" >/dev/null
+
+docker run --rm --entrypoint /bin/sh "$IMAGE" -ec '
+  set -eu
+  version="$(/usr/sbin/nginx -v 2>&1)"
+  echo "Proxy binary: $version"
+  case "$version" in
+    "nginx version: nginx/1.31.8") ;;
+    *) echo "FAIL: executable is not the approved patched NGINX 1.31.8" >&2; exit 1 ;;
+  esac
+  for name in ngx_http_geoip2_module ngx_stream_geoip2_module; do
+    test -s "/usr/lib/nginx/modules/${name}.so" || {
+      echo "FAIL: required NGINX module missing: $name" >&2; exit 1;
+    }
+  done
+  test -s /etc/nginx/modules/20-geoip2.conf
+  grep -Fxq "load_module /usr/lib/nginx/modules/ngx_http_geoip2_module.so;" /etc/nginx/modules/20-geoip2.conf
+  grep -Fxq "load_module /usr/lib/nginx/modules/ngx_stream_geoip2_module.so;" /etc/nginx/modules/20-geoip2.conf
+  test "$(wc -l </etc/nginx/modules/20-geoip2.conf)" -eq 2
+  # The production entrypoint provisions these paths before launching NGINX.
+  # This isolated binary/module test intentionally skips that entrypoint.
+  mkdir -p /var/log/nginx /var/cache/nginx/client_temp \
+    /var/cache/nginx/proxy_temp /var/cache/nginx/fastcgi_temp \
+    /var/cache/nginx/uwsgi_temp /var/cache/nginx/scgi_temp
+  tmp="$(mktemp)"
+  trap "rm -f \"$tmp\"" EXIT
+  cat > "$tmp" <<"NGINX"
+load_module /usr/lib/nginx/modules/ngx_http_geoip2_module.so;
+load_module /usr/lib/nginx/modules/ngx_stream_geoip2_module.so;
+user root;
+worker_processes 1;
+pid /tmp/npmi-security-check.pid;
+error_log stderr;
+events { worker_connections 64; }
+http {
+  map $request_method $npmi_security_test_method { default 1; }
+  server { listen 18080; location / { return 200; } }
+}
+stream {
+  server { listen 18444; proxy_pass 127.0.0.1:19100; }
+}
+NGINX
+  /usr/sbin/nginx -t -c "$tmp"
+  echo "PASS: patched NGINX binary and essential HTTP, stream and GeoIP2 modules"
+'
