@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import subprocess
 import sys
 
@@ -15,6 +16,10 @@ def main():
     if not root.is_absolute() or not (root / ".env").is_file():
         raise SystemExit("Invalid NPMi project directory")
     data = root / "data"
+    if data.is_symlink() or not data.is_dir():
+        raise SystemExit("Invalid native updater data directory")
+    if data.stat().st_mode & stat.S_IWOTH:
+        raise SystemExit("Native updater data directory is world-writable")
     queue = data / "host-update-request.json"
     script = Path(__file__).resolve().with_name("update-handoff.sh")
     maintenance = script.with_name("host-update-maintenance.py")
@@ -61,6 +66,8 @@ def main():
                 raise ValueError("Invalid target image")
             if action == "update" and not re.fullmatch(stable, target):
                 raise ValueError("Only official stable releases may be installed")
+            if action == "update" and target.rsplit(":", 1)[1] != "v" + version.lstrip("v"):
+                raise ValueError("Requested image tag and version do not match")
             if action == "rollback" and target != "npm-improved:local" and not re.fullmatch(stable, target):
                 raise ValueError("Invalid rollback image")
             if action == "restart" and target:
