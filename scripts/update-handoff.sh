@@ -123,8 +123,18 @@ load_release_bundle() {
 	sum_file="$stage_dir/$sums"
 	download_log="$stage_dir/download.log"
 
+	# The staging directory is on an application-writable volume; never
+	# follow a pre-existing symlink or reuse untrusted staged contents.
+	if [ -L "$stage_dir" ]; then
+		RELEASE_BUNDLE_ERROR="Release staging path is a symbolic link."
+		return 1
+	fi
+	if [ -e "$stage_dir" ] && [ ! -d "$stage_dir" ]; then
+		RELEASE_BUNDLE_ERROR="Release staging path is not a directory."
+		return 1
+	fi
 	rm -rf "$stage_dir"
-	mkdir -p "$stage_dir"
+	mkdir -m 700 -p "$stage_dir"
 
 	if ! command -v wget >/dev/null 2>&1; then
 		RELEASE_BUNDLE_ERROR="The temporary updater does not include wget, so the GitHub Release fallback cannot be used."
@@ -149,6 +159,11 @@ load_release_bundle() {
 
 	if ! (cd "$stage_dir" && printf '%s\n' "$expected_line" | sha256sum -c - >/dev/null 2>&1); then
 		RELEASE_BUNDLE_ERROR="The downloaded GitHub Release image bundle failed SHA-256 verification."
+		return 1
+	fi
+
+	if ! gzip -t "$bundle" 2>"$download_log"; then
+		RELEASE_BUNDLE_ERROR="Downloaded image archive has an invalid gzip stream."
 		return 1
 	fi
 
