@@ -124,6 +124,12 @@ Under **Settings → Update → Maintenance & Recovery**, choose **Reinstall Cur
 
 This option is useful when a security build is republished under an unchanged version number. The regular automatic version checker still only detects **newer semantic versions**. Reinstall is the explicit way to apply new bytes under the same tag; the UI reporting the same version does not prove a reinstallation took place.
 
+### Republishing an existing version (maintainers)
+
+Reinstall can retrieve changed release bytes under an unchanged version number, but the release must first be intentionally republished. Maintainers can open GitHub **Actions → Release → Run workflow**, choose the `develop` branch, and explicitly set **republish_current** to **true**. The publisher rebuilds the multi-architecture images, replaces the official release bundles and checksums, verifies the published downloads, and updates the existing release tag. Ordinary pushes remain immutable if a release already exists. Normal users cannot trigger this publishing operation from the NPMi Control Center.
+
+On the installed system, **Reinstall Current Release** is then the explicit way to obtain and apply the refreshed image. Do not infer that software has changed just because the displayed version is unchanged; use the Update status image digest and a runtime check to confirm the replacement.
+
 ## Restart
 
 **Restart NPM Improved** restarts only the application service using the existing deployment and then waits for it to become healthy again.
