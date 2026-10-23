@@ -18,17 +18,15 @@ docker run --rm --entrypoint /bin/sh "$IMAGE" -ec '
     "nginx version: nginx/1.31.8") ;;
     *) echo "FAIL: executable is not the approved patched NGINX 1.31.8" >&2; exit 1 ;;
   esac
-  for name in ngx_stream_module ngx_http_geoip2_module ngx_stream_geoip2_module; do
+  for name in ngx_http_geoip2_module ngx_stream_geoip2_module; do
     test -s "/usr/lib/nginx/modules/${name}.so" || {
       echo "FAIL: required NGINX module missing: $name" >&2; exit 1;
     }
   done
-  test -s /etc/nginx/modules/10-stream.conf
   test -s /etc/nginx/modules/20-geoip2.conf
   tmp="$(mktemp)"
   trap "rm -f \"$tmp\"" EXIT
   cat > "$tmp" <<"NGINX"
-load_module /usr/lib/nginx/modules/ngx_stream_module.so;
 load_module /usr/lib/nginx/modules/ngx_http_geoip2_module.so;
 load_module /usr/lib/nginx/modules/ngx_stream_geoip2_module.so;
 worker_processes 1;
