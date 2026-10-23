@@ -109,6 +109,34 @@ router
 	});
 
 /**
+ * POST /api/version/update/reinstall
+ *
+ * Re-fetch the latest published stable GitHub release. Reinstalling the same
+ * semantic version is intentional and still requires administrator password,
+ * safety checks and the native host updater's health/rollback protections.
+ */
+router
+	.route("/update/reinstall")
+	.options((_, res) => {
+		res.sendStatus(204);
+	})
+	.all(jwtdecode())
+	.post(async (req, res, next) => {
+		try {
+			const release = await internalRemoteVersion.get(true);
+			const result = await internalUpdateManager.reinstallRelease(
+				res.locals.access,
+				release,
+				req.body?.password,
+			);
+			res.status(202).send(result);
+		} catch (err) {
+			debug(logger, `${req.method.toUpperCase()} ${req.path}: ${err}`);
+			next(err);
+		}
+	});
+
+/**
  * POST /api/version/update/rollback
  */
 router
