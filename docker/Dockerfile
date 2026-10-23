@@ -1,3 +1,29 @@
+# Security runtime: use the upstream NGINX Open Source build containing the
+# 2026-10-14 fixes (and subsequent 1.31.8 fixes). The inherited NPMi v1.4
+# image contains OpenResty; overlaying application files alone cannot fix it.
+FROM nginx:1.31.8-trixie AS patched-nginx
+
+# Build GeoIP2 for the *same* NGINX core so that the NPMi configuration
+# and optional MaxMind/stream integrations do not load an incompatible .so.
+FROM debian:trixie-slim AS geoip2-builder
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+      ca-certificates git build-essential libpcre2-dev libssl-dev \
+      zlib1g-dev libmaxminddb-dev \
+    && rm -rf /var/lib/apt/lists/*
+RUN set -eux; \
+    git clone --depth 1 --branch release-1.31.8 https://github.com/nginx/nginx.git /src/nginx; \
+    test "$(git -C /src/nginx rev-parse HEAD)" = "140aa942711868a8daeb95810bc9a81f272ada72"; \
+    git clone --depth 1 --branch 3.4 https://github.com/leev/ngx_http_geoip2_module.git /src/geoip2; \
+    test "$(git -C /src/geoip2 rev-parse HEAD)" = "cbaa35461c62a99d2577e6bae3273492502d8769"; \
+    cd /src/nginx; \
+    ./auto/configure --with-compat --with-stream=dynamic \
+      --with-http_ssl_module --with-http_v2_module --with-threads \
+      --add-dynamic-module=/src/geoip2; \
+    make -j2 modules; \
+    test -s objs/ngx_http_geoip2_module.so; \
+    test -s objs/ngx_stream_geoip2_module.so
+
 # NPM Improved v1.5.0 production runtime patch build.
 # Inherits the verified, already-published NPMi v1.4.0 multi-architecture
 # runtime, native control-plane binary, nginx templates and trusted CA.
@@ -16,6 +42,22 @@ COPY frontend/ ./
 RUN yarn build
 
 FROM ${BASE_IMAGE}
+# Replace the actual reverse-proxy executable and its dynamic modules. This is
+# deliberately distinct from the application overlay and is required for the
+# 2026-10 NGINX fixes to reach running installations.
+COPY --from=patched-nginx /usr/sbin/nginx /usr/sbin/nginx
+COPY --from=patched-nginx /usr/lib/nginx/modules/ /usr/lib/nginx/modules/
+COPY --from=geoip2-builder /src/nginx/objs/ngx_http_geoip2_module.so /usr/lib/nginx/modules/
+COPY --from=geoip2-builder /src/nginx/objs/ngx_stream_geoip2_module.so /usr/lib/nginx/modules/
+RUN set -eux; \
+    mkdir -p /etc/nginx/modules; \
+    find /etc/nginx/modules -maxdepth 1 -type f -name '*.conf' -delete; \
+    printf '%s\\n' 'load_module /usr/lib/nginx/modules/ngx_stream_module.so;' \
+      > /etc/nginx/modules/10-stream.conf; \
+    printf '%s\\n' 'load_module /usr/lib/nginx/modules/ngx_http_geoip2_module.so;' \
+      'load_module /usr/lib/nginx/modules/ngx_stream_geoip2_module.so;' \
+      > /etc/nginx/modules/20-geoip2.conf; \
+    /usr/sbin/nginx -v 2>&1 | grep -F 'nginx/1.31.8'
 ARG BUILD_VERSION
 ARG BUILD_COMMIT
 ARG BUILD_DATE
