@@ -47,6 +47,8 @@ app.use((_, res, next) => {
 	res.set({
 		"X-XSS-Protection": "1; mode=block",
 		"X-Content-Type-Options": "nosniff",
+		"Referrer-Policy": "no-referrer",
+		"X-Permitted-Cross-Domain-Policies": "none",
 		"X-Frame-Options": x_frame_options,
 		"Cache-Control": "no-cache, no-store, max-age=0, must-revalidate",
 		Pragma: "no-cache",
@@ -80,7 +82,7 @@ app.use((err, req, res, _) => {
 		payload.error.message_i18n = err.message_i18n;
 	}
 
-	if (isDebugMode() || (req.baseUrl + req.path).includes("nginx/certificates")) {
+	if (isDebugMode() && process.env.NPM_ALLOW_DEBUG_ERROR_DETAILS === "true") {
 		payload.debug = {
 			stack: typeof err.stack !== "undefined" && err.stack ? err.stack.split("\n") : null,
 			previous: err.previous,
