@@ -22,10 +22,14 @@ require('RELEASE_EXISTS=false' in workflow and 'gh release view "$TAG"' in workf
 require('exit 1' in workflow.split('Release $TAG already exists;')[1].split("RELEASE_EXISTS=false")[0]
         if 'Release $TAG already exists;' in workflow else False,
         "Existing release must fail closed")
+require("provenance: mode=max" in workflow and "sbom: true" in workflow,
+        "Container provenance or SBOM attestations missing")
 require("python3 scripts/ci/check-release-contract.py" in workflow,
         "Release must execute this contract test")
 require("verify_and_extract(" in maintenance and "hashlib.sha256(package)" in maintenance,
         "Updater archive checksum verification was removed")
+require("len(members) != len(PROGRAMS)" in maintenance and "sum(member.size for member in members)" in maintenance,
+        "Duplicate and oversized extracted updater archive protection missing")
 require("MAX_PACKAGE_BYTES" in maintenance and "member.isfile()" in maintenance,
         "Host updater archive path and type guards missing")
 
