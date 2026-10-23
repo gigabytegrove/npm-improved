@@ -24,7 +24,8 @@ RUN set -eux; \
       --add-dynamic-module=/src/geoip2; \
     make -j2 modules; \
     test -s objs/ngx_http_geoip2_module.so; \
-    test -s objs/ngx_stream_geoip2_module.so
+    test -s objs/ngx_stream_geoip2_module.so; \
+    test -s objs/ngx_stream_module.so
 
 # NPM Improved v1.5.0 production runtime patch build.
 # Inherits the verified, already-published NPMi v1.4.0 multi-architecture
@@ -48,6 +49,7 @@ FROM ${BASE_IMAGE}
 # 2026-10 NGINX fixes to reach running installations.
 COPY --from=patched-nginx /usr/sbin/nginx /usr/sbin/nginx
 COPY --from=patched-nginx /usr/lib/nginx/modules/ /usr/lib/nginx/modules/
+COPY --from=geoip2-builder /src/nginx/objs/ngx_stream_module.so /usr/lib/nginx/modules/
 COPY --from=geoip2-builder /src/nginx/objs/ngx_http_geoip2_module.so /usr/lib/nginx/modules/
 COPY --from=geoip2-builder /src/nginx/objs/ngx_stream_geoip2_module.so /usr/lib/nginx/modules/
 RUN set -eux; \
