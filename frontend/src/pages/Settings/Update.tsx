@@ -108,7 +108,11 @@ export default function Update() {
 	const active = ACTIVE_STATES.has(data?.status?.state || "");
 	const updateAvailable = Boolean(data?.release?.updateAvailable);
 	const updaterReady = Boolean(data?.capabilities?.enabled);
-	const canReinstall = updaterReady && Boolean(data?.release?.latest) && !data?.releaseError;
+	const reinstallHostReady = Boolean(
+		data?.capabilities?.hostUpdaterAutomaticMaintenance &&
+		data?.capabilities?.hostUpdaterVersion === data?.release?.latest?.replace(/^v/, ""),
+	);
+	const canReinstall = updaterReady && reinstallHostReady && Boolean(data?.release?.latest) && !data?.releaseError;
 	const rolling = Boolean(data?.coordination?.instanceSyncEnabled);
 	const canRollback = Boolean(data?.status?.previousImage);
 	const progress = UPDATE_PROGRESS[data?.status?.state || "idle"] ?? 0;
@@ -476,6 +480,13 @@ export default function Update() {
 							Roll back to {data?.status?.previousVersion || "previous version"}
 						</Button>
 					</div>
+					{updaterReady && !reinstallHostReady && data?.release?.latest ? (
+						<Alert variant="warning" className="mt-3 mb-0">
+							Reinstall is available after the native host updater has been refreshed to
+							{" "}{data.release.latest}. Complete the normal update or its one-time host updater
+							{" "}maintenance before using this option.
+						</Alert>
+					) : null}
 					<div className="text-secondary small mt-3">
 						Reinstall fetches the currently published stable release from GitHub and recreates
 						the application even when the version number is unchanged. Administrator password
