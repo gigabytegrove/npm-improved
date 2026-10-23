@@ -24,8 +24,7 @@ RUN set -eux; \
       --add-dynamic-module=/src/geoip2; \
     make -j2 modules; \
     test -s objs/ngx_http_geoip2_module.so; \
-    test -s objs/ngx_stream_geoip2_module.so; \
-    test -s objs/ngx_stream_module.so
+    test -s objs/ngx_stream_geoip2_module.so
 
 # NPM Improved v1.5.0 production runtime patch build.
 # Inherits the verified, already-published NPMi v1.4.0 multi-architecture
@@ -49,14 +48,11 @@ FROM ${BASE_IMAGE}
 # 2026-10 NGINX fixes to reach running installations.
 COPY --from=patched-nginx /usr/sbin/nginx /usr/sbin/nginx
 COPY --from=patched-nginx /usr/lib/nginx/modules/ /usr/lib/nginx/modules/
-COPY --from=geoip2-builder /src/nginx/objs/ngx_stream_module.so /usr/lib/nginx/modules/
 COPY --from=geoip2-builder /src/nginx/objs/ngx_http_geoip2_module.so /usr/lib/nginx/modules/
 COPY --from=geoip2-builder /src/nginx/objs/ngx_stream_geoip2_module.so /usr/lib/nginx/modules/
 RUN set -eux; \
     mkdir -p /etc/nginx/modules; \
     find /etc/nginx/modules -maxdepth 1 -type f -name '*.conf' -delete; \
-    printf '%s\\n' 'load_module /usr/lib/nginx/modules/ngx_stream_module.so;' \
-      > /etc/nginx/modules/10-stream.conf; \
     printf '%s\\n' 'load_module /usr/lib/nginx/modules/ngx_http_geoip2_module.so;' \
       'load_module /usr/lib/nginx/modules/ngx_stream_geoip2_module.so;' \
       > /etc/nginx/modules/20-geoip2.conf; \
