@@ -10,6 +10,22 @@ FROM nginx:1.31.8-trixie AS patched-nginx
 # frontend build-stage runtime. The base image's Node may be outdated.
 FROM node:24.22.1-bookworm-slim AS patched-node
 
+# Compile an updated native Go control plane instead of inheriting the
+# security-outdated executable baked into the immutable v1.4.0 base.
+FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine AS patched-controlplane
+ARG TARGETOS
+ARG TARGETARCH
+ARG TARGETVARIANT
+WORKDIR /src
+COPY controlplane/go.mod ./
+COPY controlplane/*.go ./
+RUN CGO_ENABLED=0 go test ./...
+RUN set -eux; \
+    if [ "$TARGETARCH" = "arm" ] && [ -n "${TARGETVARIANT:-}" ]; then export GOARM="${TARGETVARIANT#v}"; fi; \
+    CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" \
+      go build -trimpath -ldflags="-s -w" -o /out/npm-improved-control-plane .; \
+    go version -m /out/npm-improved-control-plane | grep -F 'go1.27.3'
+
 # Build GeoIP2 for the *same* NGINX core so that the NPMi configuration
 # and optional MaxMind/stream integrations do not load an incompatible .so.
 FROM debian:trixie-slim AS geoip2-builder
@@ -48,6 +64,12 @@ COPY frontend/ ./
 RUN yarn build
 
 FROM ${BASE_IMAGE}
+# The image's native privileged listener must be rebuilt with the same
+# patched Go standard library. Preserve the original bind capability.
+COPY --from=patched-controlplane /out/npm-improved-control-plane /usr/local/bin/npm-improved-control-plane
+RUN set -eux; \
+    setcap 'cap_net_bind_service=+ep' /usr/local/bin/npm-improved-control-plane; \
+    getcap /usr/local/bin/npm-improved-control-plane | grep -F cap_net_bind_service
 # Secure the live application Node.js runtime. The official Node executable
 # is copied into the image and verified immediately, failing the build if
 # runtime dependencies or the expected security version are unavailable.
