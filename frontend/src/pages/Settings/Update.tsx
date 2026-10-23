@@ -112,7 +112,7 @@ export default function Update() {
 		data?.capabilities?.hostUpdaterAutomaticMaintenance &&
 		data?.capabilities?.hostUpdaterVersion === data?.release?.latest?.replace(/^v/, ""),
 	);
-	const canReinstall = updaterReady && reinstallHostReady && Boolean(data?.release?.latest) && !data?.releaseError;
+	const canReinstall = updaterReady && reinstallHostReady && Boolean(data?.release?.latest) && !data?.releaseError && (data?.release?.latest === data?.release?.current || updateAvailable);
 	const rolling = Boolean(data?.coordination?.instanceSyncEnabled);
 	const canRollback = Boolean(data?.status?.previousImage);
 	const progress = UPDATE_PROGRESS[data?.status?.state || "idle"] ?? 0;
