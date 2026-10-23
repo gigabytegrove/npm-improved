@@ -19,7 +19,7 @@ require("git push --force" not in workflow and "git tag -f" not in workflow,
 require("gh release upload" not in workflow or "--clobber" not in workflow,
         "Replacing published release assets is forbidden")
 require("republish_current" not in workflow, "Same-version republishing is forbidden")
-require('RELEASE_EXISTS=false' in workflow and 'gh release view "$TAG"' in workflow,
+require('RELEASE_EXISTS=false' in workflow and 'releases/tags/$TAG' in workflow,
         "Release existence must be initialized and checked")
 require('exit 1' in workflow.split('Release $TAG already exists;')[1].split("RELEASE_EXISTS=false")[0]
         if 'Release $TAG already exists;' in workflow else False,
@@ -35,12 +35,13 @@ require("len(members) != len(PROGRAMS)" in maintenance and "sum(member.size for 
 require("MAX_PACKAGE_BYTES" in maintenance and "member.isfile()" in maintenance,
         "Host updater archive path and type guards missing")
 
-require("O_NOFOLLOW" in dispatch and "stat.S_ISREG" in dispatch,
+require("O_NOFOLLOW" in dispatch and "stat.S_ISREG" in dispatch and "request_file.read(16385)" in dispatch,
         "Native queued request must be opened without following symlinks")
 require("Requested image tag and version do not match" in dispatch,
         "Native updater must reject image-version mismatches")
 require('if [ -L "$stage_dir" ]' in handoff and 'gzip -t "$bundle"' in handoff,
         "Release fallback must reject symlink staging and test gzip integrity")
+require("Native host updater downgrade is not permitted" in maintenance, "Forced native updater downgrades must fail")
 require("temporary.chmod(0o600)" in maintenance,
         "Updater maintenance status must not be world-readable")
 if issues:

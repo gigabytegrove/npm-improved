@@ -166,6 +166,8 @@ def maintain(root, version, downloader=fetch, force=False):
     if ready.get("mode") != "native-host-service" or ready.get("project_dir") != str(root):
         raise ValueError("Host updater is not initialized for this project")
     current = ready.get("component_version", "0.0.0")
+    if current != "0.0.0" and VERSION_PATTERN.fullmatch(current) and newer_than(current, version):
+        raise ValueError("Native host updater downgrade is not permitted")
     if not force and not newer_than(version, current):
         return False
     base = f"{RELEASE_BASE}/v{version}"

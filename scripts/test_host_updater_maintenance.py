@@ -133,6 +133,15 @@ class HostUpdaterBundleTests(unittest.TestCase):
                 installer.assert_called_once()
                 self.assertEqual(installer.call_args.args[0][0], "/bin/bash")
 
+    def test_native_updater_downgrade_rejected_even_if_forced(self):
+        with tempfile.TemporaryDirectory() as dirname:
+            root = Path(dirname)
+            ready = {"mode": "native-host-service", "project_dir": str(root),
+                     "component_version": "1.7.0"}
+            with mock.patch.object(module, "read_ready", return_value=ready):
+                with self.assertRaisesRegex(ValueError, "downgrade"):
+                    module.maintain(root, "1.6.15", force=True)
+
     def test_only_forward_versions_install(self):
         self.assertTrue(module.newer_than("1.4.2", "1.4.1"))
         self.assertFalse(module.newer_than("1.4.2", "1.4.2"))
