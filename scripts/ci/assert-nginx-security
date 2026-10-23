@@ -24,6 +24,18 @@ docker run --rm --entrypoint /bin/sh "$IMAGE" -ec '
     echo "FAIL: Node.js is not the approved October 21 patched 24.22.1" >&2
     exit 1
   fi
+  controlplane=/usr/local/bin/npm-improved-control-plane
+  test -x "$controlplane" || { echo "FAIL: native Go control-plane binary missing" >&2; exit 1; }
+  # Go module build metadata is embedded by the Go linker in the ELF binary.
+  if ! grep -aq "go1.27.3" "$controlplane"; then
+    echo "FAIL: native control plane does not contain patched Go 1.27.3 metadata" >&2
+    exit 1
+  fi
+  getcap "$controlplane" | grep -q cap_net_bind_service || {
+    echo "FAIL: native control-plane bind capability missing" >&2
+    exit 1
+  }
+  echo "Native control plane: Go 1.27.3 with bind capability"
   for name in ngx_http_geoip2_module ngx_stream_geoip2_module; do
     test -s "/usr/lib/nginx/modules/${name}.so" || {
       echo "FAIL: required NGINX module missing: $name" >&2; exit 1;
