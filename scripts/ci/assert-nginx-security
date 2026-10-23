@@ -18,6 +18,12 @@ docker run --rm --entrypoint /bin/sh "$IMAGE" -ec '
     "nginx version: nginx/1.31.8") ;;
     *) echo "FAIL: executable is not the approved patched NGINX 1.31.8" >&2; exit 1 ;;
   esac
+  node_version="$(node -p "process.versions.node")"
+  echo "Application Node.js: $node_version"
+  if [ "$node_version" != "24.22.1" ]; then
+    echo "FAIL: Node.js is not the approved October 21 patched 24.22.1" >&2
+    exit 1
+  fi
   for name in ngx_http_geoip2_module ngx_stream_geoip2_module; do
     test -s "/usr/lib/nginx/modules/${name}.so" || {
       echo "FAIL: required NGINX module missing: $name" >&2; exit 1;
