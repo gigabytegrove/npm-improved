@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.6.16] - 2026-10-23
+
+### Security-patched native control plane
+- Rebuild NPM Improved's native Go control plane using Go 1.27.3, incorporating the October 19 crypto/x509 fix (CVE-2026-111943).
+- Preserve the original bind capability needed for the independent control-plane listener, including restricted PUID deployments.
+- Keep the already-released NGINX 1.31.8 and Node.js 24.22.1 patches from v1.6.14/v1.6.15.
+- Preserve NPMX replication, SQLite/MySQL migrations and the native in-place updater/rollback contract; require Docker regression validation before publication.
+- Installed nodes must apply the new release to receive the rebuilt executable.
+
+
 ## [1.6.15] - 2026-10-23
 
 ### October 21 Node.js security maintenance
