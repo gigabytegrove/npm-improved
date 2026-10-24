@@ -98,6 +98,8 @@ jobs:
           bash -n scripts/install-host-updater scripts/audit-deployment-security
           sh -n scripts/update-handoff.sh
           python3 scripts/ci/check-release-contract.py
+          node --check backend/app.js
+          node --check backend/internal/update-manager.js
 
       - name: Set up QEMU
         if: steps.version.outputs.release_exists != 'true'
