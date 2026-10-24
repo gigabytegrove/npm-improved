@@ -8,12 +8,6 @@ on:
       - ".version"
       - ".github/workflows/release.yml"
   workflow_dispatch:
-    inputs:
-      republish_current:
-        description: "Deliberately replace this version's verified release assets without changing its number"
-        type: boolean
-        required: true
-        default: false
 
 permissions:
   contents: write
@@ -72,17 +66,19 @@ jobs:
             echo "Manual stable release publication must run from develop." >&2
             exit 1
           fi
-          REPUBLISH=false
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.republish_current }}" == "true" ]]; then
-            REPUBLISH=true
-          fi
-          if gh release view "$TAG" >/dev/null 2>&1 && [[ "$REPUBLISH" != "true" ]]; then
-            RELEASE_EXISTS=true
+          # Distinguish an absent release (HTTP 404) from an API/network error.
+          # Fail closed on ambiguous GitHub API failures.
+          status="$(gh api -i "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" 2>&1 | head -n 1 || true)"
+          if [[ "$status" =~ ^HTTP/[0-9.]+[[:space:]]404([[:space:]]|$) ]]; then
+            : # Verified not found
+          elif [[ "$status" =~ ^HTTP/[0-9.]+[[:space:]]200([[:space:]]|$) ]]; then
+            echo "Release $TAG already exists; refusing to replace its artifacts." >&2
+            exit 1
           else
-            RELEASE_EXISTS=false
+            echo "Unable to verify release absence: $status" >&2
+            exit 1
           fi
-
-          echo "republish=$REPUBLISH" >> "$GITHUB_OUTPUT"
+          RELEASE_EXISTS=false
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "notes=$NOTES" >> "$GITHUB_OUTPUT"
           echo "build_date=$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
@@ -91,6 +87,19 @@ jobs:
       - name: Existing release
         if: steps.version.outputs.release_exists == 'true'
         run: echo "v${{ steps.version.outputs.version }} already exists; no release work is required."
+
+      - name: Validate native updater and release security contracts
+        if: steps.version.outputs.release_exists != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s scripts -p 'test_*.py' -v
+          python3 -m py_compile scripts/host-update-dispatch.py scripts/host-update-maintenance.py
+          bash -n scripts/install-host-updater scripts/audit-deployment-security
+          sh -n scripts/update-handoff.sh
+          python3 scripts/ci/check-release-contract.py
+          node --check backend/app.js
+          node --check backend/internal/update-manager.js
 
       - name: Set up QEMU
         if: steps.version.outputs.release_exists != 'true'
@@ -115,6 +124,8 @@ jobs:
           context: .
           file: docker/Dockerfile
           push: true
+          provenance: mode=max
+          sbom: true
           platforms: linux/amd64,linux/arm64
           tags: |
             ghcr.io/gigabytegrove/npm-improved:v${{ steps.version.outputs.version }}
@@ -215,16 +226,9 @@ jobs:
 
           TAG="v${VERSION}"
 
-          if [[ "${{ steps.version.outputs.republish }}" == "true" ]] && gh release view "$TAG" >/dev/null 2>&1; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git tag -f "$TAG" "$GITHUB_SHA"
-            git push --force origin "refs/tags/$TAG"
-            gh release edit "$TAG" --target "$GITHUB_SHA" --title "NPM Improved $TAG" --notes-file "$NOTES" --latest
-            gh release upload "$TAG" release-assets/* --clobber
-          else
-            gh release create "$TAG" --target "$GITHUB_SHA" --title "NPM Improved $TAG" --notes-file "$NOTES" release-assets/*
-          fi
+          # Release tags and their assets are immutable after publication.
+          # Publish a new semantic version for every changed build.
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "NPM Improved $TAG" --notes-file "$NOTES" release-assets/*
 
           for asset in "npm-improved-$TAG-host-updater.tar.gz" "npm-improved-$TAG-linux-amd64.tar.gz" "npm-improved-$TAG-linux-arm64.tar.gz" "npm-improved-$TAG-SHA256SUMS.txt"; do
             gh release view "$TAG" --json assets --jq '.assets[].name' | grep -Fxq "$asset" || {

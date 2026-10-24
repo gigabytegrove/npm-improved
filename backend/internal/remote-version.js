@@ -6,6 +6,7 @@ import pjson from "../package.json" with { type: "json" };
 const RELEASE_REQUEST_TIMEOUT_MS = 8_000;
 const MAX_RELEASE_RESPONSE_BYTES = 1024 * 1024;
 const VERSION_URL = "https://api.github.com/repos/gigabytegrove/npm-improved/releases/latest";
+const RELEASE_LIST_URL = "https://api.github.com/repos/gigabytegrove/npm-improved/releases?per_page=30";
 const BUILD_VERSION_PATTERN = /^v?(\d+)\.(\d+)\.(\d+)/;
 
 const getCurrentVersion = () => {
@@ -33,29 +34,39 @@ const internalRemoteVersion = {
 	}),
 	last_result: null,
 	last_fetch_time: null,
+	channel_cache: new Map(),
 
 	/**
 	 * Fetch the latest NPM Improved release. A repository with no published
 	 * release is a valid state and is cached as "no update available".
 	 * @return {Promise<{current: string, latest: string | null, update_available: boolean}>}
 	 */
-	get: async (refresh = false) => {
+	get: async (refresh = false, channel = "stable") => {
+		if (!["stable", "beta", "alpha"].includes(channel)) throw new Error("Invalid release channel");
 		const currentVersion = getCurrentVersion();
 
 		if (
 			refresh ||
-			!internalRemoteVersion.last_result ||
+			!internalRemoteVersion.channel_cache.has(channel) ||
 			!internalRemoteVersion.last_fetch_time ||
 			Date.now() - internalRemoteVersion.last_fetch_time > internalRemoteVersion.cache_timeout
 		) {
-			const response = await internalRemoteVersion.fetchUrl(VERSION_URL);
+			const response = await internalRemoteVersion.fetchUrl(channel === "stable" ? VERSION_URL : RELEASE_LIST_URL);
 
 			if (response.statusCode === 404) {
-				internalRemoteVersion.last_result = { tag_name: null };
+				internalRemoteVersion.channel_cache.set(channel, { tag_name: null });
 			} else if (response.statusCode < 200 || response.statusCode >= 300) {
 				throw new Error(`GitHub release check failed with HTTP ${response.statusCode}`);
 			} else {
-				internalRemoteVersion.last_result = JSON.parse(response.rawData);
+				const payload = JSON.parse(response.rawData);
+				if (channel !== "stable") {
+					if (!Array.isArray(payload)) throw new Error("Unexpected release list response");
+					internalRemoteVersion.channel_cache.set(channel, payload.find((item) =>
+						!item.draft && typeof item.tag_name === "string" &&
+						(channel === "beta" ? /-beta(?:[.-]|$)/i.test(item.tag_name) : /-(?:alpha|rc)(?:[.-]|$)/i.test(item.tag_name))
+					) || { tag_name: null });
+				} else internalRemoteVersion.channel_cache.set(channel, payload);
+				internalRemoteVersion.last_result = internalRemoteVersion.channel_cache.get(channel);
 			}
 
 			internalRemoteVersion.last_fetch_time = Date.now();
@@ -63,17 +74,19 @@ const internalRemoteVersion = {
 			debug(logger, "Using cached NPM Improved remote version result");
 		}
 
-		const latestVersion = internalRemoteVersion.last_result?.tag_name || null;
+		const selected = internalRemoteVersion.channel_cache.get(channel) || null;
+		const latestVersion = selected?.tag_name || null;
 		return {
 			current: currentVersion,
 			latest: latestVersion,
 			update_available: latestVersion
 				? internalRemoteVersion.compareVersions(currentVersion, latestVersion)
 				: false,
-			release_name: internalRemoteVersion.last_result?.name || null,
-			release_notes: internalRemoteVersion.last_result?.body || null,
-			published_at: internalRemoteVersion.last_result?.published_at || null,
-			release_url: internalRemoteVersion.last_result?.html_url || null,
+			release_name: selected?.name || null,
+			channel,
+			release_notes: selected?.body || null,
+			published_at: selected?.published_at || null,
+			release_url: selected?.html_url || null,
 		};
 	},
 
@@ -116,8 +129,8 @@ const internalRemoteVersion = {
 		const cleanCurrent = current.replace(/^v/, "");
 		const cleanLatest = latest.replace(/^v/, "");
 
-		const currentParts = cleanCurrent.split(".").map(Number);
-		const latestParts = cleanLatest.split(".").map(Number);
+		const currentParts = cleanCurrent.split(/[.-]/).slice(0,3).map(Number);
+		const latestParts = cleanLatest.split(/[.-]/).slice(0,3).map(Number);
 
 		for (let i = 0; i < Math.max(currentParts.length, latestParts.length); i++) {
 			const curr = currentParts[i] || 0;

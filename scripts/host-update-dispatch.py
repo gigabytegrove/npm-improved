@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import subprocess
 import sys
 
@@ -15,6 +16,10 @@ def main():
     if not root.is_absolute() or not (root / ".env").is_file():
         raise SystemExit("Invalid NPMi project directory")
     data = root / "data"
+    if data.is_symlink() or not data.is_dir():
+        raise SystemExit("Invalid native updater data directory")
+    if data.stat().st_mode & stat.S_IWOTH:
+        raise SystemExit("Native updater data directory is world-writable")
     queue = data / "host-update-request.json"
     script = Path(__file__).resolve().with_name("update-handoff.sh")
     maintenance = script.with_name("host-update-maintenance.py")
@@ -25,12 +30,21 @@ def main():
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return
-        if not queue.is_file() or queue.is_symlink():
+        if queue.is_symlink() or not queue.is_file():
             return
         processing = data / (".host-update-processing-" + str(os.getpid()) + ".json")
         queue.replace(processing)
         try:
-            request = json.loads(processing.read_text(encoding="utf-8"))
+            file_flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+            fd = os.open(processing, file_flags)
+            with os.fdopen(fd, "r", encoding="utf-8") as request_file:
+                metadata = os.fstat(request_file.fileno())
+                if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > 16384:
+                    raise ValueError("Native updater request must be a bounded regular file")
+                raw = request_file.read(16385)
+                if len(raw) > 16384:
+                    raise ValueError("Native updater request exceeds its size limit")
+                request = json.loads(raw)
             if not isinstance(request, dict):
                 raise ValueError("Invalid request")
             action = request.get("action")
@@ -61,8 +75,12 @@ def main():
                 raise ValueError("Invalid target image")
             if action == "update" and not re.fullmatch(stable, target):
                 raise ValueError("Only official stable releases may be installed")
+            if action == "update" and target.rsplit(":", 1)[1] != "v" + version.lstrip("v"):
+                raise ValueError("Requested image tag and version do not match")
             if action == "rollback" and target != "npm-improved:local" and not re.fullmatch(stable, target):
                 raise ValueError("Invalid rollback image")
+            if action == "rollback" and target != "npm-improved:local" and target.rsplit(":", 1)[1] != "v" + version.lstrip("v"):
+                raise ValueError("Rollback image tag and version do not match")
             if action == "restart" and target:
                 raise ValueError("Restart may not replace the image")
             env = dict(os.environ,
@@ -100,8 +118,9 @@ def main():
             status.update(state="failed", message="Native host updater rejected request.",
                           error=str(error))
             temp = data / (".host-update-status-" + str(os.getpid()))
-            temp.write_text(json.dumps(status, indent=2) + "\n", encoding="utf-8")
-            os.chmod(temp, 0o600)
+            descriptor = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+                output.write(json.dumps(status, indent=2) + "\n")
             temp.replace(status_path)
             raise SystemExit(str(error))
         finally:
