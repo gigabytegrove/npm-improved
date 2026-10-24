@@ -82,6 +82,7 @@ type AuthAction = "update" | "reinstall" | "rollback" | "restart";
 
 export default function Update() {
 	const initialStatusLoad = useRef(true);
+	const [releaseChannel, setReleaseChannel] = useState<"stable" | "beta" | "alpha">("stable");
 	const {
 		data,
 		isLoading,
@@ -100,14 +101,13 @@ export default function Update() {
 	});
 
 	const [password, setPassword] = useState("");
-	const [releaseChannel, setReleaseChannel] = useState<"stable" | "beta" | "alpha">("stable");
 	const [actionError, setActionError] = useState("");
 	const [checking, setChecking] = useState(false);
 	const [runningAction, setRunningAction] = useState<AuthAction | null>(null);
 	const [authAction, setAuthAction] = useState<AuthAction | null>(null);
 
 	const active = ACTIVE_STATES.has(data?.status?.state || "");
-	const updateAvailable = Boolean(data?.release?.updateAvailable);
+	const updateAvailable = releaseChannel === "stable" && Boolean(data?.release?.updateAvailable);
 	const updaterReady = Boolean(data?.capabilities?.enabled);
 	const reinstallHostReady = Boolean(
 		data?.capabilities?.hostUpdaterAutomaticMaintenance &&
@@ -229,7 +229,7 @@ export default function Update() {
 					<option value="beta">Beta — pre-release testing</option>
 					<option value="alpha">Alpha / RC — experimental</option>
 				</select>
-				{releaseChannel !== "stable" ? <span className="text-warning small">Experimental builds may be incompatible with production. Back up before updating.</span> : null}
+				{releaseChannel !== "stable" ? <span className="text-warning small">Preview channel discovery only. Installing prereleases is not yet supported by the native host updater.</span> : null}
 			</div>
 			{error ? <Alert variant="danger">{error.message}</Alert> : null}
 			{data?.releaseError ? <Alert variant="warning">GitHub release check unavailable: {data.releaseError}. Local updater progress and recovery controls remain available.</Alert> : null}
@@ -264,7 +264,7 @@ export default function Update() {
 									? `${data?.release?.releaseName || data?.release?.latest} is ready to install.`
 									: data?.releaseError
 									? "Remote release availability has not been verified."
-									: "This installation matches the latest stable NPM Improved release."}
+									: "This installation matches the latest selected supported NPM Improved release."}
 							</div>
 
 							{published ? (

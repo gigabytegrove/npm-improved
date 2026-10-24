@@ -47,14 +47,14 @@ const internalRemoteVersion = {
 
 		if (
 			refresh ||
-			!internalRemoteVersion.last_result ||
+			!internalRemoteVersion.channel_cache.has(channel) ||
 			!internalRemoteVersion.last_fetch_time ||
 			Date.now() - internalRemoteVersion.last_fetch_time > internalRemoteVersion.cache_timeout
 		) {
 			const response = await internalRemoteVersion.fetchUrl(channel === "stable" ? VERSION_URL : RELEASE_LIST_URL);
 
 			if (response.statusCode === 404) {
-				internalRemoteVersion.last_result = { tag_name: null };
+				internalRemoteVersion.channel_cache.set(channel, { tag_name: null });
 			} else if (response.statusCode < 200 || response.statusCode >= 300) {
 				throw new Error(`GitHub release check failed with HTTP ${response.statusCode}`);
 			} else {
@@ -74,7 +74,7 @@ const internalRemoteVersion = {
 			debug(logger, "Using cached NPM Improved remote version result");
 		}
 
-		const selected = internalRemoteVersion.channel_cache.get(channel) || (channel === "stable" ? internalRemoteVersion.last_result : null);
+		const selected = internalRemoteVersion.channel_cache.get(channel) || null;
 		const latestVersion = selected?.tag_name || null;
 		return {
 			current: currentVersion,
