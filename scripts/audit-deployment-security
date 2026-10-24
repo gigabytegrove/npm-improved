@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# NPM Improved read-only deployment hardening audit. No changes are made.
+set -Eeuo pipefail
+export LC_ALL=C
+failures=0
+warnings=0
+pass() { printf 'PASS  %s\n' "$*"; }
+warn() { printf 'WARN  %s\n' "$*"; warnings=$((warnings+1)); }
+fail() { printf 'FAIL  %s\n' "$*"; failures=$((failures+1)); }
+if ! command -v docker >/dev/null 2>&1; then
+  fail "Docker CLI not installed"
+  exit 2
+fi
+if ! docker info >/dev/null 2>&1; then
+  fail "Docker daemon unavailable or access denied"
+  exit 2
+fi
+mapfile -t ids < <(docker ps --filter 'label=com.docker.compose.project=npm-improved' --format '{{.ID}}')
+if (("${#ids[@]}" == 0)); then
+  warn "No containers found under Compose project npm-improved; set project name or inspect manually"
+fi
+for id in "${ids[@]}"; do
+  image="$(docker inspect --format '{{.Config.Image}}' "$id")"
+  name="$(docker inspect --format '{{.Name}}' "$id")"
+  printf 'CONTAINER %s IMAGE %s\n' "$name" "$image"
+  if [[ "$image" == *@sha256:* ]]; then
+    pass "Image referenced by immutable digest"
+  else
+    warn "Image is referenced by a mutable tag ($image); verify its digest in release records"
+  fi
+  read_only="$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$id")"
+  privileged="$(docker inspect --format '{{.HostConfig.Privileged}}' "$id")"
+  [[ "$privileged" == false ]] && pass "Container is not privileged" || fail "Privileged container detected"
+  [[ "$read_only" == true ]] && pass "Read-only root filesystem" || warn "Root filesystem writable; assess required runtime writes"
+  while IFS='|' read -r ip host_port container_port; do
+    [[ -n "$host_port" ]] || continue
+    if [[ "$container_port" == 81/* ]] && [[ -z "$ip" || "$ip" == '0.0.0.0' || "$ip" == '::' ]]; then
+      warn "Management port $host_port binds all host interfaces; verify firewall allowlist"
+    fi
+  done < <(docker inspect --format '{{range $k, $v := .NetworkSettings.Ports}}{{range $v}}{{.HostIp}}|{{.HostPort}}|{{$k}}{{println}}{{end}}{{end}}' "$id")
+done
+for directory in ./data ./letsencrypt; do
+  if [[ -d "$directory" ]]; then
+    if [[ -L "$directory" ]]; then
+      warn "$directory is a symlink; resolve its destination before evaluating permissions"
+      continue
+    fi
+    perms="$(stat -c '%a' "$directory" 2>/dev/null || true)"
+    if [[ -n "$perms" ]]; then
+      other=$((8#$perms & 7))
+      if ((other > 0)); then
+        warn "$directory permits access by other users (mode $perms)"
+      else
+        pass "$directory denies other-user access"
+      fi
+    fi
+  else
+    warn "$directory not found in working directory; verify bind mount source"
+  fi
+done
+printf 'RESULT failures=%d warnings=%d\n' "$failures" "$warnings"
+((failures == 0))

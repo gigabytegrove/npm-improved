@@ -28,7 +28,7 @@ router
 	.get(async (req, res, _next) => {
 		try {
 			const refresh = req.query.refresh === "1" || req.query.refresh === "true";
-			const data = await internalRemoteVersion.get(refresh);
+			const data = await internalRemoteVersion.get(refresh, req.query.channel || "stable");
 			res.status(200).send(data);
 		} catch (error) {
 			debug(logger, `${req.method.toUpperCase()} ${req.path}: ${error}`);
@@ -95,7 +95,7 @@ router
 	})
 	.post(async (req, res, next) => {
 		try {
-			const release = await internalRemoteVersion.get(true);
+			const release = await internalRemoteVersion.get(true, req.body?.channel || "stable");
 			const result = await internalUpdateManager.startUpdate(
 				res.locals.access,
 				release,

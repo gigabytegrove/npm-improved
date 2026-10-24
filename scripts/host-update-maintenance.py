@@ -93,8 +93,10 @@ def verify_and_extract(version, checksum_text, package, dest):
     with tarfile.open(fileobj=io.BytesIO(package), mode="r:gz") as archive:
         members = archive.getmembers()
         found = {member.name for member in members}
-        if found != set(PROGRAMS) or any(not member.isfile() for member in members):
+        if len(members) != len(PROGRAMS) or found != set(PROGRAMS) or any(not member.isfile() for member in members):
             raise ValueError("Host updater package has unexpected paths or entries")
+        if sum(member.size for member in members) > MAX_PACKAGE_BYTES:
+            raise ValueError("Host updater archive expands beyond its size limit")
         for member in members:
             value = archive.extractfile(member)
             if value is None or member.size > MAX_PACKAGE_BYTES:
@@ -164,6 +166,8 @@ def maintain(root, version, downloader=fetch, force=False):
     if ready.get("mode") != "native-host-service" or ready.get("project_dir") != str(root):
         raise ValueError("Host updater is not initialized for this project")
     current = ready.get("component_version", "0.0.0")
+    if current != "0.0.0" and VERSION_PATTERN.fullmatch(current) and newer_than(current, version):
+        raise ValueError("Native host updater downgrade is not permitted")
     if not force and not newer_than(version, current):
         return False
     base = f"{RELEASE_BASE}/v{version}"
@@ -207,14 +211,19 @@ def main():
                            "error": explain_maintenance_error(error)}, handle)
                 handle.write("\n")
                 temporary = Path(handle.name)
-            temporary.chmod(0o644)
+            temporary.chmod(0o600)
             temporary.replace(status)
         return 1
     status = root / "data/host-updater-maintenance.json"
     if status.parent.is_dir():
-        status.write_text(json.dumps(
-            {"status": "current", "target_version": version, "updated": changed}
-        ) + "\n", encoding="utf-8")
+        with tempfile.NamedTemporaryFile(
+            mode="w", dir=status.parent, prefix=".maintenance-", delete=False
+        ) as handle:
+            json.dump({"status": "current", "target_version": version, "updated": changed}, handle)
+            handle.write("\n")
+            temporary = Path(handle.name)
+        temporary.chmod(0o600)
+        temporary.replace(status)
     print(f"Native updater {'refreshed' if changed else 'current'} at {version}")
     return 0
 
