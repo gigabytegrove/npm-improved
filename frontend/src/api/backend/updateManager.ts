@@ -57,8 +57,10 @@ export interface UpdateManagerResponse {
 export async function getUpdateManager(
 	refresh = false,
 	clearFailed = false,
+	channel: "stable" | "beta" | "alpha" = "stable",
 ): Promise<UpdateManagerResponse> {
 	const params: Record<string, string> = {};
+	params.channel = channel;
 	if (refresh) params.refresh = "1";
 	if (clearFailed) params.clearFailed = "1";
 
@@ -68,17 +70,17 @@ export async function getUpdateManager(
 	});
 }
 
-export async function startManagedUpdate(password: string): Promise<UpdateStatus> {
+export async function startManagedUpdate(password: string, channel: "stable" | "beta" | "alpha" = "stable"): Promise<UpdateStatus> {
 	return await api.post({
 		url: "/version/update",
-		data: { password },
+		data: { password, channel },
 	});
 }
 
-export async function reinstallManagedRelease(password: string): Promise<UpdateStatus> {
+export async function reinstallManagedRelease(password: string, channel: "stable" | "beta" | "alpha" = "stable"): Promise<UpdateStatus> {
 	return await api.post({
 		url: "/version/update/reinstall",
-		data: { password },
+		data: { password, channel },
 	});
 }
 

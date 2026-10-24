@@ -88,10 +88,10 @@ export default function Update() {
 		error,
 		refetch,
 	} = useQuery({
-		queryKey: ["update-manager"],
+		queryKey: ["update-manager", releaseChannel],
 		queryFn: async () => {
 			const clearFailed = initialStatusLoad.current;
-			const result = await getUpdateManager(false, clearFailed);
+			const result = await getUpdateManager(false, clearFailed, releaseChannel);
 			initialStatusLoad.current = false;
 			return result;
 		},
@@ -100,6 +100,7 @@ export default function Update() {
 	});
 
 	const [password, setPassword] = useState("");
+	const [releaseChannel, setReleaseChannel] = useState<"stable" | "beta" | "alpha">("stable");
 	const [actionError, setActionError] = useState("");
 	const [checking, setChecking] = useState(false);
 	const [runningAction, setRunningAction] = useState<AuthAction | null>(null);
@@ -138,7 +139,7 @@ export default function Update() {
 		setChecking(true);
 		setActionError("");
 		try {
-			await getUpdateManager(true);
+			await getUpdateManager(true, false, releaseChannel);
 			await refetch();
 		} catch (err) {
 			setActionError(err instanceof Error ? err.message : String(err));
@@ -193,7 +194,7 @@ export default function Update() {
 		setRunningAction(action);
 		setActionError("");
 		try {
-			await fn(password);
+			await (action === "update" ? startManagedUpdate(password, releaseChannel) : action === "reinstall" ? reinstallManagedRelease(password, releaseChannel) : fn(password));
 			setPassword("");
 			setAuthAction(null);
 			await refetch();
@@ -210,7 +211,7 @@ export default function Update() {
 				<div>
 					<h3 className="mb-1">Update</h3>
 					<p className="text-secondary mb-0">
-						Install stable NPM Improved releases without leaving the Control Center.
+						Manage NPM Improved updates and select a release channel.
 					</p>
 				</div>
 				<Button onClick={checkNow} isLoading={checking} disabled={checking || active}>
@@ -219,6 +220,17 @@ export default function Update() {
 				</Button>
 			</div>
 
+			<div className="mb-4 d-flex flex-wrap align-items-center gap-3">
+				<label htmlFor="npmi-release-channel" className="fw-semibold">Release channel</label>
+				<select id="npmi-release-channel" className="form-select" style={{ maxWidth: "18rem" }}
+					value={releaseChannel} disabled={active || runningAction !== null}
+					onChange={(event) => setReleaseChannel(event.target.value as "stable" | "beta" | "alpha")}>
+					<option value="stable">Stable — recommended</option>
+					<option value="beta">Beta — pre-release testing</option>
+					<option value="alpha">Alpha / RC — experimental</option>
+				</select>
+				{releaseChannel !== "stable" ? <span className="text-warning small">Experimental builds may be incompatible with production. Back up before updating.</span> : null}
+			</div>
 			{error ? <Alert variant="danger">{error.message}</Alert> : null}
 			{data?.releaseError ? <Alert variant="warning">GitHub release check unavailable: {data.releaseError}. Local updater progress and recovery controls remain available.</Alert> : null}
 			{actionError ? <Alert variant="danger">{actionError}</Alert> : null}
