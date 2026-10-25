@@ -75,7 +75,7 @@ If you are new to reverse proxies, these are the main terms you will see:
 | Term | What it means |
 | --- | --- |
 | **Proxy Host** | A public or internal hostname such as `photos.example.com` that NPM Improved sends to one or more apps behind it. |
-| **Backend / Upstream** | The actual server running your app, such as `redacted.invalid:8080`. |
+| **Backend / Upstream** | The actual server running your app, such as `upstream.internal:8080`. |
 | **Reverse Proxy** | The server that receives the user's web request first, handles things like HTTPS, then passes the request to the correct app. |
 | **Certificate** | The TLS/SSL certificate that gives a site HTTPS. |
 | **Control Center** | The NPM Improved web interface where you manage hosts, certificates, users, logs, backups, and health. |
@@ -110,7 +110,7 @@ A normal reverse-proxy rule often points to one server:
 ```text
 app.example.com
         ↓
-redacted.invalid:8080
+upstream.internal:8080
 ```
 
 NPM Improved can point the same hostname at a pool of servers instead:
