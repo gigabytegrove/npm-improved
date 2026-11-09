@@ -409,6 +409,60 @@ const internalInstanceSync = {
 	},
 
 
+	// Stage the HTTP host on the primary and wait for each paired secondary
+	// to pull the matching snapshot and acknowledge local Nginx readiness.
+	awaitHostReadiness: async (hostId, domains, { phase = "host", certificateId = null } = {}) => {
+		const status = await sanitizedStatus();
+		if (!status.enabled || status.role !== "primary") return { checked: 0 };
+		const peers = status.peers.filter((peer) => peer.role === "secondary" && peer.node_id !== status.nodeId);
+		if (!peers.length) return { checked: 0 };
+		if (!status.secretConfigured) throw new errs.ValidationError("NPMX ACME coordination requires pairing credentials");
+		const incompatible = peers.filter((peer) =>
+			peer.version !== currentVersion() || peer.protocol !== NPMX_PROTOCOL ||
+			peer.protocol_version !== NPMX_VERSION);
+		if (incompatible.length) {
+			throw new errs.ValidationError("NPMX ACME coordination requires matching versions on peers: " +
+				incompatible.map((peer) => peer.node_id).join(", "));
+		}
+		const token = phase === "host" ? crypto.randomBytes(24).toString("base64url") : "";
+		const value = phase === "host" ? crypto.randomBytes(32).toString("base64url") : "";
+		const directory = "/data/letsencrypt-acme-challenge/.well-known/acme-challenge";
+		const file = token ? path.join(directory, token) : null;
+		if (file) {
+			fs.mkdirSync(directory, { recursive: true });
+			fs.writeFileSync(file, value, { flag: "wx", mode: 0o600 });
+		}
+		const gate = createAcmeGate({
+			hostId, domains, peerIds: peers.map((peer) => peer.node_id),
+			phase, certificateId, token, value,
+		});
+		try {
+			if (token) await probeLocalAcmeDomains(domains, token, value);
+			await gate.wait();
+			return { checked: peers.length };
+		} catch (err) {
+			throw new errs.ValidationError(err instanceof Error ? err.message : String(err));
+		} finally {
+			gate.close();
+			if (file) fs.rmSync(file, { force: true });
+		}
+	},
+
+	acknowledgeHostReadiness: async (req) => {
+		const status = await sanitizedStatus();
+		if (!status.enabled || status.role !== "primary" ||
+			!status.peers.some((peer) => peer.node_id === req.npmxNodeId && peer.role === "secondary")) {
+			return { ok: false };
+		}
+		return { ok: acknowledgeAcmeGate({
+			gateId: req.body.gate_id,
+			nodeId: req.npmxNodeId,
+			hostId: req.body.host_id,
+			domains: req.body.domain_names,
+			phase: req.body.phase,
+		}) };
+	},
+
 	// Called before Certbot contacts the CA. The temporary token is written
 	// locally and fetched via each remote node's authenticated NPMX endpoint,
 	// which invokes the same missing-token resolution as its public ingress.
