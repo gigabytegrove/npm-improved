@@ -95,8 +95,10 @@ const internalProxyHost = {
 				if (!freshRow.enabled) {
 					throw new errs.ValidationError("Cannot issue a new HTTP-01 certificate until the proxy host is enabled");
 				}
-				await runProxyStage("NPMX host readiness", () =>
+				if (!thisData.meta?.dns_challenge) {
+					await runProxyStage("NPMX host readiness", () =>
 					internalInstanceSync.awaitHostReadiness(row.id, freshRow.domain_names));
+				}
 				const cert = await runProxyStage("SSL certificate request", () =>
 					internalCertificate.createQuickCertificate(access, thisData, { coordinatedHost: true }));
 				thisData.certificate_id = cert.id;
@@ -223,8 +225,10 @@ const internalProxyHost = {
 				if (!updatedRow.enabled) {
 					throw new errs.ValidationError("Cannot issue a new HTTP-01 certificate until the proxy host is enabled");
 				}
-				await runProxyStage("NPMX host readiness", () =>
+				if (!thisData.meta?.dns_challenge) {
+					await runProxyStage("NPMX host readiness", () =>
 					internalInstanceSync.awaitHostReadiness(updatedRow.id, updatedRow.domain_names));
+				}
 				const cert = await runProxyStage("SSL certificate request", () =>
 					internalCertificate.createQuickCertificate(access, {
 						domain_names: updatedRow.domain_names,
