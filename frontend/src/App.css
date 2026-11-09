@@ -683,6 +683,21 @@ label.row {
 .npmi-proxy-host-dialog .modal-body .row {
 	min-width: 0;
 }
+.npmi-proxy-host-dialog .modal-body .card-header:has(> .nav-tabs) {
+	min-width: 0;
+	max-width: 100%;
+	overflow-x: auto;
+	overflow-y: hidden;
+}
+.npmi-proxy-host-dialog .modal-body .card-header > .nav-tabs {
+	display: flex;
+	flex-wrap: nowrap;
+	width: max-content;
+	min-width: 100%;
+}
+.npmi-proxy-host-dialog .modal-body .card-header > .nav-tabs .nav-item {
+	flex: 0 0 auto;
+}
 .npmi-proxy-host-dialog .modal-footer {
 	position: relative;
 	z-index: 6;
