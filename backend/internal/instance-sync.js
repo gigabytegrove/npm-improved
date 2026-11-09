@@ -668,6 +668,7 @@ const internalInstanceSync = {
 			meta,
 		});
 		internalInstanceSync.reschedule(1000);
+		internalInstanceSync.startAcmePolling();
 		return sanitizedStatus();
 	},
 
@@ -685,6 +686,7 @@ const internalInstanceSync = {
 		};
 		await settingModel.query().findById(SETTING_ID).patch({ value: "enabled", meta });
 		internalInstanceSync.reschedule(1000);
+		internalInstanceSync.startAcmePolling();
 		return sanitizedStatus();
 	},
 
@@ -978,6 +980,7 @@ const internalInstanceSync = {
 			},
 		});
 		internalInstanceSync.reschedule(1000);
+		internalInstanceSync.startAcmePolling();
 
 		return {
 			ok: true,
@@ -1331,6 +1334,7 @@ const internalInstanceSync = {
 			if (result.status >= 200 && result.status < 300) {
 				// Refresh this secondary promptly after the primary accepts the write.
 				internalInstanceSync.reschedule(1000);
+		internalInstanceSync.startAcmePolling();
 			}
 			return applyForwardedResponse(res, result);
 		} catch (err) {
@@ -1340,6 +1344,19 @@ const internalInstanceSync = {
 					(err instanceof Error ? err.message : String(err)),
 				));
 		}
+	},
+
+	// Poll only lightweight NPMX metadata every 2.5s. A full database
+	// snapshot is pulled ONLY after a pending ACME gate is announced.
+	startAcmePolling: () => {
+		if (acmePollTimer) clearTimeout(acmePollTimer);
+		const poll = async () => {
+			await internalInstanceSync.pollAcmeGates();
+			acmePollTimer = setTimeout(poll, 2500);
+			acmePollTimer.unref?.();
+		};
+		acmePollTimer = setTimeout(poll, 1000);
+		acmePollTimer.unref?.();
 	},
 
 	reschedule: (delayMs = null) => {
@@ -1380,6 +1397,7 @@ const internalInstanceSync = {
 			return;
 		}
 		internalInstanceSync.reschedule(30_000);
+		internalInstanceSync.startAcmePolling();
 	},
 };
 
