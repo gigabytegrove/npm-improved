@@ -1115,6 +1115,19 @@ const internalInstanceSync = {
 		return internalDisasterRecovery.createClusterEnvelope(secret);
 	},
 
+	// Do not allow a signed but different node to impersonate another peer
+	// or register arbitrary identities through the heartbeat endpoint.
+	recordAuthenticatedHeartbeat: async (data, authenticatedNodeId, remoteAddress = null) => {
+		const status = await sanitizedStatus();
+		if (!status.enabled || status.role !== "primary" ||
+			!authenticatedNodeId || data.node_id !== authenticatedNodeId ||
+			data.role !== "secondary" ||
+			!status.peers.some((peer) => peer.node_id === authenticatedNodeId && peer.role === "secondary")) {
+			throw new errs.TokenRevokedError("NPMX heartbeat sender is not an enrolled secondary");
+		}
+		return internalInstanceSync.recordHeartbeat(data, remoteAddress);
+	},
+
 	recordHeartbeat: async (data, remoteAddress = null) => {
 		const row = await getRow();
 		const meta = row.meta || {};
