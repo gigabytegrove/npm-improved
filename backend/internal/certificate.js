@@ -316,7 +316,7 @@ const internalCertificate = {
 	 * @param   {Object}  data
 	 * @returns {Promise}
 	 */
-	create: async (access, data) => {
+	create: async (access, data, options = {}) => {
 		await access.can("certificates:create", data);
 		data.owner_user_id = access.token.getUserId(1);
 
@@ -378,7 +378,7 @@ const internalCertificate = {
 					// and could route validation into a private access list.
 					// Never disable the real proxy to issue a certificate.
 					await internalNginx.test();
-					await internalCertificate.requestLetsEncryptSsl(certificate, user.email);
+					await internalCertificate.requestLetsEncryptSsl(certificate, user.email, options);
 				}
 
 				// At this point, the letsencrypt cert should exist on disk.
@@ -743,12 +743,12 @@ const internalCertificate = {
 	 * @param   {Array}    data.domain_names
 	 * @returns {Promise}
 	 */
-	createQuickCertificate: async (access, data) => {
+	createQuickCertificate: async (access, data, options = {}) => {
 		return await internalCertificate.create(access, {
 			provider: "letsencrypt",
 			domain_names: data.domain_names,
 			meta: data.meta,
-		});
+		}, options);
 	},
 
 	/**
@@ -1073,7 +1073,7 @@ const internalCertificate = {
 	 * @param   {String}  email         the email address to use for registration
 	 * @returns {Promise}
 	 */
-	requestLetsEncryptSsl: async (certificate, email) => {
+	requestLetsEncryptSsl: async (certificate, email, options = {}) => {
 		logger.info(
 			`Requesting LetsEncrypt certificates for Cert #${certificate.id}: ${certificate.domain_names.join(", ")}`,
 		);
@@ -1110,7 +1110,9 @@ const internalCertificate = {
 
 		logger.info(`Command: ${certbotCommand} ${args ? args.join(" ") : ""}`);
 
-		await internalInstanceSync.verifyAcmeRelays();
+		// A coordinated proxy host already passed a stronger test through
+		// each peer\'s real local port-80 ingress before this operation.
+		if (!options.coordinatedHost) await internalInstanceSync.verifyAcmeRelays();
 		const logSnapshot = snapshotCertbotLog();
 		try {
 			const result = await utils.execFile(certbotCommand, args, adds.opts);
