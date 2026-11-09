@@ -514,7 +514,9 @@ const internalInstanceSync = {
 			if (!status.enabled || status.role !== "secondary" || !status.secretConfigured || !status.primaryUrl) return;
 			const primaryUrl = normalizeUrl(status.primaryUrl, "Primary node URL", true);
 			const response = await npmxRequest(primaryUrl, readSecret(), status.nodeId, "/status", { timeout: 3500 });
-			if (!response.ok) return;
+			if (!response.ok) {
+				throw new Error("Primary NPMX polling status returned HTTP " + response.status);
+			}
 			const remote = await response.json();
 			// Heartbeats must not depend on successful snapshot application.
 			// Report the running version even when the snapshot has failed.
