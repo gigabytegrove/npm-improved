@@ -420,6 +420,18 @@ const internalInstanceSync = {
 		const peers = status.peers.filter((peer) => peer.role === "secondary" && peer.node_id !== status.nodeId);
 		if (!peers.length) return { checked: 0 };
 		if (!status.secretConfigured) throw new errs.ValidationError("NPMX ACME coordination requires pairing credentials");
+		const now = Date.now();
+		const stale = peers.filter((peer) =>
+			!Number.isFinite(Date.parse(peer.last_seen || "")) ||
+			now - Date.parse(peer.last_seen) > 90_000 ||
+			Date.parse(peer.last_seen) > now + 30_000);
+		if (stale.length) {
+			throw new errs.ValidationError("NPMX ACME coordination requires recent authenticated heartbeats; " +
+				"secondary peers have not checked in: " + stale.map((peer) =>
+					peer.node_id + " (last " + (peer.last_seen || "never") +
+					", cached version " + (peer.version || "unknown") + ")").join("; ") +
+				". Verify the secondary's NPMX connection and heartbeat errors.");
+		}
 		const incompatible = peers.filter((peer) =>
 			peer.version !== currentVersion() || peer.protocol !== NPMX_PROTOCOL ||
 			peer.protocol_version !== NPMX_VERSION);
