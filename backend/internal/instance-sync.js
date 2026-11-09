@@ -1147,6 +1147,35 @@ const internalInstanceSync = {
 			if (!peer.capabilities.includes("configuration") || !peer.capabilities.includes("filesystem-assets")) {
 				throw new Error("Primary NPMX capabilities cannot satisfy full instance synchronization");
 			}
+			// Announce the running secondary version before rejecting a mismatched
+			// snapshot. Previously heartbeat followed only a successful sync,
+			// leaving the primary's peer record stale after an upgrade.
+			// This is telemetry only: it never authorizes incompatible sync.
+			const versionHeartbeat = {
+				node_id: status.nodeId,
+				node_name: status.nodeName,
+				public_url: status.publicUrl,
+				role: status.role,
+				version: status.version,
+				build_commit: status.buildCommit,
+				last_sync: status.lastSync,
+				protocol: NPMX_PROTOCOL,
+				protocol_version: NPMX_VERSION,
+			};
+			try {
+				const announced = await npmxRequest(
+					primaryUrl, secret, status.nodeId, "/heartbeat",
+					{ method: "POST", body: versionHeartbeat, timeout: 5000 },
+				);
+				if (!announced.ok) {
+					throw new Error(`HTTP ${announced.status}`);
+				}
+				await updateMeta({ last_heartbeat_error: null });
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err);
+				logger.warn(`NPMX pre-sync version heartbeat failed: ${message}`);
+				await updateMeta({ last_heartbeat_error: message }).catch(() => undefined);
+			}
 			if (String(peer.version) !== currentVersion()) {
 				throw new Error(
 					`NPMX negotiation refused snapshot sync because application versions differ: local ${currentVersion()}, primary ${peer.version || "unknown"}`,
