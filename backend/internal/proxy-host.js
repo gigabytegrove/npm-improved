@@ -47,6 +47,12 @@ const internalProxyHost = {
 			throw new errs.ValidationError(err instanceof Error ? err.message : String(err));
 		}
 		const createCertificate = thisData.certificate_id === "new";
+		const requestedTls = {
+			ssl_forced: Boolean(thisData.ssl_forced),
+			http2_support: Boolean(thisData.http2_support),
+			hsts_enabled: Boolean(thisData.hsts_enabled),
+			hsts_subdomains: Boolean(thisData.hsts_subdomains),
+		};
 		if (createCertificate) {
 			delete thisData.certificate_id;
 		}
@@ -94,7 +100,10 @@ const internalProxyHost = {
 				const cert = await runProxyStage("SSL certificate request", () =>
 					internalCertificate.createQuickCertificate(access, thisData, { coordinatedHost: true }));
 				thisData.certificate_id = cert.id;
-				await proxyHostModel.query().where("id", row.id).patch({ certificate_id: cert.id });
+				await proxyHostModel.query().where("id", row.id).patch({
+					certificate_id: cert.id,
+					...internalHost.cleanSslHstsData({ ...requestedTls, certificate_id: cert.id }),
+				});
 				freshRow = await internalProxyHost.get(access, {
 					id: row.id,
 					expand: ["certificate", "owner", "access_list.[clients,items]"],
