@@ -29,6 +29,9 @@ import {
 import errs from "../lib/error.js";
 import { validAcmeToken, readLocalAcmeToken } from "../lib/acme-challenge.js";
 import { selectAcmePreflightPeers } from "../lib/npmx-acme-peer-policy.js";
+import { acknowledgeAcmeGate, createAcmeGate, listAcmeGates } from "../lib/npmx-acme-gates.js";
+import proxyHostModel from "../models/proxy_host.js";
+import internalNginx from "./nginx.js";
 import settingModel from "../models/setting.js";
 import pjson from "../package.json" with { type: "json" };
 import { global as logger } from "../logger.js";
@@ -55,6 +58,9 @@ const SNAPSHOT_TIMEOUT_MS = 180_000;
 
 let schedulerTimer = null;
 let syncRunning = false;
+let acmePollTimer = null;
+let acmePollRunning = false;
+const acknowledgedGates = new Set();
 const seenNpmxNonces = new Map();
 
 const currentVersion = () => (process.env.NPM_BUILD_VERSION || pjson.version || "0.0.0").trim();
@@ -157,6 +163,7 @@ const npmxCapabilities = () => ({
 		"node-local-template-rendering",
 		"primary-write-arbitration",
 		"acme-http01-relay",
+		"acme-host-readiness-v1",
 	],
 });
 
@@ -579,6 +586,7 @@ const internalInstanceSync = {
 			build_commit: status.buildCommit,
 			build_date: status.buildDate,
 			last_sync: status.lastSync,
+			acme_gates: status.enabled && status.role === "primary" ? listAcmeGates() : [],
 			sync_policy: {
 				require_same_app_version: true,
 				secondary_read_only: false,
