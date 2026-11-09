@@ -189,14 +189,6 @@ const internalProxyHost = {
 
 		const previousState = await snapshotModelRow(proxyHostModel, currentRow.id);
 
-		if (createCertificate) {
-			const cert = await runProxyStage("SSL certificate request", () => internalCertificate.createQuickCertificate(access, {
-				domain_names: thisData.domain_names || currentRow.domain_names,
-				meta: _.assign({}, currentRow.meta, thisData.meta),
-			}));
-			thisData.certificate_id = cert.id;
-		}
-
 		thisData = _.assign({}, { domain_names: currentRow.domain_names }, thisData);
 		thisData = internalHost.cleanSslHstsData(thisData, currentRow);
 		thisData = internalHost.cleanProtectionData(thisData, currentRow);
@@ -218,8 +210,56 @@ const internalProxyHost = {
 				}));
 				updatedRow.meta = newMeta;
 			}
+			if (createCertificate) {
+				if (!updatedRow.enabled) {
+					throw new errs.ValidationError("Cannot issue a new HTTP-01 certificate until the proxy host is enabled");
+				}
+				await runProxyStage("NPMX host readiness", () =>
+					internalInstanceSync.awaitHostReadiness(updatedRow.id, updatedRow.domain_names));
+				const cert = await runProxyStage("SSL certificate request", () =>
+					internalCertificate.createQuickCertificate(access, {
+						domain_names: updatedRow.domain_names,
+						meta: _.assign({}, currentRow.meta, thisData.meta),
+					}));
+				thisData.certificate_id = cert.id;
+				await proxyHostModel.query().where("id", updatedRow.id).patch({ certificate_id: cert.id });
+				updatedRow = await internalProxyHost.get(access, {
+					id: updatedRow.id,
+					expand: ["owner", "certificate", "access_list.[clients,items]"],
+				});
+				updatedRow.meta = await runProxyStage("TLS host activation", () =>
+					internalNginx.configure(proxyHostModel, "proxy_host", updatedRow, {
+						userId: access.token.getUserId(1),
+						operation: "activate-certificate",
+					}));
+				await runProxyStage("NPMX certificate distribution", () =>
+					internalInstanceSync.awaitHostReadiness(updatedRow.id, updatedRow.domain_names, {
+						phase: "certificate", certificateId: cert.id,
+					}));
+			}
 		} catch (err) {
 			await restoreModelRow(proxyHostModel, currentRow.id, previousState);
+			// The HTTP staging configuration might already have been reloaded.
+			// Restore the active Nginx host as well as the database snapshot.
+			try {
+				const restored = await internalProxyHost.get(access, {
+					id: currentRow.id,
+					expand: ["owner", "certificate", "access_list.[clients,items]"],
+				});
+				if (restored.enabled) {
+					await internalNginx.configure(proxyHostModel, "proxy_host", restored, {
+						userId: access.token.getUserId(1),
+						operation: "failed-certificate-rollback",
+						recordRevision: false,
+					});
+				}
+			} catch (rollbackError) {
+				logger.error("CRITICAL: proxy host update Nginx rollback failed:", rollbackError);
+				throw new errs.ConfigurationError(
+					"Proxy host update failed and the previous Nginx configuration could not be restored. Check server logs.",
+					rollbackError,
+				);
+			}
 			throw err;
 		}
 
