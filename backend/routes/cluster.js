@@ -54,13 +54,13 @@ router.post("/npmx/acme-ready", internalInstanceSync.requireNpmxAuth, async (req
 			required: ["gate_id", "host_id", "domain_names", "phase"],
 			additionalProperties: false,
 			properties: {
-				gate_id: { type: "string", format: "uuid" },
+				gate_id: { type: "string", minLength: 36, maxLength: 36, pattern: "^[0-9a-fA-F-]{36}$" },
 				host_id: { type: "integer", minimum: 1 },
 				domain_names: { type: "array", minItems: 1, maxItems: 100, items: { type: "string", minLength: 1, maxLength: 253 } },
 				phase: { type: "string", enum: ["host", "certificate"] },
 			},
 		}, req.body);
-		res.status(200).send(await internalInstanceSync.acknowledgeHostReadiness({ ...req, body: data }));
+		res.status(200).send(await internalInstanceSync.acknowledgeHostReadiness({ npmxNodeId: req.npmxNodeId, body: data }));
 	} catch (err) {
 		next(err);
 	}
