@@ -28,6 +28,7 @@ import userModel from "../models/user.js";
 import internalAuditLog from "./audit-log.js";
 import internalHost from "./host.js";
 import internalNginx from "./nginx.js";
+import internalInstanceSync from "./instance-sync.js";
 import { getServingNodeHostname } from "../lib/node-identity.js";
 
 const letsencryptConfig = "/etc/letsencrypt.ini";
@@ -1109,6 +1110,7 @@ const internalCertificate = {
 
 		logger.info(`Command: ${certbotCommand} ${args ? args.join(" ") : ""}`);
 
+		await internalInstanceSync.verifyAcmeRelays();
 		const logSnapshot = snapshotCertbotLog();
 		try {
 			const result = await utils.execFile(certbotCommand, args, adds.opts);
@@ -1307,6 +1309,7 @@ const internalCertificate = {
 
 		logger.info(`Command: ${certbotCommand} ${args ? args.join(" ") : ""}`);
 
+		await internalInstanceSync.verifyAcmeRelays();
 		const result = await utils.execFile(certbotCommand, args, adds.opts);
 		logger.info(result);
 		return result;
