@@ -34,6 +34,18 @@ router.get("/npmx/acme/:token", internalInstanceSync.requireNpmxAuth, async (req
 	}
 });
 
+// Signed preflight: exercise the node's real ACME resolver, including
+// its remote lookup. This endpoint is not accessible without NPMX credentials.
+router.get("/npmx/acme-verify/:token", internalInstanceSync.requireNpmxAuth, async (req, res, next) => {
+	try {
+		const result = await internalInstanceSync.verifyAuthenticatedAcmeRelay(req.params.token);
+		res.set({ "Cache-Control": "no-store", "Content-Type": "text/plain; charset=utf-8" });
+		res.status(result.status).send(result.value || "");
+	} catch (err) {
+		next(err);
+	}
+});
+
 // NPMX pairing is authenticated by a short-lived one-time pairing token and
 // an ephemeral X25519 key exchange. The persistent cluster secret is never
 // returned in plaintext.

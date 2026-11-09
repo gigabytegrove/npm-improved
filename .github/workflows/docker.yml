@@ -228,6 +228,11 @@ jobs:
             exit 1
           fi
 
+          # The native privileged updater rejects world-writable queue directories.
+          # CI uses permissive initial bind mounts; secure the data directory
+          # before submitting a restart request to the host-side service.
+          sudo chmod o-w data
+
           curl -fsS -H "Authorization: Bearer $TOKEN" \
             -H 'Content-Type: application/json' \
             -d '{"password":"update-ci-password-12345"}' \
