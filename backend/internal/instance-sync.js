@@ -422,8 +422,13 @@ const internalInstanceSync = {
 			peer.version !== currentVersion() || peer.protocol !== NPMX_PROTOCOL ||
 			peer.protocol_version !== NPMX_VERSION);
 		if (incompatible.length) {
-			throw new errs.ValidationError("NPMX ACME coordination requires matching versions on peers: " +
-				incompatible.map((peer) => peer.node_id).join(", "));
+			throw new errs.ValidationError("NPMX ACME coordination requires matching versions on peers (local " +
+				currentVersion() + " / protocol " + NPMX_PROTOCOL + "/" + NPMX_VERSION + "): " +
+				incompatible.map((peer) =>
+					peer.node_id + " (reported " + (peer.version || "unknown") +
+					", protocol " + (peer.protocol || "unknown") + "/" +
+					(peer.protocol_version ?? "unknown") +
+					", last heartbeat " + (peer.last_seen || "never") + ")").join("; "));
 		}
 		const token = phase === "host" ? crypto.randomBytes(24).toString("base64url") : "";
 		const value = phase === "host" ? crypto.randomBytes(32).toString("base64url") : "";
