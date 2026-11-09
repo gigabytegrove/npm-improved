@@ -60,6 +60,7 @@ let schedulerTimer = null;
 let syncRunning = false;
 let acmePollTimer = null;
 let acmePollRunning = false;
+let acmePollEpoch = 0;
 const acknowledgedGates = new Set();
 const seenNpmxNonces = new Map();
 
@@ -1350,9 +1351,11 @@ const internalInstanceSync = {
 	// Poll only lightweight NPMX metadata every 2.5s. A full database
 	// snapshot is pulled ONLY after a pending ACME gate is announced.
 	startAcmePolling: () => {
+		const epoch = ++acmePollEpoch;
 		if (acmePollTimer) clearTimeout(acmePollTimer);
 		const poll = async () => {
 			await internalInstanceSync.pollAcmeGates();
+			if (epoch !== acmePollEpoch) return;
 			acmePollTimer = setTimeout(poll, 2500);
 			acmePollTimer.unref?.();
 		};
