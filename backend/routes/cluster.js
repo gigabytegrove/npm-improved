@@ -154,7 +154,7 @@ router.post("/npmx/heartbeat", internalInstanceSync.requireNpmxAuth, async (req,
 			},
 			req.body,
 		);
-		res.status(200).send(await internalInstanceSync.recordHeartbeat(data, req.ip));
+		res.status(200).send(await internalInstanceSync.recordAuthenticatedHeartbeat(data, req.npmxNodeId, req.ip));
 	} catch (err) {
 		debug(logger, `POST /cluster/npmx/heartbeat: ${err}`);
 		next(err);

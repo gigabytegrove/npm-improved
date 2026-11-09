@@ -61,6 +61,8 @@ let syncRunning = false;
 let acmePollTimer = null;
 let acmePollRunning = false;
 let acmePollEpoch = 0;
+let lastIndependentHeartbeat = 0;
+const HEARTBEAT_INTERVAL_MS = 20_000;
 const acknowledgedGates = new Set();
 const seenNpmxNonces = new Map();
 
@@ -418,6 +420,18 @@ const internalInstanceSync = {
 		const peers = status.peers.filter((peer) => peer.role === "secondary" && peer.node_id !== status.nodeId);
 		if (!peers.length) return { checked: 0 };
 		if (!status.secretConfigured) throw new errs.ValidationError("NPMX ACME coordination requires pairing credentials");
+		const now = Date.now();
+		const stale = peers.filter((peer) =>
+			!Number.isFinite(Date.parse(peer.last_seen || "")) ||
+			now - Date.parse(peer.last_seen) > 90_000 ||
+			Date.parse(peer.last_seen) > now + 30_000);
+		if (stale.length) {
+			throw new errs.ValidationError("NPMX ACME coordination requires recent authenticated heartbeats; " +
+				"secondary peers have not checked in: " + stale.map((peer) =>
+					peer.node_id + " (last " + (peer.last_seen || "never") +
+					", cached version " + (peer.version || "unknown") + ")").join("; ") +
+				". Verify the secondary's NPMX connection and heartbeat errors.");
+		}
 		const incompatible = peers.filter((peer) =>
 			peer.version !== currentVersion() || peer.protocol !== NPMX_PROTOCOL ||
 			peer.protocol_version !== NPMX_VERSION);
@@ -469,6 +483,39 @@ const internalInstanceSync = {
 		}) };
 	},
 
+	// Lightweight, authenticated heartbeat independently of full snapshots.
+	// Keep sync timestamps unchanged: a heartbeat never proves a snapshot
+	// or Nginx reload completed.
+	heartbeatNow: async (knownStatus = null, knownPrimaryUrl = null) => {
+		const status = knownStatus || await sanitizedStatus();
+		if (!status.enabled || status.role !== "secondary" || !status.secretConfigured || !status.primaryUrl) return false;
+		const now = Date.now();
+		if (now - lastIndependentHeartbeat < HEARTBEAT_INTERVAL_MS) return false;
+		// Retry failed heartbeats next interval; keep this bounded and separate
+		// from the potentially expensive full snapshot process.
+		lastIndependentHeartbeat = now;
+		const primaryUrl = knownPrimaryUrl || normalizeUrl(status.primaryUrl, "Primary node URL", true);
+		const body = {
+			node_id: status.nodeId, node_name: status.nodeName,
+			public_url: status.publicUrl, role: "secondary",
+			version: currentVersion(), build_commit: status.buildCommit,
+			last_sync: status.lastSync,
+			protocol: NPMX_PROTOCOL, protocol_version: NPMX_VERSION,
+		};
+		try {
+			const reply = await npmxRequest(primaryUrl, readSecret(), status.nodeId,
+				"/heartbeat", { method: "POST", body, timeout: 5000 });
+			if (!reply.ok) throw new Error("HTTP " + reply.status);
+			await updateMeta({ last_heartbeat_error: null });
+			return true;
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			logger.warn("NPMX independent heartbeat failed: " + message);
+			await updateMeta({ last_heartbeat_error: message }).catch(() => undefined);
+			return false;
+		}
+	},
+
 	// Pull-only nodes discover pending gates through the signed primary status
 	// endpoint. They never require an inbound management URL.
 	pollAcmeGates: async () => {
@@ -479,9 +526,16 @@ const internalInstanceSync = {
 			if (!status.enabled || status.role !== "secondary" || !status.secretConfigured || !status.primaryUrl) return;
 			const primaryUrl = normalizeUrl(status.primaryUrl, "Primary node URL", true);
 			const response = await npmxRequest(primaryUrl, readSecret(), status.nodeId, "/status", { timeout: 3500 });
-			if (!response.ok) return;
+			if (!response.ok) {
+				throw new Error("Primary NPMX polling status returned HTTP " + response.status);
+			}
 			const remote = await response.json();
-			if (!remote.enabled || remote.role !== "primary" || remote.version !== currentVersion() ||
+			// Heartbeats must not depend on successful snapshot application.
+			// Report the running version even when the snapshot has failed.
+			// Do not trust the local cache as proof that a peer is ready.
+			if (!remote.enabled || remote.role !== "primary") return;
+			await internalInstanceSync.heartbeatNow(status, primaryUrl);
+			if (remote.version !== currentVersion() ||
 				!remote.capabilities?.includes("acme-host-readiness-v1")) return;
 			const gates = Array.isArray(remote.acme_gates) ? remote.acme_gates.slice(0, 8) : [];
 			const ids = new Set(gates.map((gate) => gate.id));
@@ -1073,6 +1127,19 @@ const internalInstanceSync = {
 			throw new errs.ValidationError("Cluster secret is not configured");
 		}
 		return internalDisasterRecovery.createClusterEnvelope(secret);
+	},
+
+	// Do not allow a signed but different node to impersonate another peer
+	// or register arbitrary identities through the heartbeat endpoint.
+	recordAuthenticatedHeartbeat: async (data, authenticatedNodeId, remoteAddress = null) => {
+		const status = await sanitizedStatus();
+		if (!status.enabled || status.role !== "primary" ||
+			!authenticatedNodeId || data.node_id !== authenticatedNodeId ||
+			data.role !== "secondary" ||
+			!status.peers.some((peer) => peer.node_id === authenticatedNodeId && peer.role === "secondary")) {
+			throw new errs.TokenRevokedError("NPMX heartbeat sender is not an enrolled secondary");
+		}
+		return internalInstanceSync.recordHeartbeat(data, remoteAddress);
 	},
 
 	recordHeartbeat: async (data, remoteAddress = null) => {
