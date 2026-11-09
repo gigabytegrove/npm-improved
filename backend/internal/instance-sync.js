@@ -463,6 +463,75 @@ const internalInstanceSync = {
 		}) };
 	},
 
+	// Pull-only nodes discover pending gates through the signed primary status
+	// endpoint. They never require an inbound management URL.
+	pollAcmeGates: async () => {
+		if (acmePollRunning) return;
+		acmePollRunning = true;
+		try {
+			const status = await sanitizedStatus();
+			if (!status.enabled || status.role !== "secondary" || !status.secretConfigured || !status.primaryUrl) return;
+			const primaryUrl = normalizeUrl(status.primaryUrl, "Primary node URL", true);
+			const response = await npmxRequest(primaryUrl, readSecret(), status.nodeId, "/status", { timeout: 3500 });
+			if (!response.ok) return;
+			const remote = await response.json();
+			if (!remote.enabled || remote.role !== "primary" || remote.version !== currentVersion() ||
+				!remote.capabilities?.includes("acme-host-readiness-v1")) return;
+			const gates = Array.isArray(remote.acme_gates) ? remote.acme_gates.slice(0, 8) : [];
+			const ids = new Set(gates.map((gate) => gate.id));
+			for (const id of acknowledgedGates) {
+				if (!ids.has(id)) acknowledgedGates.delete(id);
+			}
+			for (const gate of gates) {
+				if (acknowledgedGates.has(gate.id)) continue;
+				if (!Number.isInteger(gate.host_id) || gate.host_id < 1 ||
+					!Array.isArray(gate.domain_names) || !gate.domain_names.length ||
+					!["host", "certificate"].includes(gate.phase)) continue;
+				// Snapshot application and Nginx reload must finish before ack.
+				if (syncRunning) return;
+				await internalInstanceSync.syncNow();
+				const host = await proxyHostModel.query().findById(gate.host_id);
+				if (!host?.enabled ||
+					!gate.domain_names.every((domain) => host.domain_names.includes(domain)) ||
+					!fs.existsSync(internalNginx.getConfigName("proxy_host", gate.host_id))) {
+					throw new Error("NPMX ACME host " + gate.host_id + " is not active on this node");
+				}
+				await internalNginx.test();
+				if (gate.phase === "host") {
+					if (!validAcmeToken(gate.token) || !gate.value || Buffer.byteLength(gate.value) > 4096) {
+						throw new Error("Invalid NPMX ACME readiness challenge");
+					}
+					await probeLocalAcmeDomains(gate.domain_names, gate.token, gate.value);
+				} else {
+					if (!Number.isInteger(gate.certificate_id) ||
+						host.certificate_id !== gate.certificate_id ||
+						!fs.existsSync("/etc/letsencrypt/live/npm-" + gate.certificate_id + "/fullchain.pem")) {
+						throw new Error("NPMX certificate " + gate.certificate_id + " was not installed on secondary");
+					}
+				}
+				const ack = await npmxRequest(primaryUrl, readSecret(), status.nodeId, "/acme-ready", {
+					method: "POST",
+					body: {
+						gate_id: gate.id,
+						host_id: gate.host_id,
+						domain_names: gate.domain_names,
+						phase: gate.phase,
+					},
+					timeout: 5000,
+				});
+				if (!ack.ok || !(await ack.json()).ok) {
+					throw new Error("Primary rejected NPMX ACME readiness acknowledgement");
+				}
+				acknowledgedGates.add(gate.id);
+			}
+		} catch (err) {
+			logger.warn("NPMX ACME readiness poll failed: " +
+				(err instanceof Error ? err.message : String(err)));
+		} finally {
+			acmePollRunning = false;
+		}
+	},
+
 	// Called before Certbot contacts the CA. The temporary token is written
 	// locally and fetched via each remote node's authenticated NPMX endpoint,
 	// which invokes the same missing-token resolution as its public ingress.
