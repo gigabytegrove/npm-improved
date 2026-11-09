@@ -630,6 +630,92 @@ label.row {
 }
 
 
+/* The Proxy Host Formik <form> sits directly inside .modal-content.
+ * Bootstrap's scrollable modal rules target .modal-body as a direct child,
+ * so the desktop form must explicitly own the flex/scroll layout too.
+ * Keep the header, error region and footer accessible at any viewport size. */
+.npmi-proxy-host-dialog.modal-dialog-scrollable .modal-content {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	height: min(860px, calc(100dvh - 2.5rem));
+	max-height: calc(100dvh - 2.5rem);
+	overflow: hidden;
+}
+.npmi-proxy-host-dialog.modal-dialog-scrollable .modal-content > form {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-height: 0;
+	min-width: 0;
+	overflow: hidden;
+}
+.npmi-proxy-host-dialog.modal-dialog-scrollable .modal-content > form > .modal-header,
+.npmi-proxy-host-dialog.modal-dialog-scrollable .modal-content > form > .modal-footer {
+	flex: 0 0 auto;
+}
+.npmi-proxy-host-dialog.modal-dialog-scrollable .modal-content > form > .modal-body {
+	display: block;
+	flex: 1 1 0;
+	min-width: 0;
+	min-height: 0;
+	overflow-x: hidden;
+	overflow-y: auto;
+	overscroll-behavior-y: contain;
+	-webkit-overflow-scrolling: touch;
+	scrollbar-gutter: stable;
+}
+.npmi-proxy-host-dialog .modal-body > .alert {
+	margin: 0;
+	border-radius: 0;
+	overflow-wrap: anywhere;
+}
+.npmi-proxy-host-dialog .modal-body > .card {
+	min-width: 0;
+	max-width: 100%;
+}
+.npmi-proxy-host-dialog .modal-body .card-body,
+.npmi-proxy-host-dialog .modal-body .tab-content,
+.npmi-proxy-host-dialog .modal-body .tab-pane {
+	min-width: 0;
+	max-width: 100%;
+}
+.npmi-proxy-host-dialog .modal-body .row {
+	min-width: 0;
+}
+.npmi-proxy-host-dialog .modal-body .card-header:has(> .nav-tabs) {
+	min-width: 0;
+	max-width: 100%;
+	overflow-x: auto;
+	overflow-y: hidden;
+}
+.npmi-proxy-host-dialog .modal-body .card-header > .nav-tabs {
+	display: flex;
+	flex-wrap: nowrap;
+	width: max-content;
+	min-width: 100%;
+}
+.npmi-proxy-host-dialog .modal-body .card-header > .nav-tabs .nav-item {
+	flex: 0 0 auto;
+}
+.npmi-proxy-host-dialog .modal-footer {
+	position: relative;
+	z-index: 6;
+}
+@media (max-width: 991.98px) {
+	.npmi-proxy-host-dialog.modal-dialog-scrollable .modal-content {
+		height: calc(100dvh - 1rem);
+		max-height: calc(100dvh - 1rem);
+	}
+}
+@media (max-width: 575.98px) {
+	.npmi-proxy-host-dialog.modal-dialog-scrollable .modal-content {
+		height: 100dvh;
+		min-height: 100dvh;
+		max-height: 100dvh;
+	}
+}
+
 /* Proxy Host editor
  *
  * This workflow now contains upstream pools, SSL, protection, custom locations,
