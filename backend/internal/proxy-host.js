@@ -92,7 +92,7 @@ const internalProxyHost = {
 				await runProxyStage("NPMX host readiness", () =>
 					internalInstanceSync.awaitHostReadiness(row.id, freshRow.domain_names));
 				const cert = await runProxyStage("SSL certificate request", () =>
-					internalCertificate.createQuickCertificate(access, thisData));
+					internalCertificate.createQuickCertificate(access, thisData, { coordinatedHost: true }));
 				thisData.certificate_id = cert.id;
 				await proxyHostModel.query().where("id", row.id).patch({ certificate_id: cert.id });
 				freshRow = await internalProxyHost.get(access, {
@@ -220,7 +220,7 @@ const internalProxyHost = {
 					internalCertificate.createQuickCertificate(access, {
 						domain_names: updatedRow.domain_names,
 						meta: _.assign({}, currentRow.meta, thisData.meta),
-					}));
+					}, { coordinatedHost: true }));
 				thisData.certificate_id = cert.id;
 				await proxyHostModel.query().where("id", updatedRow.id).patch({ certificate_id: cert.id });
 				updatedRow = await internalProxyHost.get(access, {
