@@ -28,6 +28,7 @@ import {
 } from "../lib/npmx.js";
 import errs from "../lib/error.js";
 import { validAcmeToken, readLocalAcmeToken } from "../lib/acme-challenge.js";
+import { selectAcmePreflightPeers } from "../lib/npmx-acme-peer-policy.js";
 import settingModel from "../models/setting.js";
 import pjson from "../package.json" with { type: "json" };
 import { global as logger } from "../logger.js";
@@ -389,11 +390,15 @@ const internalInstanceSync = {
 		if (!node.secretConfigured) {
 			throw new errs.ValidationError("NPMX ACME preflight: cluster secret is not configured");
 		}
-		const peers = node.role === "secondary"
-			? [{ node_id: "primary", public_url: node.primaryUrl }]
-			: (Array.isArray(node.peers) ? node.peers : [])
-				.filter((peer) => peer.role === "secondary");
-		if (!peers.length) return { checked: 0 };
+		const { peers, skipped } = selectAcmePreflightPeers(node);
+		// Pull-only peers have no inbound management URL. The missing URL
+		// does not prevent their authenticated secondary-to-primary ACME
+		// lookup, so only configured reverse links can be probed here.
+		// Do not conceal that these reverse links were not verified.
+		if (skipped.length) {
+			logger.warn(`NPMX ACME preflight: skipped reverse connectivity for ${skipped.length} pull-only secondary peer(s) without a public URL: ${skipped.join(", ")}`);
+		}
+		if (!peers.length) return { checked: 0, skipped: skipped.length };
 		const token = crypto.randomBytes(24).toString("base64url");
 		const expected = crypto.randomBytes(32).toString("base64url");
 		const directory = "/data/letsencrypt-acme-challenge/.well-known/acme-challenge";
@@ -427,7 +432,7 @@ const internalInstanceSync = {
 					`NPMX ACME preflight failed before contacting Let's Encrypt: ${failures.join("; ")}`,
 				);
 			}
-			return { checked: peers.length };
+			return { checked: peers.length, skipped: skipped.length };
 		} finally {
 			fs.rmSync(file, { force: true });
 		}
