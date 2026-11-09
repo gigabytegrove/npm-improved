@@ -315,6 +315,29 @@ const fetchWithTimeout = async (url, options = {}, timeout = REQUEST_TIMEOUT_MS)
 	}
 };
 
+// Probe the actual Nginx port-80 listener with the correct Host header.
+// A direct Express 200 is insufficient to prove the public vhost works.
+const probeLocalAcmeDomains = async (domains, token, expected) => {
+	for (const domain of domains) {
+		const controller = new AbortController();
+		const timer = setTimeout(() => controller.abort(), 7000);
+		try {
+			const response = await fetch("http://127.0.0.1/.well-known/acme-challenge/" + token, {
+				headers: { Host: domain },
+				signal: controller.signal,
+				redirect: "manual",
+			});
+			const body = await response.text();
+			if (response.status !== 200 || body !== expected) {
+				throw new Error("NPMX host " + domain + " local HTTP-01 ingress returned HTTP " +
+					response.status + " or an incorrect challenge response");
+			}
+		} finally {
+			clearTimeout(timer);
+		}
+	}
+};
+
 // HTTP-01 tokens are opaque, short-lived Certbot artifacts. Never use a
 // request-supplied filesystem path; only these bounded token characters are allowed.
 const internalInstanceSync = {
