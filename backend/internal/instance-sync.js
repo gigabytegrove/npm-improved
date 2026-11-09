@@ -1322,7 +1322,8 @@ const internalInstanceSync = {
 			};
 			// Only the primary executes writes and assigns new database IDs.
 			const response = await npmxRequest(primaryUrl, secret, selfId, "/write", {
-				method: "POST", body: request, timeout: 125_000,
+				method: "POST", body: request,
+				timeout: request.body?.certificate_id === "new" ? 650_000 : 125_000,
 			});
 			if (!response.ok) {
 				const result = await response.json().catch(() => null);
