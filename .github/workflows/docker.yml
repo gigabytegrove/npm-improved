@@ -239,8 +239,12 @@ jobs:
             -X POST http://127.0.0.1:19181/api/version/update/restart \
             >/tmp/npmi-update-restart.json
 
-          test -s data/host-update-request.json
-          sudo "/usr/local/libexec/npm-improved/$HASH/host-update-dispatch.py" "$GITHUB_WORKSPACE"
+          # systemd.path may consume the queue immediately after the API
+          # accepts it. Manual dispatch is only necessary if still pending.
+          # The final status and empty-queue assertions below verify success.
+          if test -s data/host-update-request.json; then
+            sudo "/usr/local/libexec/npm-improved/$HASH/host-update-dispatch.py" "$GITHUB_WORKSPACE"
+          fi
 
           # systemd.path may pick up the request before the CI shell's
           # explicit dispatch invocation completes; wait for final state.
