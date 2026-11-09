@@ -320,7 +320,11 @@ const internalInstanceSync = {
 		const local = readLocalAcmeToken(token);
 		if (local !== null) return { status: 200, value: local };
 		const node = await sanitizedStatus();
-		if (!node.enabled || !node.secretConfigured) return { status: 404 };
+		if (!node.enabled) return { status: 404 };
+		if (!node.secretConfigured || (node.role === "secondary" && !node.primaryUrl)) {
+			logger.warn("NPMX ACME relay misconfigured: cluster secret or primary URL missing");
+			return { status: 503 };
+		}
 
 		// HTTP-01 can arrive at any public node, but Certbot creates its
 		// short-lived token only on the node performing issuance. The primary
@@ -371,6 +375,71 @@ const internalInstanceSync = {
 		if (!node.enabled || !node.secretConfigured) return { status: 403 };
 		const value = readLocalAcmeToken(token);
 		return value === null ? { status: 404 } : { status: 200, value };
+	},
+
+
+	// Called before Certbot contacts the CA. The temporary token is written
+	// locally and fetched via each remote node's authenticated NPMX endpoint,
+	// which invokes the same missing-token resolution as its public ingress.
+	// This catches broken pairing, stale releases and incorrect peer URLs
+	// without spending a Let's Encrypt failed-authorization attempt.
+	verifyAcmeRelays: async () => {
+		const node = await sanitizedStatus();
+		if (!node.enabled) return { checked: 0 };
+		if (!node.secretConfigured) {
+			throw new errs.ValidationError("NPMX ACME preflight: cluster secret is not configured");
+		}
+		const peers = node.role === "secondary"
+			? [{ node_id: "primary", public_url: node.primaryUrl }]
+			: (Array.isArray(node.peers) ? node.peers : [])
+				.filter((peer) => peer.role === "secondary");
+		if (!peers.length) return { checked: 0 };
+		const token = crypto.randomBytes(24).toString("base64url");
+		const expected = crypto.randomBytes(32).toString("base64url");
+		const directory = "/data/letsencrypt-acme-challenge/.well-known/acme-challenge";
+		const file = path.join(directory, token);
+		fs.mkdirSync(directory, { recursive: true });
+		fs.writeFileSync(file, expected, { flag: "wx", mode: 0o600 });
+		try {
+			const results = await Promise.all(peers.map(async (peer) => {
+				if (!peer.public_url) return `${peer.node_id}: missing NPMX public URL`;
+				if (node.role === "primary" &&
+					(peer.version !== currentVersion() || peer.protocol !== NPMX_PROTOCOL ||
+					peer.protocol_version !== NPMX_VERSION)) {
+					return `${peer.node_id}: NPMX versions/capabilities differ`;
+				}
+				try {
+					const response = await npmxRequest(
+						normalizeUrl(peer.public_url, "NPMX peer URL", true),
+						readSecret(), node.nodeId, `/acme-verify/${token}`,
+						{ timeout: 6000 },
+					);
+					if (!response.ok) return `${peer.node_id}: HTTP ${response.status}`;
+					const body = await response.text();
+					return body === expected ? null : `${peer.node_id}: wrong challenge response`;
+				} catch (err) {
+					return `${peer.node_id}: ${err instanceof Error ? err.message : String(err)}`;
+				}
+			}));
+			const failures = results.filter(Boolean);
+			if (failures.length) {
+				throw new errs.ValidationError(
+					`NPMX ACME preflight failed before contacting Let's Encrypt: ${failures.join("; ")}`,
+				);
+			}
+			return { checked: peers.length };
+		} finally {
+			fs.rmSync(file, { force: true });
+		}
+	},
+
+	// Authenticated probes call the public responder's same resolver. The
+	// underlying signed /acme/:token endpoint remains strictly local-only.
+	verifyAuthenticatedAcmeRelay: async (token) => {
+		if (!validAcmeToken(token)) return { status: 404 };
+		const node = await sanitizedStatus();
+		if (!node.enabled || !node.secretConfigured) return { status: 503 };
+		return internalInstanceSync.resolveAcmeChallenge(token);
 	},
 
 	updateSettings: async (data) => {
