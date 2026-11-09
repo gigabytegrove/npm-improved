@@ -6,6 +6,7 @@ import { describeNpmxWrite, recordFingerprint, validPrecondition } from "../lib/
 import db from "../db.js";
 
 const MUTATION_TIMEOUT = 120_000;
+const CERTIFICATE_MUTATION_TIMEOUT = 600_000;
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_REQUEST_BYTES = 96 * 1024;
 
@@ -117,7 +118,10 @@ export async function applyAuthorizedWrite(value) {
 		expiresIn: "2m",
 	});
 	const controller = new AbortController();
-	const timeout = setTimeout(() => controller.abort(), MUTATION_TIMEOUT);
+	const certificateOperation = checked.body?.certificate_id === "new" &&
+		checked.path.startsWith("/nginx/proxy-hosts");
+	const timeout = setTimeout(() => controller.abort(),
+		certificateOperation ? CERTIFICATE_MUTATION_TIMEOUT : MUTATION_TIMEOUT);
 	try {
 		const headers = {
 			Authorization: "Bearer " + credential.token,
