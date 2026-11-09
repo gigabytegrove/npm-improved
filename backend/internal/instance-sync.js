@@ -61,6 +61,8 @@ let syncRunning = false;
 let acmePollTimer = null;
 let acmePollRunning = false;
 let acmePollEpoch = 0;
+let lastIndependentHeartbeat = 0;
+const HEARTBEAT_INTERVAL_MS = 20_000;
 const acknowledgedGates = new Set();
 const seenNpmxNonces = new Map();
 
@@ -469,6 +471,39 @@ const internalInstanceSync = {
 		}) };
 	},
 
+	// Lightweight, authenticated heartbeat independently of full snapshots.
+	// Keep sync timestamps unchanged: a heartbeat never proves a snapshot
+	// or Nginx reload completed.
+	heartbeatNow: async (knownStatus = null, knownPrimaryUrl = null) => {
+		const status = knownStatus || await sanitizedStatus();
+		if (!status.enabled || status.role !== "secondary" || !status.secretConfigured || !status.primaryUrl) return false;
+		const now = Date.now();
+		if (now - lastIndependentHeartbeat < HEARTBEAT_INTERVAL_MS) return false;
+		// Retry failed heartbeats next interval; keep this bounded and separate
+		// from the potentially expensive full snapshot process.
+		lastIndependentHeartbeat = now;
+		const primaryUrl = knownPrimaryUrl || normalizeUrl(status.primaryUrl, "Primary node URL", true);
+		const body = {
+			node_id: status.nodeId, node_name: status.nodeName,
+			public_url: status.publicUrl, role: "secondary",
+			version: currentVersion(), build_commit: status.buildCommit,
+			last_sync: status.lastSync,
+			protocol: NPMX_PROTOCOL, protocol_version: NPMX_VERSION,
+		};
+		try {
+			const reply = await npmxRequest(primaryUrl, readSecret(), status.nodeId,
+				"/heartbeat", { method: "POST", body, timeout: 5000 });
+			if (!reply.ok) throw new Error("HTTP " + reply.status);
+			await updateMeta({ last_heartbeat_error: null });
+			return true;
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			logger.warn("NPMX independent heartbeat failed: " + message);
+			await updateMeta({ last_heartbeat_error: message }).catch(() => undefined);
+			return false;
+		}
+	},
+
 	// Pull-only nodes discover pending gates through the signed primary status
 	// endpoint. They never require an inbound management URL.
 	pollAcmeGates: async () => {
@@ -481,7 +516,12 @@ const internalInstanceSync = {
 			const response = await npmxRequest(primaryUrl, readSecret(), status.nodeId, "/status", { timeout: 3500 });
 			if (!response.ok) return;
 			const remote = await response.json();
-			if (!remote.enabled || remote.role !== "primary" || remote.version !== currentVersion() ||
+			// Heartbeats must not depend on successful snapshot application.
+			// Report the running version even when the snapshot has failed.
+			// Do not trust the local cache as proof that a peer is ready.
+			if (!remote.enabled || remote.role !== "primary") return;
+			await internalInstanceSync.heartbeatNow(status, primaryUrl);
+			if (remote.version !== currentVersion() ||
 				!remote.capabilities?.includes("acme-host-readiness-v1")) return;
 			const gates = Array.isArray(remote.acme_gates) ? remote.acme_gates.slice(0, 8) : [];
 			const ids = new Set(gates.map((gate) => gate.id));
