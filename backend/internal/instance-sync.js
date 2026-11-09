@@ -422,8 +422,13 @@ const internalInstanceSync = {
 			peer.version !== currentVersion() || peer.protocol !== NPMX_PROTOCOL ||
 			peer.protocol_version !== NPMX_VERSION);
 		if (incompatible.length) {
-			throw new errs.ValidationError("NPMX ACME coordination requires matching versions on peers: " +
-				incompatible.map((peer) => peer.node_id).join(", "));
+			throw new errs.ValidationError("NPMX ACME coordination requires matching versions on peers (local " +
+				currentVersion() + " / protocol " + NPMX_PROTOCOL + "/" + NPMX_VERSION + "): " +
+				incompatible.map((peer) =>
+					peer.node_id + " (reported " + (peer.version || "unknown") +
+					", protocol " + (peer.protocol || "unknown") + "/" +
+					(peer.protocol_version ?? "unknown") +
+					", last heartbeat " + (peer.last_seen || "never") + ")").join("; "));
 		}
 		const token = phase === "host" ? crypto.randomBytes(24).toString("base64url") : "";
 		const value = phase === "host" ? crypto.randomBytes(32).toString("base64url") : "";
@@ -1146,6 +1151,35 @@ const internalInstanceSync = {
 			}
 			if (!peer.capabilities.includes("configuration") || !peer.capabilities.includes("filesystem-assets")) {
 				throw new Error("Primary NPMX capabilities cannot satisfy full instance synchronization");
+			}
+			// Announce the running secondary version before rejecting a mismatched
+			// snapshot. Previously heartbeat followed only a successful sync,
+			// leaving the primary's peer record stale after an upgrade.
+			// This is telemetry only: it never authorizes incompatible sync.
+			const versionHeartbeat = {
+				node_id: status.nodeId,
+				node_name: status.nodeName,
+				public_url: status.publicUrl,
+				role: status.role,
+				version: status.version,
+				build_commit: status.buildCommit,
+				last_sync: status.lastSync,
+				protocol: NPMX_PROTOCOL,
+				protocol_version: NPMX_VERSION,
+			};
+			try {
+				const announced = await npmxRequest(
+					primaryUrl, secret, status.nodeId, "/heartbeat",
+					{ method: "POST", body: versionHeartbeat, timeout: 5000 },
+				);
+				if (!announced.ok) {
+					throw new Error(`HTTP ${announced.status}`);
+				}
+				await updateMeta({ last_heartbeat_error: null });
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err);
+				logger.warn(`NPMX pre-sync version heartbeat failed: ${message}`);
+				await updateMeta({ last_heartbeat_error: message }).catch(() => undefined);
 			}
 			if (String(peer.version) !== currentVersion()) {
 				throw new Error(
