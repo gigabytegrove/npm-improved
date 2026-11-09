@@ -29,6 +29,9 @@ import {
 import errs from "../lib/error.js";
 import { validAcmeToken, readLocalAcmeToken } from "../lib/acme-challenge.js";
 import { selectAcmePreflightPeers } from "../lib/npmx-acme-peer-policy.js";
+import { acknowledgeAcmeGate, createAcmeGate, listAcmeGates } from "../lib/npmx-acme-gates.js";
+import proxyHostModel from "../models/proxy_host.js";
+import internalNginx from "./nginx.js";
 import settingModel from "../models/setting.js";
 import pjson from "../package.json" with { type: "json" };
 import { global as logger } from "../logger.js";
@@ -55,6 +58,10 @@ const SNAPSHOT_TIMEOUT_MS = 180_000;
 
 let schedulerTimer = null;
 let syncRunning = false;
+let acmePollTimer = null;
+let acmePollRunning = false;
+let acmePollEpoch = 0;
+const acknowledgedGates = new Set();
 const seenNpmxNonces = new Map();
 
 const currentVersion = () => (process.env.NPM_BUILD_VERSION || pjson.version || "0.0.0").trim();
@@ -157,6 +164,7 @@ const npmxCapabilities = () => ({
 		"node-local-template-rendering",
 		"primary-write-arbitration",
 		"acme-http01-relay",
+		"acme-host-readiness-v1",
 	],
 });
 
@@ -308,6 +316,29 @@ const fetchWithTimeout = async (url, options = {}, timeout = REQUEST_TIMEOUT_MS)
 	}
 };
 
+// Probe the actual Nginx port-80 listener with the correct Host header.
+// A direct Express 200 is insufficient to prove the public vhost works.
+const probeLocalAcmeDomains = async (domains, token, expected) => {
+	for (const domain of domains) {
+		const controller = new AbortController();
+		const timer = setTimeout(() => controller.abort(), 7000);
+		try {
+			const response = await fetch("http://127.0.0.1/.well-known/acme-challenge/" + token, {
+				headers: { Host: domain },
+				signal: controller.signal,
+				redirect: "manual",
+			});
+			const body = await response.text();
+			if (response.status !== 200 || body !== expected) {
+				throw new Error("NPMX host " + domain + " local HTTP-01 ingress returned HTTP " +
+					response.status + " or an incorrect challenge response");
+			}
+		} finally {
+			clearTimeout(timer);
+		}
+	}
+};
+
 // HTTP-01 tokens are opaque, short-lived Certbot artifacts. Never use a
 // request-supplied filesystem path; only these bounded token characters are allowed.
 const internalInstanceSync = {
@@ -378,6 +409,129 @@ const internalInstanceSync = {
 		return value === null ? { status: 404 } : { status: 200, value };
 	},
 
+
+	// Stage the HTTP host on the primary and wait for each paired secondary
+	// to pull the matching snapshot and acknowledge local Nginx readiness.
+	awaitHostReadiness: async (hostId, domains, { phase = "host", certificateId = null } = {}) => {
+		const status = await sanitizedStatus();
+		if (!status.enabled || status.role !== "primary") return { checked: 0 };
+		const peers = status.peers.filter((peer) => peer.role === "secondary" && peer.node_id !== status.nodeId);
+		if (!peers.length) return { checked: 0 };
+		if (!status.secretConfigured) throw new errs.ValidationError("NPMX ACME coordination requires pairing credentials");
+		const incompatible = peers.filter((peer) =>
+			peer.version !== currentVersion() || peer.protocol !== NPMX_PROTOCOL ||
+			peer.protocol_version !== NPMX_VERSION);
+		if (incompatible.length) {
+			throw new errs.ValidationError("NPMX ACME coordination requires matching versions on peers: " +
+				incompatible.map((peer) => peer.node_id).join(", "));
+		}
+		const token = phase === "host" ? crypto.randomBytes(24).toString("base64url") : "";
+		const value = phase === "host" ? crypto.randomBytes(32).toString("base64url") : "";
+		const directory = "/data/letsencrypt-acme-challenge/.well-known/acme-challenge";
+		const file = token ? path.join(directory, token) : null;
+		if (file) {
+			fs.mkdirSync(directory, { recursive: true });
+			fs.writeFileSync(file, value, { flag: "wx", mode: 0o600 });
+		}
+		const gate = createAcmeGate({
+			hostId, domains, peerIds: peers.map((peer) => peer.node_id),
+			phase, certificateId, token, value,
+		});
+		try {
+			if (token) await probeLocalAcmeDomains(domains, token, value);
+			await gate.wait();
+			return { checked: peers.length };
+		} catch (err) {
+			throw new errs.ValidationError(err instanceof Error ? err.message : String(err));
+		} finally {
+			gate.close();
+			if (file) fs.rmSync(file, { force: true });
+		}
+	},
+
+	acknowledgeHostReadiness: async (req) => {
+		const status = await sanitizedStatus();
+		if (!status.enabled || status.role !== "primary" ||
+			!status.peers.some((peer) => peer.node_id === req.npmxNodeId && peer.role === "secondary")) {
+			return { ok: false };
+		}
+		return { ok: acknowledgeAcmeGate({
+			gateId: req.body.gate_id,
+			nodeId: req.npmxNodeId,
+			hostId: req.body.host_id,
+			domains: req.body.domain_names,
+			phase: req.body.phase,
+		}) };
+	},
+
+	// Pull-only nodes discover pending gates through the signed primary status
+	// endpoint. They never require an inbound management URL.
+	pollAcmeGates: async () => {
+		if (acmePollRunning) return;
+		acmePollRunning = true;
+		try {
+			const status = await sanitizedStatus();
+			if (!status.enabled || status.role !== "secondary" || !status.secretConfigured || !status.primaryUrl) return;
+			const primaryUrl = normalizeUrl(status.primaryUrl, "Primary node URL", true);
+			const response = await npmxRequest(primaryUrl, readSecret(), status.nodeId, "/status", { timeout: 3500 });
+			if (!response.ok) return;
+			const remote = await response.json();
+			if (!remote.enabled || remote.role !== "primary" || remote.version !== currentVersion() ||
+				!remote.capabilities?.includes("acme-host-readiness-v1")) return;
+			const gates = Array.isArray(remote.acme_gates) ? remote.acme_gates.slice(0, 8) : [];
+			const ids = new Set(gates.map((gate) => gate.id));
+			for (const id of acknowledgedGates) {
+				if (!ids.has(id)) acknowledgedGates.delete(id);
+			}
+			for (const gate of gates) {
+				if (acknowledgedGates.has(gate.id)) continue;
+				if (!Number.isInteger(gate.host_id) || gate.host_id < 1 ||
+					!Array.isArray(gate.domain_names) || !gate.domain_names.length ||
+					!["host", "certificate"].includes(gate.phase)) continue;
+				// Snapshot application and Nginx reload must finish before ack.
+				if (syncRunning) return;
+				await internalInstanceSync.syncNow();
+				const host = await proxyHostModel.query().findById(gate.host_id);
+				if (!host?.enabled ||
+					!gate.domain_names.every((domain) => host.domain_names.includes(domain)) ||
+					!fs.existsSync(internalNginx.getConfigName("proxy_host", gate.host_id))) {
+					throw new Error("NPMX ACME host " + gate.host_id + " is not active on this node");
+				}
+				await internalNginx.test();
+				if (gate.phase === "host") {
+					if (!validAcmeToken(gate.token) || !gate.value || Buffer.byteLength(gate.value) > 4096) {
+						throw new Error("Invalid NPMX ACME readiness challenge");
+					}
+					await probeLocalAcmeDomains(gate.domain_names, gate.token, gate.value);
+				} else {
+					if (!Number.isInteger(gate.certificate_id) ||
+						host.certificate_id !== gate.certificate_id ||
+						!fs.existsSync("/etc/letsencrypt/live/npm-" + gate.certificate_id + "/fullchain.pem")) {
+						throw new Error("NPMX certificate " + gate.certificate_id + " was not installed on secondary");
+					}
+				}
+				const ack = await npmxRequest(primaryUrl, readSecret(), status.nodeId, "/acme-ready", {
+					method: "POST",
+					body: {
+						gate_id: gate.id,
+						host_id: gate.host_id,
+						domain_names: gate.domain_names,
+						phase: gate.phase,
+					},
+					timeout: 5000,
+				});
+				if (!ack.ok || !(await ack.json()).ok) {
+					throw new Error("Primary rejected NPMX ACME readiness acknowledgement");
+				}
+				acknowledgedGates.add(gate.id);
+			}
+		} catch (err) {
+			logger.warn("NPMX ACME readiness poll failed: " +
+				(err instanceof Error ? err.message : String(err)));
+		} finally {
+			acmePollRunning = false;
+		}
+	},
 
 	// Called before Certbot contacts the CA. The temporary token is written
 	// locally and fetched via each remote node's authenticated NPMX endpoint,
@@ -515,6 +669,7 @@ const internalInstanceSync = {
 			meta,
 		});
 		internalInstanceSync.reschedule(1000);
+		internalInstanceSync.startAcmePolling();
 		return sanitizedStatus();
 	},
 
@@ -532,6 +687,7 @@ const internalInstanceSync = {
 		};
 		await settingModel.query().findById(SETTING_ID).patch({ value: "enabled", meta });
 		internalInstanceSync.reschedule(1000);
+		internalInstanceSync.startAcmePolling();
 		return sanitizedStatus();
 	},
 
@@ -579,6 +735,7 @@ const internalInstanceSync = {
 			build_commit: status.buildCommit,
 			build_date: status.buildDate,
 			last_sync: status.lastSync,
+			acme_gates: status.enabled && status.role === "primary" ? listAcmeGates() : [],
 			sync_policy: {
 				require_same_app_version: true,
 				secondary_read_only: false,
@@ -824,6 +981,7 @@ const internalInstanceSync = {
 			},
 		});
 		internalInstanceSync.reschedule(1000);
+		internalInstanceSync.startAcmePolling();
 
 		return {
 			ok: true,
@@ -1165,7 +1323,8 @@ const internalInstanceSync = {
 			};
 			// Only the primary executes writes and assigns new database IDs.
 			const response = await npmxRequest(primaryUrl, secret, selfId, "/write", {
-				method: "POST", body: request, timeout: 125_000,
+				method: "POST", body: request,
+				timeout: request.body?.certificate_id === "new" ? 650_000 : 125_000,
 			});
 			if (!response.ok) {
 				const result = await response.json().catch(() => null);
@@ -1177,6 +1336,7 @@ const internalInstanceSync = {
 			if (result.status >= 200 && result.status < 300) {
 				// Refresh this secondary promptly after the primary accepts the write.
 				internalInstanceSync.reschedule(1000);
+		internalInstanceSync.startAcmePolling();
 			}
 			return applyForwardedResponse(res, result);
 		} catch (err) {
@@ -1186,6 +1346,21 @@ const internalInstanceSync = {
 					(err instanceof Error ? err.message : String(err)),
 				));
 		}
+	},
+
+	// Poll only lightweight NPMX metadata every 2.5s. A full database
+	// snapshot is pulled ONLY after a pending ACME gate is announced.
+	startAcmePolling: () => {
+		const epoch = ++acmePollEpoch;
+		if (acmePollTimer) clearTimeout(acmePollTimer);
+		const poll = async () => {
+			await internalInstanceSync.pollAcmeGates();
+			if (epoch !== acmePollEpoch) return;
+			acmePollTimer = setTimeout(poll, 2500);
+			acmePollTimer.unref?.();
+		};
+		acmePollTimer = setTimeout(poll, 1000);
+		acmePollTimer.unref?.();
 	},
 
 	reschedule: (delayMs = null) => {
@@ -1226,6 +1401,7 @@ const internalInstanceSync = {
 			return;
 		}
 		internalInstanceSync.reschedule(30_000);
+		internalInstanceSync.startAcmePolling();
 	},
 };
 
