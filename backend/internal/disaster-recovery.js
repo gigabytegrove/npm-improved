@@ -24,6 +24,13 @@ import userModel from "../models/user.js";
 import userPermissionModel from "../models/user_permission.js";
 import internalAuditLog from "./audit-log.js";
 import internalNginx from "./nginx.js";
+import internalAccessList from "./access-list.js";
+import {
+	assertAccessListSnapshot,
+	assertAppliedClusterDatabase,
+	assertAppliedClusterFiles,
+	NPMX_ACCESS_ROOT,
+} from "../lib/npmx-snapshot-audit.js";
 
 const MAX_BUNDLE_BYTES = 512 * 1024 * 1024;
 const MAX_CAPTURE_BYTES = 384 * 1024 * 1024;
@@ -75,6 +82,7 @@ const TABLES = Object.freeze({
 });
 
 const FILE_ROOTS = Object.freeze({
+	access: NPMX_ACCESS_ROOT,
 	custom_nginx: "/data/nginx/custom",
 	default_www: "/data/nginx/default_www",
 	custom_ssl: "/data/custom_ssl",
@@ -350,6 +358,11 @@ const restoreEntries = (root, entries) => {
 
 const restoreFilesystem = (bundle) => {
 	for (const [name, root] of Object.entries(FILE_ROOTS)) {
+		// Older manual backups predate the access asset inventory. Do not
+		// wipe locally generated ACL files when restoring one of those bundles.
+		// Current cluster snapshots must include the root and are validated.
+		if (name === "access" && bundle.scope !== "cluster" &&
+			!Object.hasOwn(bundle.filesystem.roots, "access")) continue;
 		restoreEntries(root, bundle.filesystem.roots[name] || []);
 	}
 
@@ -374,6 +387,7 @@ const snapshotLiveFilesystem = () => {
 
 	const sources = {
 		nginx: "/data/nginx",
+		access: NPMX_ACCESS_ROOT,
 		custom_ssl: "/data/custom_ssl",
 		letsencrypt: "/etc/letsencrypt",
 		keys: "/data/keys.json",
@@ -395,6 +409,7 @@ const snapshotLiveFilesystem = () => {
 const restoreLiveFilesystemSnapshot = (rollbackRoot) => {
 	const targets = {
 		nginx: "/data/nginx",
+		access: NPMX_ACCESS_ROOT,
 		custom_ssl: "/data/custom_ssl",
 		letsencrypt: "/etc/letsencrypt",
 		keys: "/data/keys.json",
@@ -541,6 +556,38 @@ const captureClusterDatabase = async () => {
 	return database;
 };
 
+// Legacy installations may contain a database access list without its derived
+// Nginx htpasswd file. Repair only missing/stale files on the primary before
+// publishing a snapshot, rather than distributing a broken authorization state.
+const ensureClusterAccessAssets = async (database) => {
+	const lists = (database.access_list || []).filter((list) => !list.is_deleted);
+	if (!lists.length) return;
+	fs.mkdirSync(NPMX_ACCESS_ROOT, { recursive: true, mode: 0o750 });
+	for (const list of lists) {
+		const items = (database.access_list_auth || []).filter(
+			(item) => String(item.access_list_id) === String(list.id),
+		);
+		const filename = path.join(NPMX_ACCESS_ROOT, String(list.id));
+		let valid = false;
+		try {
+			if (fs.lstatSync(filename).isFile()) {
+				const contents = fs.readFileSync(filename, "utf8");
+				const usernames = new Set(contents.split(/\r?\n/).filter(Boolean).map(
+					(line) => line.split(":", 1)[0],
+				));
+				valid = items.every((item) => usernames.has(String(item.username)));
+			}
+		} catch {
+			// Missing or invalid derived file; regenerate from authoritative DB.
+		}
+		if (valid) continue;
+		if (items.some((item) => !item.password)) {
+			throw new Error(`NPMX cannot regenerate access list #${list.id}: stored authentication password is missing`);
+		}
+		await internalAccessList.build({ ...list, items });
+	}
+};
+
 const replaceClusterDatabase = async (snapshot) => {
 	const localSyncSetting = await settingModel.query().findById("instance-sync");
 	await replaceDatabase(snapshot, "cluster");
@@ -558,6 +605,7 @@ const applyClusterPayload = async (bundle) => {
 	if (bundle.scope !== "cluster") {
 		throw new Error("Cluster synchronization payload has the wrong scope");
 	}
+	assertAccessListSnapshot(bundle.database, bundle.filesystem);
 
 	const previousDatabase = await captureDatabase("cluster");
 	const rollbackRoot = snapshotLiveFilesystem();
@@ -567,6 +615,10 @@ const applyClusterPayload = async (bundle) => {
 		await replaceClusterDatabase(bundle.database);
 		restoreFilesystem(bundle);
 		await regenerateNginx();
+		// A Nginx reload or successful database import alone is insufficient:
+		// verify every replicated entity ID, security record, file, and symlink.
+		assertAppliedClusterDatabase(bundle.database, await captureClusterDatabase());
+		assertAppliedClusterFiles(bundle.filesystem, FILE_ROOTS);
 		removePath(rollbackRoot);
 		return {
 			ok: true,
@@ -749,7 +801,9 @@ const internalDisasterRecovery = {
 
 	createClusterEnvelope: async (passphrase) => {
 		const database = await captureClusterDatabase();
+		await ensureClusterAccessAssets(database);
 		const filesystem = captureFilesystem("cluster");
+		assertAccessListSnapshot(database, filesystem);
 		const payload = makePayload("cluster", database, filesystem);
 		return {
 			data: createBackupEnvelope(payload, passphrase),
@@ -768,6 +822,7 @@ const internalDisasterRecovery = {
 		try {
 			bundle = openBackupEnvelope(buffer, passphrase);
 			validateBundle(bundle);
+			assertAccessListSnapshot(bundle.database, bundle.filesystem);
 		} catch (err) {
 			throw new errs.ValidationError(err instanceof Error ? err.message : String(err));
 		}

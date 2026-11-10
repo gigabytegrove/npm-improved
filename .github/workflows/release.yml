@@ -100,6 +100,9 @@ jobs:
           python3 scripts/ci/check-release-contract.py
           node --check backend/app.js
           node --check backend/internal/update-manager.js
+          node --check backend/internal/disaster-recovery.js
+          node --check backend/lib/npmx-snapshot-audit.js
+          node --test backend/test/npmx-snapshot-audit.test.js
 
       - name: Set up QEMU
         if: steps.version.outputs.release_exists != 'true'
