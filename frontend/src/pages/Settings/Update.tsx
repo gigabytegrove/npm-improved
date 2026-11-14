@@ -107,18 +107,23 @@ export default function Update() {
 	const [authAction, setAuthAction] = useState<AuthAction | null>(null);
 
 	const active = ACTIVE_STATES.has(data?.status?.state || "");
-	const updateAvailable = releaseChannel === "stable" && Boolean(data?.release?.updateAvailable);
+	const updateAvailable = Boolean(data?.release?.updateAvailable);
+	const installableUpdate = updateAvailable && (releaseChannel === "stable" || Boolean(data?.capabilities?.hostUpdaterPrereleaseSupport));
 	const updaterReady = Boolean(data?.capabilities?.enabled);
 	const reinstallHostReady = Boolean(
 		data?.capabilities?.hostUpdaterAutomaticMaintenance &&
 		data?.capabilities?.hostUpdaterVersion === data?.release?.latest?.replace(/^v/, ""),
 	);
-	const canReinstall = updaterReady && reinstallHostReady && Boolean(data?.release?.latest) && !data?.releaseError && (data?.release?.latest === data?.release?.current || updateAvailable);
+	const canReinstall = releaseChannel === "stable" && updaterReady && reinstallHostReady && Boolean(data?.release?.latest) && !data?.releaseError && (data?.release?.latest === data?.release?.current || installableUpdate);
 	const rolling = Boolean(data?.coordination?.instanceSyncEnabled);
 	const canRollback = Boolean(data?.status?.previousImage);
 	const progress = UPDATE_PROGRESS[data?.status?.state || "idle"] ?? 0;
 	const bootstrapCommand = data?.capabilities?.hostProjectDir && data?.release?.current
 		? hostUpdaterBootstrap(data.capabilities.hostProjectDir, data.release.current)
+		: null;
+	const prereleaseBootstrapRequired = releaseChannel !== "stable" && updaterReady && !data?.capabilities?.hostUpdaterPrereleaseSupport;
+	const prereleaseBootstrapCommand = prereleaseBootstrapRequired && data?.capabilities?.hostProjectDir && data?.release?.latest
+		? hostUpdaterBootstrap(data.capabilities.hostProjectDir, data.release.latest)
 		: null;
 
 	const published = useMemo(() => {
@@ -229,8 +234,30 @@ export default function Update() {
 					<option value="beta">Beta — pre-release testing</option>
 					<option value="alpha">Alpha / RC — experimental</option>
 				</select>
-				{releaseChannel !== "stable" ? <span className="text-warning small">Preview channel discovery only. Installing prereleases is not yet supported by the native host updater.</span> : null}
+				{prereleaseBootstrapRequired && data?.release?.latest ? <span className="text-secondary small">A one-time host updater refresh is needed before installing this prerelease.</span> : null}
 			</div>
+			{prereleaseBootstrapRequired && prereleaseBootstrapCommand ? (
+				<details className="mb-3">
+					<summary className="fw-semibold">Enable {releaseChannel} updates on this host</summary>
+					<p className="small text-secondary mt-2">
+						The existing native updater can install stable releases. Refresh its host-side
+						component from the verified {data?.release?.latest} release bundle to enable
+						authenticated prerelease updates, without replacing the running application.
+					</p>
+					<pre className="mt-2 p-2 border rounded overflow-auto user-select-all"><code>{prereleaseBootstrapCommand}</code></pre>
+					<Button type="button" onClick={() => {
+						if (!navigator.clipboard?.writeText) {
+							setActionError("Clipboard unavailable. Select and copy the command above.");
+							return;
+						}
+						void navigator.clipboard.writeText(prereleaseBootstrapCommand).catch((err) =>
+							setActionError(err instanceof Error ? err.message : "Clipboard unavailable. Select and copy the command above."),
+						);
+					}}>
+						Copy verified host updater command
+					</Button>
+				</details>
+			) : null}
 			{error ? <Alert variant="danger">{error.message}</Alert> : null}
 			{data?.releaseError ? <Alert variant="warning">GitHub release check unavailable: {data.releaseError}. Local updater progress and recovery controls remain available.</Alert> : null}
 			{actionError ? <Alert variant="danger">{actionError}</Alert> : null}
@@ -243,12 +270,16 @@ export default function Update() {
 								<span className="fw-bold">Software update</span>
 								{active ? (
 									<span className="badge bg-azure-lt text-azure">{statusLabel(data?.status?.state)}</span>
+								) : data?.releaseError || !data?.release?.latest ? (
+									<span className="badge bg-warning-lt text-warning">Not verified</span>
 								) : updateAvailable ? (
-									<span className="badge bg-warning-lt text-warning">Update available</span>
+									<span className="badge bg-warning-lt text-warning">
+										{releaseChannel === "stable" ? "Update available" : "Prerelease available"}
+									</span>
 								) : (
 									<span className="badge bg-success-lt text-success">
 										<IconCheck size={14} className="me-1" />
-										Up to date
+										No newer release
 									</span>
 								)}
 							</div>
@@ -260,11 +291,15 @@ export default function Update() {
 							</div>
 
 							<div className="text-secondary">
-								{updateAvailable
-									? `${data?.release?.releaseName || data?.release?.latest} is ready to install.`
-									: data?.releaseError
+								{data?.releaseError
 									? "Remote release availability has not been verified."
-									: "This installation matches the latest selected supported NPM Improved release."}
+									: !data?.release?.latest
+										? `No published ${releaseChannel} release was found.`
+										: updateAvailable && releaseChannel === "stable"
+											? `${data?.release?.releaseName || data?.release?.latest} is ready to install.`
+											: updateAvailable
+												? `${data?.release?.releaseName || data?.release?.latest} is available on the ${releaseChannel} channel.`
+												: `No newer ${releaseChannel} release is available.`}
 							</div>
 
 							{published ? (
@@ -272,7 +307,7 @@ export default function Update() {
 							) : null}
 						</div>
 
-						{updateAvailable ? (
+						{installableUpdate ? (
 							<div className="d-grid gap-2" style={{ minWidth: "13rem" }}>
 								<Button
 									actionType="primary"
@@ -286,12 +321,16 @@ export default function Update() {
 									Admin password required.
 								</div>
 							</div>
+						) : updateAvailable && releaseChannel !== "stable" && data?.release?.releaseUrl ? (
+							<a href={data.release.releaseUrl} target="_blank" rel="noreferrer" className="btn btn-outline-primary">
+								View {releaseChannel} release on GitHub
+							</a>
 						) : null}
 					</div>
 				</div>
 			</div>
 
-			{rolling && (updateAvailable || active) ? (
+			{rolling && (installableUpdate || active) ? (
 				<Alert variant="info">
 					<strong>Rolling NPMX update — {data?.coordination?.role} node</strong>
 					<div className="mt-1">
@@ -342,16 +381,13 @@ export default function Update() {
 							</Button>
 						</details>
 					) : <div className="mt-2">Set NPM_HOST_PROJECT_DIR and install the managed native updater on the Docker host.</div>}
-					{data?.capabilities?.hostUpdaterMaintenanceError ? (
-						<div className="mt-2 text-danger">
-							Last host-updater maintenance error: {data.capabilities.hostUpdaterMaintenanceError}
-						</div>
-					) : null}
-				</Alert>
-			) : data?.capabilities?.hostUpdaterMaintenanceError ? (
-				<Alert variant="warning">
-					Host updater maintenance reported: {data.capabilities.hostUpdaterMaintenanceError}
-				</Alert>
+					</Alert>
+			) : null}
+			{data?.capabilities?.hostUpdaterMaintenanceState === "retry_scheduled" ? (
+				<details className="text-secondary small mb-3">
+					<summary>Native updater maintenance: retry scheduled</summary>
+					<p className="mt-2 mb-0">{data.capabilities.hostUpdaterMaintenanceSummary || "Routine updater housekeeping will retry automatically. NPM Improved remains available."}</p>
+				</details>
 			) : null}
 			{data?.status?.error ? (
 				<Alert variant="danger">
@@ -492,7 +528,7 @@ export default function Update() {
 							Roll back to {data?.status?.previousVersion || "previous version"}
 						</Button>
 					</div>
-					{updaterReady && !reinstallHostReady && data?.release?.latest ? (
+					{releaseChannel === "stable" && updaterReady && !reinstallHostReady && data?.release?.latest ? (
 						<Alert variant="warning" className="mt-3 mb-0">
 							Reinstall is available after the native host updater has been refreshed to
 							{" "}{data.release.latest}. Complete the normal update or its one-time host updater
