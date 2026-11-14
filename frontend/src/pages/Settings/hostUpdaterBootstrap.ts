@@ -4,7 +4,7 @@
  */
 const quoteShell = (value: string) => `'${value.replace(/'/g, "'\\''")}'`;
 export const hostUpdaterBootstrap = (projectDir: string, version: string) => {
-	if (!/^v?\d+\.\d+\.\d+$/.test(version)) return null;
+	if (!/^v?\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?$/.test(version)) return null;
 	const release = version.startsWith("v") ? version : `v${version}`;
 	return [
 		"set -euo pipefail",
