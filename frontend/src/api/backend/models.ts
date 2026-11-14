@@ -29,6 +29,7 @@ export interface FirewallHealth extends ComponentHealth {
 	status: "ok" | "degraded" | "disabled";
 	enabled: boolean;
 	enforced: boolean;
+	releasePending: boolean;
 	state: string;
 	configured: boolean;
 	helperReady: boolean;
