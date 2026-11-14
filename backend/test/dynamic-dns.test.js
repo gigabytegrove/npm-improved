@@ -10,8 +10,9 @@ const ddns = await import("../lib/dynamic-dns.js");
 
 test("supported providers are explicit and fixed", () => {
   const providers = ddns.listDynamicDNSProviders();
-  assert.deepEqual(providers.map((p) => p.id), ["cloudflare", "duckdns", "noip", "dynu", "he", "desec"]);
+  assert.deepEqual(providers.map((p) => p.id), ["cloudflare", "duckdns", "noip", "dynu", "he", "desec", "digitalocean", "namecheap"]);
   assert.equal(providers.every((p) => p.supports.includes("A")), true);
+  assert.deepEqual(providers.find((p) => p.id === "namecheap").supports, ["A"]);
 });
 
 test("sensitive credentials are encrypted at rest and redacted from API results", () => {
@@ -41,5 +42,23 @@ test("rejects credentials missing and duplicate records", () => {
   assert.throws(() => ddns.addDynamicDNSRecord({
     provider: "duckdns", hostname: "site.duckdns.org", secret: "another-token",
   }), RangeError);
+  assert.equal(ddns.deleteDynamicDNSRecord(row.id), true);
+});
+
+test("DigitalOcean and Namecheap validate ownership and record capabilities", () => {
+  assert.throws(() => ddns.addDynamicDNSRecord({
+    provider: "digitalocean", hostname: "app.example.net", zoneId: "example.com",
+    dnsRecordId: "12345", secret: "provider-token-xyz",
+  }), RangeError);
+  assert.throws(() => ddns.addDynamicDNSRecord({
+    provider: "namecheap", hostname: "app.example.com", zoneId: "example.com",
+    recordType: "AAAA", secret: "namecheap-secret-abc",
+  }), RangeError);
+  const row = ddns.addDynamicDNSRecord({
+    provider: "digitalocean", hostname: "app.example.com", zoneId: "example.com",
+    dnsRecordId: "12345", secret: "provider-token-xyz",
+  });
+  assert.equal(row.zoneId, "example.com");
+  assert.equal(row.dnsRecordId, "12345");
   assert.equal(ddns.deleteDynamicDNSRecord(row.id), true);
 });

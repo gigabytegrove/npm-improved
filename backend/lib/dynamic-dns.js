@@ -13,6 +13,8 @@ const providerInfo = Object.freeze([
   { id: "dynu", name: "Dynu", supports: ["A", "AAAA"], credentials: "IP update username and password" },
   { id: "he", name: "Hurricane Electric", supports: ["A", "AAAA"], credentials: "Dynamic DNS record hostname and generated key" },
   { id: "desec", name: "deSEC / dedyn.io", supports: ["A", "AAAA"], credentials: "Dedicated update token" },
+  { id: "digitalocean", name: "DigitalOcean", supports: ["A", "AAAA"], credentials: "DNS API token, zone name and numeric DNS record ID" },
+  { id: "namecheap", name: "Namecheap", supports: ["A"], credentials: "Enable Dynamic DNS; use the domain DDNS password and zone name" },
 ]);
 const shortResponseLimit = 1000;
 let cycle = null;
@@ -89,6 +91,7 @@ function createInput(input) {
   const recordType = input.recordType || input.record_type || "A";
   if (!provider.supports.includes(recordType)) throw new RangeError("Unsupported DNS record type.");
   const hostname = validateHostname(input.hostname);
+  const originalHostname = input.hostname.trim();
   const username = typeof input.username === "string" ? input.username.trim() : "";
   const secret = input.secret;
   if (typeof secret !== "string" || secret.length < 6 || secret.length > 1024) {
@@ -102,13 +105,24 @@ function createInput(input) {
   if (provider.id === "cloudflare" && (!identifier(zoneId) || !identifier(dnsRecordId))) {
     throw new RangeError("Cloudflare zone ID and DNS record ID are required.");
   }
+  if (["digitalocean", "namecheap"].includes(provider.id)) {
+    if (typeof zoneId !== "string" || !zoneId.trim()) throw new RangeError("DNS zone/domain name is required.");
+    const zone = validateHostname(zoneId);
+    if (hostname !== zone && !hostname.endsWith("." + zone)) {
+      throw new RangeError("The DNS hostname must belong to the configured zone.");
+    }
+    if (provider.id === "digitalocean" && !/^\d{1,15}$/.test(String(dnsRecordId))) {
+      throw new RangeError("DigitalOcean requires the numeric DNS record ID.");
+    }
+  }
   if (provider.id === "duckdns" && !hostname.endsWith(".duckdns.org")) {
     throw new RangeError("DuckDNS requires a duckdns.org hostname.");
   }
   return {
     id: crypto.randomUUID(), provider: provider.id, hostname, recordType,
-    username, zoneId: provider.id === "cloudflare" ? zoneId : "",
-    dnsRecordId: provider.id === "cloudflare" ? dnsRecordId : "",
+    username, zoneId: ["cloudflare", "digitalocean", "namecheap"].includes(provider.id) ? zoneId.trim() : "",
+    dnsRecordId: ["cloudflare", "digitalocean"].includes(provider.id) ? String(dnsRecordId) : "",
+    updateHostname: provider.id === "namecheap" ? originalHostname : "",
     secret: seal(secret),
     enabled: true,
     lastIp: "", lastUpdatedAt: null, lastCheckedAt: null, lastError: null,
@@ -186,6 +200,33 @@ async function updateProvider(row, ip) {
   const version = row.recordType === "AAAA" ? 6 : 4;
   let url;
   let options = {};
+  if (row.provider === "digitalocean") {
+    url = "https://api.digitalocean.com/v2/domains/" + encodeURIComponent(row.zoneId) +
+      "/records/" + encodeURIComponent(row.dnsRecordId);
+    options = {
+      method: "PATCH",
+      headers: { Authorization: "Bearer " + credential, "Content-Type": "application/json" },
+      body: JSON.stringify({ data: ip }),
+    };
+    const result = JSON.parse(await fetchText(url, options));
+    if (result?.domain_record?.data !== ip) throw new Error("DigitalOcean did not confirm the DNS update.");
+    return;
+  }
+  if (row.provider === "namecheap") {
+    url = new URL("https://dynamicdns.park-your-domain.com/update");
+    const originalName = row.updateHostname || row.hostname;
+    const parent = row.zoneId;
+    const shortHost = originalName.toLowerCase() === parent.toLowerCase() ? "@" : originalName.slice(0, -(parent.length + 1));
+    url.searchParams.set("host", shortHost);
+    url.searchParams.set("domain", parent);
+    url.searchParams.set("password", credential);
+    url.searchParams.set("ip", ip);
+    const reply = await fetchText(url);
+    if (!/<ErrCount>\s*0\s*<\/ErrCount>/i.test(reply) || !/<Done>\s*true\s*<\/Done>/i.test(reply)) {
+      throw new Error("Namecheap rejected the DNS update.");
+    }
+    return;
+  }
   if (row.provider === "cloudflare") {
     url = "https://api.cloudflare.com/client/v4/zones/" + encodeURIComponent(row.zoneId) +
       "/dns_records/" + encodeURIComponent(row.dnsRecordId);

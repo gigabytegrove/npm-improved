@@ -17,6 +17,8 @@ Supported providers in this integration:
 | Dynu | IP-update username and password |
 | Hurricane Electric | Dynamic record hostname and generated update key |
 | deSEC / dedyn.io | Dedicated update token |
+| DigitalOcean | Scoped DNS API token, DNS zone name, existing numeric record ID |
+| Namecheap | Dynamic DNS domain password, domain name (IPv4 A only) |
 
 Provider destinations are fixed and use HTTPS. There is no arbitrary
 administrator-supplied update URL or shell-command path. The UI never returns
@@ -42,3 +44,8 @@ Address family separation: deSEC updates use the provider's `myipv4` /
 set the other family to `no`. DuckDNS updates supply the correct IPv4/IPv6
 address in its `ip` field. These behaviors follow each provider's documented
 update protocol.
+
+Dynamic DNS public IP discovery contacts independent third-party HTTPS
+services (ipify, Amazon CheckIP, icanhazip / ident.me). Those services can
+observe the current public IP and update request. They receive no stored
+DNS provider credentials.

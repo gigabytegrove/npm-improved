@@ -65,7 +65,7 @@ export default function DynamicDNS() {
         <p className="text-secondary mb-0">Keep public DNS records updated when your ISP changes your address. Checks run automatically every five minutes and updates are sent only when needed.</p>
       </header>
       <Alert variant="info">
-        Dynamic DNS does not open router ports, publish Docker ports, or bypass carrier-grade NAT (CGNAT).
+        Dynamic DNS does not open router ports, publish Docker ports, or bypass carrier-grade NAT (CGNAT). Public-IP detection contacts independent external HTTPS services and shares your current public IP address with them.
         Configure your NPMi instance firewall under <a href="/security">Instance Security</a>.
         The provider credentials are encrypted on disk and never returned by this screen.
       </Alert>
@@ -115,7 +115,8 @@ export default function DynamicDNS() {
           <div className="col-md-7">
             <label className="form-label" htmlFor="ddns-provider">Provider</label>
             <select id="ddns-provider" className="form-select" value={form.provider} disabled={busy}
-              onChange={(e) => setField("provider", e.target.value)}>
+              onChange={(e) => setForm((current) => ({ ...current, provider: e.target.value,
+                recordType: e.target.value === "namecheap" ? "A" : current.recordType }))}>
               {snapshot?.providers.map((entry) => <option value={entry.id} key={entry.id}>{entry.name}</option>)}
             </select>
             <p className="text-secondary small mt-1">{provider?.credentials}</p>
@@ -142,23 +143,23 @@ export default function DynamicDNS() {
           ) : null}
           <div className={["noip", "dynu"].includes(form.provider) ? "col-md-6" : "col-12"}>
             <label className="form-label" htmlFor="ddns-secret">
-              {form.provider === "cloudflare" ? "API token" : "Provider update key / password"}
+              {["cloudflare", "digitalocean"].includes(form.provider) ? "Scoped DNS API token" : "Provider update key / password"}
             </label>
             <input id="ddns-secret" className="form-control" type="password" autoComplete="new-password"
               minLength={6} required value={form.secret} disabled={busy} onChange={(e) => setField("secret", e.target.value)} />
           </div>
-          {form.provider === "cloudflare" ? (
+          {["cloudflare", "digitalocean", "namecheap"].includes(form.provider) ? (
             <>
               <div className="col-md-6">
-                <label className="form-label" htmlFor="ddns-zone">Cloudflare Zone ID</label>
+                <label className="form-label" htmlFor="ddns-zone">{form.provider === "cloudflare" ? "Cloudflare Zone ID" : "DNS zone / domain name"}</label>
                 <input id="ddns-zone" className="form-control font-monospace" required
                   value={form.zoneId} disabled={busy} onChange={(e) => setField("zoneId", e.target.value)} />
               </div>
-              <div className="col-md-6">
-                <label className="form-label" htmlFor="ddns-record-id">Cloudflare DNS Record ID</label>
+              {form.provider !== "namecheap" ? <div className="col-md-6">
+                <label className="form-label" htmlFor="ddns-record-id">{form.provider === "cloudflare" ? "Cloudflare DNS Record ID" : "DigitalOcean numeric DNS Record ID"}</label>
                 <input id="ddns-record-id" className="form-control font-monospace" required
                   value={form.dnsRecordId} disabled={busy} onChange={(e) => setField("dnsRecordId", e.target.value)} />
-              </div>
+              </div> : null}
             </>
           ) : null}
           <div className="col-12">
