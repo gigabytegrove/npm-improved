@@ -190,6 +190,26 @@ async function discoverPublicIp(version) {
   throw new Error("Public IPv" + version + " address could not be verified by two independent detectors.");
 }
 
+// Reuse the same independent public-IP detectors as Dynamic DNS.
+// Cache successes and failures to avoid three outgoing requests on every UI poll.
+let observedIpv4 = { address: null, checkedAt: 0 };
+let observingIpv4 = null;
+
+export async function observePublicIpv4() {
+  const now = Date.now();
+  if (now - observedIpv4.checkedAt < 300000) return observedIpv4;
+  if (!observingIpv4) {
+    observingIpv4 = discoverPublicIp(4)
+      .catch(() => null)
+      .then((address) => {
+        observedIpv4 = { address, checkedAt: Date.now() };
+        return observedIpv4;
+      })
+      .finally(() => { observingIpv4 = null; });
+  }
+  return observingIpv4;
+}
+
 function basic(username, password) {
   return "Basic " + Buffer.from(username + ":" + password).toString("base64");
 }
