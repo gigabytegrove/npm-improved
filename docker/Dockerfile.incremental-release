@@ -8,6 +8,9 @@ WORKDIR /build/frontend
 COPY frontend/package.json frontend/yarn.lock ./
 RUN yarn install --frozen-lockfile
 COPY frontend/ ./
+# Run the critical unified-firewall UI and navigation regressions before
+# publishing an image. TypeScript and production bundling follow.
+RUN yarn vitest run src/pages/Settings/Firewall.test.ts src/modules/instanceFirewallVisibility.test.ts
 RUN yarn build
 
 FROM npmi_target_base AS npmi_runtime
@@ -27,7 +30,7 @@ RUN set -eux; \
     test "$(node -p 'process.versions.node')" = '24.22.1'; \
     /usr/sbin/nginx -v 2>&1 | grep -F 'nginx/1.31.8'; \
     grep -a -q 'go1.27.3' /usr/local/bin/npm-improved-control-plane; \
-    node --test /app/test/release-versions.test.js /app/test/update-channels.test.js /app/test/instance-security-policy.test.js
+    node --test /app/test/release-versions.test.js /app/test/update-channels.test.js /app/test/instance-security-policy.test.js /app/test/instance-network-observation.test.js
 LABEL org.opencontainers.image.title="NPM Improved" \
       org.opencontainers.image.version="${BUILD_VERSION}" \
       org.opencontainers.image.revision="${BUILD_COMMIT}" \
