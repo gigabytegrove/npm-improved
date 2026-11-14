@@ -6,6 +6,7 @@ import {
   getInstanceSecurityStatus,
   reconcileInstanceSecurity,
   confirmInstanceSecurityActivation,
+  setInstanceFirewallEnabled,
 } from "../internal/instance-security.js";
 
 const router = express.Router({ caseSensitive: true, strict: true, mergeParams: true });
@@ -33,6 +34,32 @@ router.put("/", async (req, res, next) => {
     if (error instanceof RangeError) return res.status(400).json({ error: { code: 400, message: error.message } });
     if (error.message?.includes("Firewall helper is unavailable")) {
       return res.status(409).json({ error: { code: 409, message: error.message } });
+    }
+    next(error);
+  }
+});
+
+/**
+ * Administrator-only, narrowly scoped master switch used by Settings and
+ * System Health. It never silently enforces a default-deny policy on enable.
+ */
+router.put("/enabled", async (req, res, next) => {
+  try {
+    await res.locals.access.can("settings:update", "instance-security");
+    if (!req.body || typeof req.body.enabled !== "boolean" ||
+        Object.keys(req.body).length !== 1) {
+      return res.status(400).json({ error: { code: 400, message: "Expected enabled: true or false." } });
+    }
+    const result = await setInstanceFirewallEnabled(req.body.enabled);
+    await internalAuditLog.add(res.locals.access, {
+      action: result.enabled ? "enabled" : "disabled",
+      object_type: "instance_security", object_id: 0,
+      meta: { enabled: result.enabled, state: result.state, enforced: result.enforced },
+    }).catch(() => {});
+    res.status(200).json(result);
+  } catch (error) {
+    if (error instanceof RangeError) {
+      return res.status(400).json({ error: { code: 400, message: error.message } });
     }
     next(error);
   }
