@@ -8,6 +8,16 @@ import internalAuditLog from "./audit-log.js";
 import internalCertificate from "./certificate.js";
 import internalHost from "./host.js";
 import internalNginx from "./nginx.js";
+import { reconcileInstanceSecurity } from "./instance-security.js";
+import { global as instanceSecurityLogger } from "../logger.js";
+
+async function refreshInstancePorts() {
+	try { await reconcileInstanceSecurity(); }
+	catch (error) {
+		instanceSecurityLogger.error("Instance firewall port reconciliation failed after a stream change:", error);
+	}
+}
+
 
 const omissions = () => {
 	return ["is_deleted", "owner.is_deleted", "certificate.is_deleted"];
@@ -59,6 +69,7 @@ const internalStream = {
 			throw err;
 		}
 
+		await refreshInstancePorts();
 		await internalAuditLog.add(access, {
 			action: "created",
 			object_type: "stream",
@@ -119,6 +130,7 @@ const internalStream = {
 			throw err;
 		}
 
+		await refreshInstancePorts();
 		await internalAuditLog.add(access, {
 			action: "updated",
 			object_type: "stream",
@@ -197,6 +209,7 @@ const internalStream = {
 			throw err;
 		}
 
+		await refreshInstancePorts();
 		await internalAuditLog.add(access, {
 			action: "deleted",
 			object_type: "stream",
@@ -236,6 +249,7 @@ const internalStream = {
 			throw err;
 		}
 
+		await refreshInstancePorts();
 		await internalAuditLog.add(access, {
 			action: "enabled",
 			object_type: "stream",
@@ -272,6 +286,7 @@ const internalStream = {
 			throw err;
 		}
 
+		await refreshInstancePorts();
 		await internalAuditLog.add(access, {
 			action: "disabled",
 			object_type: "stream",
