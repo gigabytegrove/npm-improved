@@ -26,6 +26,7 @@ PROGRAMS = (
     "scripts/host-update-maintenance.py",
     "scripts/update-handoff.sh",
     ".version",
+    "compose.firewall.yaml",
 )
 RELEASE_BASE = "https://github.com/gigabytegrove/npm-improved/releases/download"
 VERSION_PATTERN = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:-(?:alpha|beta|rc)\.[0-9]+)?$")
@@ -112,7 +113,7 @@ def verify_and_extract(version, checksum_text, package, dest):
             output = dest / member.name
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_bytes(contents)
-            output.chmod(0o755 if member.name != ".version" else 0o644)
+            output.chmod(0o755 if member.name.startswith("scripts/") else 0o644)
     if (dest / ".version").read_text(encoding="utf-8").strip() != version:
         raise ValueError("Updater bundle version does not match the release")
 
