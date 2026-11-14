@@ -160,10 +160,12 @@ export async function getInstanceSecurityStatus() {
   const checkedAge = helper?.checkedAt ? Date.now() - Date.parse(helper.checkedAt) : Number.POSITIVE_INFINITY;
   const helperReady = Number.isFinite(checkedAge) && checkedAge >= 0 && checkedAge < 20000;
   const enabled = config.enabled !== false;
-  const releasePending = !enabled && helperReady && helper.state === "active";
+  const disabling = !enabled && helperReady && helper.state === "active";
+  const disabledUnverified = !enabled && !disabling && (!helperReady || helper.state !== "deferred");
+  const releasePending = disabling || disabledUnverified;
   const enforced = enabled && config.mode !== "unmanaged" && config.state === "active" &&
     helperReady && helper.state === "active" && helper.policyHash === desiredHash;
-  const state = releasePending ? "disabling" : !enabled ? "disabled" : !config.configured ? "not_configured" : config.mode === "unmanaged" ? "unmanaged" :
+  const state = disabling ? "disabling" : disabledUnverified ? "disabled_unverified" : !enabled ? "disabled" : !config.configured ? "not_configured" : config.mode === "unmanaged" ? "unmanaged" :
     config.state === "deferred" ? "deferred" : enforced ?
       (config.pendingActivation ? "activation_pending" : "active") : "needs_attention";
   // In bridge networking, the container's interface address is NOT the host's LAN address.
