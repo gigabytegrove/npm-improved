@@ -12,14 +12,24 @@ from pathlib import Path
 import sys
 import tarfile
 import tempfile
+import zlib
 
 MAX_ENTRY = 12 * 1024**3
 MAX_TOTAL = 16 * 1024**3
 MAX_ENTRIES = 5000
 
 
-def store(blobs, stream, size):
+def store(blobs, stream, size, compress=False):
+    """Stream a Docker tar layer into a content-addressed OCI blob.
+
+    Compress each raw layer with gzip before storing it. OCI supports these
+    layers natively, and disk usage stays near the size of release archives
+    instead of their several-times-larger expanded tar content.
+    """
     digest = hashlib.sha256()
+    written = 0
+    encoder = zlib.compressobj(level=1, wbits=31) if compress else None
+
     with tempfile.NamedTemporaryFile(dir=blobs, prefix=".npmi-", delete=False) as tmp:
         path = Path(tmp.name)
         try:
@@ -28,19 +38,29 @@ def store(blobs, stream, size):
                 chunk = stream.read(min(1024 * 1024, remaining))
                 if not chunk:
                     raise ValueError("Truncated Docker archive entry")
-                digest.update(chunk)
-                tmp.write(chunk)
                 remaining -= len(chunk)
+                output = encoder.compress(chunk) if encoder else chunk
+                if output:
+                    digest.update(output)
+                    tmp.write(output)
+                    written += len(output)
+            if encoder:
+                output = encoder.flush()
+                if output:
+                    digest.update(output)
+                    tmp.write(output)
+                    written += len(output)
         except BaseException:
             path.unlink(missing_ok=True)
             raise
+
     hex_digest = digest.hexdigest()
     target = blobs / hex_digest
     if target.is_file():
         path.unlink()
     else:
         os.replace(path, target)
-    return {"digest": "sha256:" + hex_digest, "size": size}
+    return {"digest": "sha256:" + hex_digest, "size": written}
 
 
 def convert(assets, output, tag):
@@ -71,7 +91,12 @@ def convert(assets, output, tag):
                         raise ValueError("Invalid or duplicate Docker archive manifest")
                     description = json.loads(stream.read())
                 else:
-                    members[entry.name] = store(blobs, stream, entry.size)
+                    members[entry.name] = store(
+                        blobs, stream, entry.size,
+                        compress=entry.name.endswith("/layer.tar")
+                        or entry.name.endswith(".layer.tar")
+                        or entry.name in ("layer.tar", "./layer.tar"),
+                    )
         if not isinstance(description, list):
             raise ValueError("Docker archive missing manifest")
         matches = [m for m in description if expected_tag in m.get("RepoTags", [])]
@@ -91,7 +116,7 @@ def convert(assets, output, tag):
                 **cfg,
             },
             "layers": [
-                {"mediaType": "application/vnd.oci.image.layer.v1.tar", **entry}
+                {"mediaType": "application/vnd.oci.image.layer.v1.tar+gzip", **entry}
                 for entry in layers
             ],
         }
