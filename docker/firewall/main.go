@@ -160,6 +160,17 @@ func droppedPackets() (uint64, uint64) {
   return parseDroppedPackets(output)
 }
 
+// Inspect the actual namespace-scoped nftables table after reconciliation.
+// Never substitute an intended policy for live packet-filtering configuration.
+func liveRuleset() (string, error) {
+  output, err := exec.Command("nft", "-a", "list", "table", "inet", tableName).Output()
+  if err != nil { return "", fmt.Errorf("unable to inspect active nftables table: %w", err) }
+  if len(output) == 0 || len(output) > 65536 {
+    return "", errors.New("live nftables table is empty or exceeds the reporting limit")
+  }
+  return strings.TrimSpace(string(output)), nil
+}
+
 func writeStatus(state, hash string, err error) {
   status := map[string]any {
     "checkedAt": time.Now().UTC().Format(time.RFC3339),
@@ -167,9 +178,18 @@ func writeStatus(state, hash string, err error) {
   }
   if err != nil { status["error"] = err.Error() }
   if state == "active" {
-    packets, bytes := droppedPackets()
-    status["droppedPackets"] = packets
-    status["droppedBytes"] = bytes
+    rules, inspectionError := liveRuleset()
+    if inspectionError != nil {
+      // Never claim verified enforcement if the live table cannot be read.
+      status["state"] = "needs_attention"
+      status["error"] = inspectionError.Error()
+    } else {
+      status["liveRules"] = rules
+      status["liveRulesObserved"] = true
+      packets, bytes := droppedPackets()
+      status["droppedPackets"] = packets
+      status["droppedBytes"] = bytes
+    }
   }
   data, marshalErr := json.MarshalIndent(status, "", "  ")
   if marshalErr != nil { return }
