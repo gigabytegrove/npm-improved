@@ -72,7 +72,7 @@ func TestLiveRulesetIsReadFromNftNotDesiredConfiguration(t *testing.T) {
 
 func TestLiveRulesetRejectsMissingKernelOutput(t *testing.T) {
   dir := t.TempDir()
-  if err := os.WriteFile(filepath.Join(dir, "nft"), []byte("#!/bin/sh\\nexit 0\\n"), 0755); err != nil { t.Fatal(err) }
+  if err := os.WriteFile(filepath.Join(dir, "nft"), []byte("#!/bin/sh\nexit 0\n"), 0755); err != nil { t.Fatal(err) }
   t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
   if _, err := liveRuleset(); err == nil { t.Fatal("empty nftables observation was accepted") }
 }
