@@ -28,7 +28,7 @@ PROGRAMS = (
     ".version",
 )
 RELEASE_BASE = "https://github.com/gigabytegrove/npm-improved/releases/download"
-VERSION_PATTERN = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
+VERSION_PATTERN = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:-(?:alpha|beta|rc)\.[0-9]+)?$")
 MAX_PACKAGE_BYTES = 1024 * 1024
 
 
@@ -69,6 +69,11 @@ def explain_maintenance_error(error):
             "The NPMi application keeps running; native updater maintenance "
             "will retry on its next scheduled run."
         )
+    if isinstance(error, subprocess.TimeoutExpired):
+        return (
+            "Routine native updater maintenance exceeded its execution window. "
+            "The NPMi application is not affected and the next scheduled cycle will retry."
+        )
     if isinstance(error, (URLError, TimeoutError)):
         return (
             "The Docker host could not reach the GitHub release downloads. "
@@ -80,7 +85,7 @@ def explain_maintenance_error(error):
 def verify_and_extract(version, checksum_text, package, dest):
     """A pinned release checksum must cover the exact archive being installed."""
     if not VERSION_PATTERN.fullmatch(version):
-        raise ValueError("Native updater requires a stable semantic version")
+        raise ValueError("Native updater requires a published NPMi release version")
     filename = f"npm-improved-v{version}-host-updater.tar.gz"
     expected = None
     for line in checksum_text.decode("utf-8").splitlines():
@@ -148,14 +153,28 @@ def app_version(root):
     for entry in version.splitlines():
         if entry.startswith("NPM_BUILD_VERSION="):
             result = entry.partition("=")[2]
-            if VERSION_PATTERN.fullmatch(result):
-                return result
+            if VERSION_PATTERN.fullmatch(result.removeprefix("v")):
+                return result.removeprefix("v")
     raise ValueError("Running application has no stable NPMi version")
 
 
+def version_sort_key(value):
+    if not VERSION_PATTERN.fullmatch(value):
+        return None
+    base, _, suffix = value.partition("-")
+    numbers = tuple(map(int, base.split(".")))
+    if not suffix:
+        return (*numbers, 3, 0)
+    stage, iteration = suffix.split(".")
+    return (*numbers, {"alpha": 0, "beta": 1, "rc": 2}[stage], int(iteration))
+
+
 def newer_than(version, current):
-    return tuple(map(int, version.split("."))) > tuple(
-        map(int, current.split("."))) if VERSION_PATTERN.fullmatch(current) else True
+    target = version_sort_key(version)
+    current_key = version_sort_key(current)
+    if target is None:
+        raise ValueError("Untrusted requested updater version")
+    return current_key is None or target > current_key
 
 
 def maintain(root, version, downloader=fetch, force=False):
@@ -181,7 +200,7 @@ def maintain(root, version, downloader=fetch, force=False):
         # systemd units and the readiness marker; never the NPMi container.
         subprocess.run(
             ["/bin/bash", str(stage / "scripts/install-host-updater"), str(root)],
-            check=True, timeout=45,
+            check=True, timeout=90,
         )
     verified = read_ready(root)
     if verified.get("component_version") != version:
