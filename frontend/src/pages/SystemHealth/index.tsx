@@ -245,7 +245,7 @@ const SystemHealth = () => {
 										: <Link to="/settings?section=firewall">Open firewall settings</Link>}
 								</div>
 								</HealthCard>
-							) : null
+							) : null}
 						</div>
 					</>
 				) : null}
