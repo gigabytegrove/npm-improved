@@ -1,6 +1,7 @@
 import EasyModal, { type InnerModalProps } from "ez-modal-react";
 import { Field, Form, Formik } from "formik";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
+import * as api from "src/api/backend/base";
 import { Alert } from "react-bootstrap";
 import Modal from "react-bootstrap/Modal";
 import { Button, Loading, SSLCertificateField, SSLOptionsFields } from "src/components";
@@ -21,6 +22,15 @@ const StreamModal = EasyModal.create(({ id, visible, remove }: Props) => {
 	const { mutate: setStream } = useSetStream();
 	const [errorMsg, setErrorMsg] = useState<ReactNode | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
+	const [instanceSecurity, setInstanceSecurity] = useState<{ config?: { mode?: string }; hostLanIp?: string | null } | null>(null);
+	useEffect(() => {
+		if (!visible) return;
+		let mounted = true;
+		void api.get({ url: "/instance-security" }).then((response) => {
+			if (mounted) setInstanceSecurity(response);
+		}).catch(() => { /* The creator may not have instance-security administration rights. */ });
+		return () => { mounted = false; };
+	}, [visible]);
 
 	const onSubmit = async (values: any, { setSubmitting }: any) => {
 		if (isSubmitting) return;
@@ -68,7 +78,7 @@ const StreamModal = EasyModal.create(({ id, visible, remove }: Props) => {
 					}
 					onSubmit={onSubmit}
 				>
-					{({ setFieldValue }: any) => (
+					{({ setFieldValue, values }: any) => (
 						<Form>
 							<Modal.Header closeButton>
 								<Modal.Title>
@@ -138,6 +148,18 @@ const StreamModal = EasyModal.create(({ id, visible, remove }: Props) => {
 														</div>
 													)}
 												</Field>
+												<Alert variant="info" className="mb-3" aria-live="polite">
+													<strong>Instance-wide firewall:</strong> {values.tcpForwarding ? "TCP" : ""}
+													{values.tcpForwarding && values.udpForwarding ? " and " : ""}
+													{values.udpForwarding ? "UDP" : ""} port <strong>{values.incomingPort || "—"}</strong> will be reflected in the NPMi instance firewall policy after the stream is enabled.
+													{instanceSecurity?.config?.mode === "forwarded" ? (
+														<span> You must also publish this port in Docker and forward it on your router to <strong>{instanceSecurity.hostLanIp || "your Docker host LAN IP"}</strong>.</span>
+													) : instanceSecurity?.config?.mode === "dmz" ? (
+														<span> Your router DMZ does not publish Docker ports. Configure Docker publishing for this stream as well.</span>
+													) : (
+														<span> Docker publication and upstream network forwarding must be configured separately.</span>
+													)}
+												</Alert>
 												<div className="row">
 													<div className="col-md-8">
 														<Field name="forwardingHost" validate={validateString(1, 255)}>

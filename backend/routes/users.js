@@ -11,6 +11,8 @@ import validator from "../lib/validator/index.js";
 import { debug, express as logger } from "../logger.js";
 import { getValidationSchema } from "../schema/index.js";
 import { isSetup } from "../setup.js";
+import { configureInstanceSecurity } from "../internal/instance-security.js";
+import { normalizeInstanceSecurity } from "../lib/instance-security-policy.js";
 
 const router = express.Router({
 	caseSensitive: true,
@@ -71,6 +73,11 @@ router
 		try {
 			// If we are in setup mode, we don't check access for current user
 			const setup = await isSetup();
+			const initialSecurity = !setup ? body.network_security : undefined;
+			if (!setup && initialSecurity !== undefined) {
+				normalizeInstanceSecurity({ ...initialSecurity, state: "deferred" });
+				delete body.network_security;
+			}
 			if (!setup) {
 				logger.info("Creating a new user in setup mode");
 				const access = new Access(null);
@@ -90,6 +97,9 @@ router
 
 			const payload = await apiValidator(getValidationSchema("/users", "post"), body);
 			const user = await internalUser.create(res.locals.access, payload);
+			if (!setup && initialSecurity) {
+				await configureInstanceSecurity({ ...initialSecurity, state: "deferred" }, { initial: true });
+			}
 			res.status(201).send(user);
 		} catch (err) {
 			debug(logger, `${req.method.toUpperCase()} ${req.path}: ${err}`);

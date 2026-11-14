@@ -1,5 +1,6 @@
 import { lazy, Suspense, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import InstanceSecurityNotice from "src/components/InstanceSecurityNotice";
 import {
 	ErrorNotFound,
 	LoadingPage,
@@ -17,6 +18,8 @@ const Setup = lazy(() => import("src/pages/Setup"));
 const Login = lazy(() => import("src/pages/Login"));
 const Dashboard = lazy(() => import("src/pages/Dashboard"));
 const Settings = lazy(() => import("src/pages/Settings"));
+const InstanceSecurity = lazy(() => import("src/pages/Settings/InstanceSecurity"));
+const DynamicDNS = lazy(() => import("src/pages/DynamicDNS"));
 const SystemHealth = lazy(() => import("src/pages/SystemHealth"));
 const Certificates = lazy(() => import("src/pages/Certificates"));
 const ConfigHistory = lazy(() => import("src/pages/ConfigHistory"));
@@ -102,6 +105,7 @@ function Router() {
 					<div className="npmi-workspace">
 						<SiteHeader menuOpen={mobileMenuOpen} onToggleMenu={() => setMobileMenuOpen((open) => !open)} />
 						<SiteContainer>
+							<InstanceSecurityNotice />
 							<Suspense fallback={<LoadingPage noLogo />}>
 								<Routes>
 									<Route path="*" element={<ErrorNotFound />} />
@@ -112,6 +116,8 @@ function Router() {
 									<Route path="/audit-log" element={<AuditLog />} />
 									<Route path="/logs" element={<Logs />} />
 									<Route path="/settings" element={<Settings />} />
+									<Route path="/security" element={<InstanceSecurity />} />
+									<Route path="/networking/dynamic-dns" element={<DynamicDNS />} />
 									<Route path="/system-health" element={<SystemHealth />} />
 									<Route path="/users" element={<Users />} />
 									<Route path="/nginx/proxy" element={<ProxyHosts />} />

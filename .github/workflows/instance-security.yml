@@ -1,0 +1,66 @@
+name: Instance Firewall
+
+on:
+  pull_request:
+    paths:
+      - "docker/firewall/**"
+      - ".github/workflows/instance-security.yml"
+      - "compose.yaml"
+  push:
+    branches: ["develop"]
+    paths:
+      - "docker/firewall/**"
+      - ".github/workflows/instance-security.yml"
+      - "compose.yaml"
+
+jobs:
+  companion:
+    name: Validate firewall companion
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.27.3"
+      - name: Go policy tests
+        run: GO111MODULE=off go test -v ./docker/firewall
+      - name: Build companion Docker image
+        run: docker build --file docker/firewall/Dockerfile --tag npmi-firewall:ci .
+      - name: Validate Compose
+        run: docker compose -f compose.yaml config --quiet
+      - name: Smoke-test nftables in isolated Docker network namespace
+        shell: bash
+        run: |
+          set -euo pipefail
+          POLICY_DIR="$(mktemp -d)"
+          chmod 770 "$POLICY_DIR"
+          cat > "$POLICY_DIR/policy.json" <<'JSON'
+          {
+            "schemaVersion": 1,
+            "mode": "dmz",
+            "state": "active",
+            "managementPort": 81,
+            "managementNetworks": ["192.168.0.0/16"],
+            "confirmBy": "",
+            "ports": [
+              {"port": 80, "protocol": "tcp"},
+              {"port": 443, "protocol": "tcp"},
+              {"port": 39482, "protocol": "udp"}
+            ]
+          }
+          JSON
+          chmod 644 "$POLICY_DIR/policy.json"
+          docker run -d --name npmi-firewall-smoke \
+            --network none --cap-drop ALL --cap-add NET_ADMIN \
+            --group-add "$(id -g)" --security-opt no-new-privileges:true \
+            -v "$POLICY_DIR:/policy" npmi-firewall:ci
+          trap 'docker rm -f npmi-firewall-smoke >/dev/null 2>&1 || true; rm -rf "$POLICY_DIR"' EXIT
+          sleep 8
+          docker ps --filter name=npmi-firewall-smoke --format '{{.Names}}' | grep -Fx npmi-firewall-smoke
+          cat "$POLICY_DIR/status.json"
+          grep -Eq '"state"[[:space:]]*:[[:space:]]*"active"' "$POLICY_DIR/status.json"
+          grep -q '"droppedPackets"' "$POLICY_DIR/status.json"
+          docker exec npmi-firewall-smoke nft list chain inet npmi_instance incoming | grep -q 'udp dport 39482'
+          docker exec npmi-firewall-smoke nft list chain inet npmi_instance incoming | grep -q 'counter.*drop'

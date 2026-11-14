@@ -72,6 +72,20 @@ const routingItems: MenuItem[] = [
 
 const controlItems: MenuItem[] = [
 	{
+		to: "/networking/dynamic-dns",
+		icon: IconServer2,
+		label: "dynamic-dns",
+		literalLabel: "Dynamic DNS",
+		permissionSection: ADMIN,
+	},
+	{
+		to: "/security",
+		icon: IconShieldLock,
+		label: "instance-security",
+		literalLabel: "Instance Security",
+		permissionSection: ADMIN,
+	},
+	{
 		to: "/access",
 		icon: IconLock,
 		label: "access-lists",

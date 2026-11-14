@@ -28,6 +28,7 @@ mkdir -p \
 	/data/nginx/dead_host \
 	/data/nginx/temp \
 	/data/letsencrypt-acme-challenge \
+	/data/instance-security/firewall \
 	/run/nginx \
 	/tmp/nginx/body \
 	/var/log/nginx \
