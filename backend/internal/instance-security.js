@@ -45,7 +45,7 @@ function atomicJSON(filename, value) {
 
 export function currentSecurityConfiguration() {
   return readJSON(configPath, {
-    configured: false, mode: "unmanaged", state: "deferred",
+    configured: false, enabled: true, mode: "static", state: "deferred",
     trustedNetworks: [...DEFAULT_MANAGEMENT_NETWORKS], hostLanIp: "", acknowledgedDmz: false,
   });
 }
@@ -84,7 +84,7 @@ export async function configureInstanceSecurity(input, { initial = false } = {})
   if (initial && config.state === "active") {
     throw new RangeError("Activate managed filtering after signing in and checking access.");
   }
-  if (config.state === "active") {
+  if (config.enabled && config.state === "active") {
     const helper = readJSON(statusPath, null);
     const age = helper?.checkedAt ? Date.now() - Date.parse(helper.checkedAt) : Number.POSITIVE_INFINITY;
     if (!Number.isFinite(age) || age > 20000) {
@@ -92,7 +92,7 @@ export async function configureInstanceSecurity(input, { initial = false } = {})
     }
   }
   const oldConfig = currentSecurityConfiguration();
-  if (config.state === "active") {
+  if (config.enabled && config.state === "active") {
     const previous = oldConfig.pendingActivation?.previous ?? oldConfig;
     config.pendingActivation = {
       deadline: new Date(Date.now() + 120000).toISOString(),
@@ -110,8 +110,38 @@ export async function configureInstanceSecurity(input, { initial = false } = {})
   return await getInstanceSecurityStatus();
 }
 
+/**
+ * Settings-level master switch. Off releases only NPMi's instance filtering,
+ * preserving the configured model and trusted networks. Turning it back on
+ * never silently activates default-deny; explicit confirmation is required.
+ */
+export async function setInstanceFirewallEnabled(enabled) {
+  if (typeof enabled !== "boolean") throw new RangeError("Firewall enabled must be true or false.");
+  const previous = currentSecurityConfiguration();
+  if ((previous.enabled !== false) === enabled) return await getInstanceSecurityStatus();
+  const next = {
+    ...previous,
+    enabled,
+    state: "deferred",
+    pendingActivation: undefined,
+  };
+  // Persist a complete, normalized configuration so settings survive restarts.
+  const normalized = normalizeInstanceSecurity(next);
+  atomicJSON(configPath, normalized);
+  try {
+    await reconcileInstanceSecurity();
+  } catch (error) {
+    if (previous.configured) atomicJSON(configPath, previous);
+    else fs.rmSync(configPath, { force: true });
+    await reconcileInstanceSecurity().catch(() => {});
+    throw error;
+  }
+  return await getInstanceSecurityStatus();
+}
+
 export async function confirmInstanceSecurityActivation() {
   const config = currentSecurityConfiguration();
+  if (config.enabled === false) throw new RangeError("Enable firewall functionality before confirming activation.");
   if (!config.pendingActivation) throw new RangeError("There is no pending firewall activation to confirm.");
   if (Date.parse(config.pendingActivation.deadline) <= Date.now()) {
     await reconcileInstanceSecurity();
@@ -135,9 +165,10 @@ export async function getInstanceSecurityStatus() {
   try { desiredHash = crypto.createHash("sha256").update(fs.readFileSync(policyPath)).digest("hex"); } catch {}
   const checkedAge = helper?.checkedAt ? Date.now() - Date.parse(helper.checkedAt) : Number.POSITIVE_INFINITY;
   const helperReady = Number.isFinite(checkedAge) && checkedAge >= 0 && checkedAge < 20000;
-  const enforced = config.mode !== "unmanaged" && config.state === "active" &&
+  const enabled = config.enabled !== false;
+  const enforced = enabled && config.mode !== "unmanaged" && config.state === "active" &&
     helperReady && helper.state === "active" && helper.policyHash === desiredHash;
-  const state = !config.configured ? "not_configured" : config.mode === "unmanaged" ? "unmanaged" :
+  const state = !enabled ? "disabled" : !config.configured ? "not_configured" : config.mode === "unmanaged" ? "unmanaged" :
     config.state === "deferred" ? "deferred" : enforced ?
       (config.pendingActivation ? "activation_pending" : "active") : "needs_attention";
   // In bridge networking, the container's interface address is NOT the host's LAN address.
@@ -145,7 +176,7 @@ export async function getInstanceSecurityStatus() {
     .filter((entry) => entry && !entry.internal && entry.family === "IPv4")
     .map((entry) => entry.address);
   return {
-    config, state, enforced, helperReady,
+    config: { ...config, enabled }, enabled, state, enforced, helperReady,
     droppedPackets: enforced && Number.isSafeInteger(helper?.droppedPackets) ? helper.droppedPackets : null,
     droppedBytes: enforced && Number.isSafeInteger(helper?.droppedBytes) ? helper.droppedBytes : null,
     pendingUntil: config.pendingActivation?.deadline || null,
