@@ -250,7 +250,7 @@ export default function FirewallSettings() {
               <div>
                 <div className={styles.metaLabel}>Public IPv4</div>
                 <strong className={styles.ipValue}>{data.publicIpv4 || "Detection unavailable"}</strong>
-                <p className="small text-secondary mb-0">Verified by two external services · {showTime(data.publicIpObservedAt)}</p>
+                <p className="small text-secondary mb-0">{data.publicIpv4 ? "Verified by two external services" : "Public IP verification unavailable"} · {showTime(data.publicIpObservedAt)}</p>
               </div>
               <div>
                 <div className={styles.metaLabel}>Docker host LAN (router destination)</div>
