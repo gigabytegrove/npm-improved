@@ -70,13 +70,32 @@ def convert(assets, output, tag):
     index = {"schemaVersion": 2, "manifests": []}
     for arch in ("amd64", "arm64"):
         source = assets / f"npm-improved-{tag}-linux-{arch}.tar.gz"
+
+        # Discover layer paths before streaming contents. Docker archives may
+        # use either */layer.tar or content-addressed blob names, so file
+        # suffixes cannot safely identify which members need OCI compression.
+        with tarfile.open(source, mode="r:gz") as archive:
+            manifest_file = archive.extractfile("manifest.json")
+            if manifest_file is None:
+                raise ValueError("Docker archive missing manifest")
+            description = json.load(manifest_file)
+        if not isinstance(description, list):
+            raise ValueError("Docker archive manifest is not a list")
+        matches = [m for m in description if expected_tag in m.get("RepoTags", [])]
+        if len(matches) != 1:
+            raise ValueError(f"Base image tag not unique for {arch}")
+        record = matches[0]
+        layer_names = set(record["Layers"])
+        needed = layer_names | {record["Config"]}
         members = {}
-        description = None
         count = total = 0
+
         with tarfile.open(source, mode="r|gz") as tf:
             for entry in tf:
-                if not entry.isfile():
+                if entry.name not in needed:
                     continue
+                if not entry.isfile():
+                    raise ValueError("Required Docker archive entry is not a regular file")
                 count += 1
                 total += entry.size
                 if count > MAX_ENTRIES or total > MAX_TOTAL or entry.size > MAX_ENTRY:
@@ -86,23 +105,12 @@ def convert(assets, output, tag):
                 stream = tf.extractfile(entry)
                 if stream is None:
                     raise ValueError("Unreadable Docker archive entry")
-                if entry.name in ("manifest.json", "./manifest.json"):
-                    if entry.size > 8 * 1024**2 or description is not None:
-                        raise ValueError("Invalid or duplicate Docker archive manifest")
-                    description = json.loads(stream.read())
-                else:
-                    members[entry.name] = store(
-                        blobs, stream, entry.size,
-                        compress=entry.name.endswith("/layer.tar")
-                        or entry.name.endswith(".layer.tar")
-                        or entry.name in ("layer.tar", "./layer.tar"),
-                    )
-        if not isinstance(description, list):
-            raise ValueError("Docker archive missing manifest")
-        matches = [m for m in description if expected_tag in m.get("RepoTags", [])]
-        if len(matches) != 1:
-            raise ValueError(f"Base image tag not unique for {arch}")
-        record = matches[0]
+                members[entry.name] = store(
+                    blobs, stream, entry.size,
+                    compress=entry.name in layer_names,
+                )
+        if set(members) != needed:
+            raise ValueError("Docker archive is missing required image contents")
         cfg = members[record["Config"]]
         config = json.loads((blobs / cfg["digest"][7:]).read_text())
         if config.get("os") != "linux" or config.get("architecture") != arch:
