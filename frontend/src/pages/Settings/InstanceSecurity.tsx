@@ -17,6 +17,7 @@ type SecurityStatus = {
   config: Configuration;
   state: string;
   enforced: boolean;
+  releasePending: boolean;
   helperReady: boolean;
   helperError: string | null;
   managementPort: number;
@@ -139,8 +140,11 @@ export default function InstanceSecurity() {
       <main className="container-fluid py-4" style={{ maxWidth: 1120 }}>
         <h1 className="h2">Firewall disabled</h1>
         <p className="text-secondary">
-          Firewall functionality was disabled for this instance. NPMi has released its
-          managed filtering rules. Existing proxy and stream routing remains unchanged.
+          Firewall functionality is switched off for this instance.
+          {status.releasePending
+            ? " The companion has not yet verified that filtering rules were removed."
+            : " The companion has confirmed that instance filtering is disabled."}
+          {" "}Existing proxy and stream routing remains unchanged.
         </p>
         <Link className="btn btn-primary" to="/settings?section=firewall">
           Enable firewall in Settings
@@ -152,7 +156,7 @@ export default function InstanceSecurity() {
   return (
     <main className="container-fluid py-4" style={{ maxWidth: 1120 }}>
       <header className="mb-4">
-        <h1 className="h2 mb-2">Instance Security</h1>
+        <h1 className="h2 mb-2">Firewall</h1>
         <p className="text-secondary mb-0">One firewall policy for the entire NPMi Docker instance. No separate firewall settings on proxy hosts, streams, or DNS records.</p>
       </header>
 
