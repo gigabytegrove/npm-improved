@@ -21,6 +21,7 @@ import styles from "./SiteHeader.module.css";
 const routeTitles: Array<[RegExp, string, string]> = [
 	[/^\/$/, "Dashboard", "Overview"],
 	[/^\/analytics(?:\/|$)/, "Analytics Center", "Local-node traffic and enforcement"],
+	[/^\/security(?:\/|$)/, "Firewall", "Instance-wide network filtering"],
 	[/^\/nginx\/proxy/, "Proxy Hosts", "HTTP and HTTPS routing"],
 	[/^\/nginx\/redirection/, "Redirection Hosts", "Redirect rules"],
 	[/^\/nginx\/stream/, "Streams", "TCP and UDP forwarding"],
@@ -39,6 +40,7 @@ const settingsSectionSubtitles: Record<string, string> = {
 	"default-site": "Fallback page and templates",
 	"certificate-lifecycle": "Retention and cleanup",
 	protection: "HTTP and connection limits",
+	firewall: "Firewall controls and enforcement",
 	database: "Database and storage",
 	"instance-sync": "NPMX synchronization",
 	"disaster-recovery": "Backup and restore",
