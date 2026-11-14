@@ -203,7 +203,7 @@ async function updateProvider(row, ip) {
     url = new URL("https://www.duckdns.org/update");
     url.searchParams.set("domains", name);
     url.searchParams.set("token", credential);
-    url.searchParams.set(version === 4 ? "ip" : "ipv6", ip);
+    url.searchParams.set("ip", ip);
     const response = await fetchText(url);
     if (!response.trim().startsWith("OK")) throw new Error("DuckDNS rejected the update.");
     return;
@@ -211,7 +211,8 @@ async function updateProvider(row, ip) {
   if (row.provider === "desec") {
     url = new URL("https://update.dedyn.io/");
     url.searchParams.set("hostname", host);
-    url.searchParams.set("myip", ip);
+    url.searchParams.set(version === 4 ? "myipv4" : "myipv6", ip);
+    url.searchParams.set(version === 4 ? "myipv6" : "myipv4", "preserve");
     options.headers = { Authorization: "Token " + credential };
   } else {
     const endpoint = row.provider === "noip" ? "https://dynupdate.no-ip.com/nic/update"
@@ -220,6 +221,7 @@ async function updateProvider(row, ip) {
     url = new URL(endpoint);
     url.searchParams.set("hostname", host);
     url.searchParams.set(row.provider === "dynu" && version === 6 ? "myipv6" : "myip", ip);
+    if (row.provider === "dynu") url.searchParams.set(version === 4 ? "myipv6" : "myip", "no");
     const user = row.provider === "he" ? host : row.username;
     options.headers = { Authorization: basic(user, credential) };
   }

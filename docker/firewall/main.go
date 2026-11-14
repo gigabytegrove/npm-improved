@@ -30,6 +30,7 @@ type policy struct {
   State string
   ManagementPort int
   ManagementNetworks []string
+  ConfirmBy string
   Ports []portRule
 }
 
@@ -61,6 +62,10 @@ func validatePolicy(p policy) error {
   for _, cidr := range p.ManagementNetworks {
     prefix, err := netip.ParsePrefix(cidr)
     if err != nil || prefix.Bits() == 0 { return errors.New("invalid management CIDR") }
+  }
+  if p.ConfirmBy != "" {
+    if _, err := time.Parse(time.RFC3339, p.ConfirmBy); err != nil { return errors.New("invalid activation deadline") }
+    if p.State != "active" { return errors.New("activation deadline requires an active policy") }
   }
   if len(p.Ports) > 1024 { return errors.New("too many service ports") }
   for _, port := range p.Ports {
@@ -135,7 +140,7 @@ func writeStatus(state, hash string, err error) {
   data, marshalErr := json.MarshalIndent(status, "", "  ")
   if marshalErr != nil { return }
   tmp := statusFile + ".tmp"
-  if writeErr := os.WriteFile(tmp, append(data, '\n'), 0600); writeErr != nil {
+  if writeErr := os.WriteFile(tmp, append(data, '\n'), 0644); writeErr != nil {
     fmt.Fprintln(os.Stderr, "security status write failed:", writeErr)
     return
   }
@@ -159,6 +164,14 @@ func reconcile() {
   if err := validatePolicy(p); err != nil { writeStatus("needs_attention", "", err); return }
   hashValue := sha256.Sum256(data)
   hash := hex.EncodeToString(hashValue[:])
+  if p.ConfirmBy != "" {
+    until, _ := time.Parse(time.RFC3339, p.ConfirmBy)
+    if !time.Now().Before(until) {
+      if err := releasePolicy(); err != nil { writeStatus("needs_attention", "", err); return }
+      writeStatus("confirmation_expired", "", errors.New("Unconfirmed instance firewall policy released automatically."))
+      return
+    }
+  }
   if p.Mode == "unmanaged" || p.State == "deferred" {
     if err := releasePolicy(); err != nil { writeStatus("needs_attention", "", err); return }
     writeStatus("deferred", hash, nil)

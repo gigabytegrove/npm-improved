@@ -40,3 +40,13 @@ func TestRuleRenderingPreservesManagementAndDefaultDeny(t *testing.T) {
   }
   if strings.Contains(rules, "flush ruleset") { t.Fatal("must never flush unrelated nftables rules") }
 }
+
+func TestPendingActivationDeadline(t *testing.T) {
+  p := policy{SchemaVersion: 1, Mode: "dmz", State: "active", ManagementPort: 81,
+    ManagementNetworks: []string{"192.168.1.0/24"}, ConfirmBy: "bad-date"}
+  if err := validatePolicy(p); err == nil { t.Fatal("bad deadline accepted") }
+  p.ConfirmBy = "2026-11-14T14:00:00Z"
+  if err := validatePolicy(p); err != nil { t.Fatal(err) }
+  p.State = "deferred"
+  if err := validatePolicy(p); err == nil { t.Fatal("deferred policy accepted activation deadline") }
+}

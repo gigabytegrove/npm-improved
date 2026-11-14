@@ -114,7 +114,7 @@ export default function InstanceSecurity() {
         <section className="mb-4" aria-label="Enforcement status">
           <h2 className="h4">Current protection</h2>
           <p className="mb-2"><strong>Firewall: {status.state.replace(/_/g, " ")}</strong>
-            {" — "}{status.enforced ? "The companion reported the current policy applied." :
+            {" — "}{status.enforced ? "The companion reported the policy applied inside the NPMi network namespace; upstream reachability and source-address fidelity are not verified." :
               status.state === "unmanaged" ? "Network filtering is delegated to your external firewall." :
               status.state === "deferred" ? "NPMi is not filtering inbound network traffic." :
               "Enforcement has not been verified."}</p>
@@ -154,7 +154,7 @@ export default function InstanceSecurity() {
 
       <section className="mb-4" aria-labelledby="management-heading">
         <h2 className="h4" id="management-heading">Management access</h2>
-        <p className="text-secondary">Only these source IPs and networks can reach the NPMi management listener (container TCP {status?.managementPort || 81}) while managed filtering is active. Restrict these to your LAN, trusted remote IPs, or VPN.</p>
+        <p className="text-secondary">The instance firewall permits management traffic from these addresses on container TCP {status?.managementPort || 81}. Docker or a userland proxy may rewrite the source IP. Also restrict public access to management at the router or Docker host; do not rely on this source restriction alone.</p>
         <label className="form-label" htmlFor="trusted-cidrs">Trusted IP addresses and CIDRs (one per line)</label>
         <textarea id="trusted-cidrs" className="form-control font-monospace mb-3" rows={5} value={networks}
           onChange={(e) => setNetworks(e.target.value)} disabled={busy || mode === "unmanaged"} />

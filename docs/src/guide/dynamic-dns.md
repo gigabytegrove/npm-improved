@@ -36,3 +36,9 @@ Dynamic DNS only changes DNS data. It **cannot** configure your router,
 automatically publish Docker ports, fix ISP CGNAT, or grant internet access
 where the ISP blocks inbound connections. Check the router's actual WAN
 address to distinguish CGNAT from ordinary dynamic public addressing.
+
+Address family separation: deSEC updates use the provider's `myipv4` /
+`myipv6` parameters and preserve the other family; Dynu updates explicitly
+set the other family to `no`. DuckDNS updates supply the correct IPv4/IPv6
+address in its `ip` field. These behaviors follow each provider's documented
+update protocol.

@@ -79,3 +79,13 @@ network filtering unenforced and showing the risk.
 The companion is built/deployed by Compose, not bundled inside the normal
 application image. Bare docker-run deployments cannot activate managed
 filtering without the companion and its shared network namespace.
+
+## Docker source-address caveat
+
+Docker's NAT and optional userland proxy may cause incoming traffic to arrive
+in the container with a gateway address rather than the original internet
+source. Do not assume source CIDR conditions in the container reliably
+protect publicly published management port 81. Protect the management
+listener at the router/host firewall, and ideally do not forward port 81
+at all. The companion reports whether its instance rules were installed,
+not whether a particular remote client can bypass router restrictions.

@@ -79,6 +79,7 @@ export function buildInstancePolicy(config, streams, managementPort = 81) {
     state: config.state,
     managementPort,
     managementNetworks: config.trustedNetworks,
+    confirmBy: config.pendingActivation?.deadline || "",
     ports: ports.map(({ port, protocol }) => ({ port, protocol })),
   };
 }

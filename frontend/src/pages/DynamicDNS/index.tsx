@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Alert } from "react-bootstrap";
 import * as api from "src/api/backend/base";
 
@@ -49,7 +49,7 @@ export default function DynamicDNS() {
   const provider = snapshot?.providers.find((entry) => entry.id === form.provider);
   const setField = (key: keyof typeof initial, value: string) => setForm((current) => ({ ...current, [key]: value }));
 
-  const add = async (e: React.FormEvent<HTMLFormElement>) => {
+  const add = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     await perform(async () => {
       await api.post({ url: "/dynamic-dns", data: form });

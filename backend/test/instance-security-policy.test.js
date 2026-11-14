@@ -48,3 +48,10 @@ test("policy does not copy proxy-host ACLs into a shared port filter", () => {
   assert.equal(policy.managementPort, 81);
   assert.equal(Object.hasOwn(policy, "hosts"), false);
 });
+
+test("activation deadline is propagated only when pending", () => {
+  const config = normalizeInstanceSecurity({ mode: "static", state: "active", trustedNetworks: ["10.0.0.0/8"] });
+  assert.equal(buildInstancePolicy(config, []).confirmBy, "");
+  config.pendingActivation = { deadline: "2026-11-14T14:00:00.000Z" };
+  assert.equal(buildInstancePolicy(config, []).confirmBy, "2026-11-14T14:00:00.000Z");
+});
