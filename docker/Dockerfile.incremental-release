@@ -1,0 +1,33 @@
+# Incremental release overlay on the already qualified NPMi v1.7.8 runtime.
+# Caller MUST provide checksum-verified, architecture-specific OCI build
+# contexts for npmi_host_base (builder architecture) and npmi_target_base.
+# Do not use public floating tags or Docker daemon-wide builder settings.
+FROM --platform=$BUILDPLATFORM npmi_host_base AS frontend-builder
+ENV NODE_ENV=development NODE_OPTIONS=--openssl-legacy-provider
+WORKDIR /build/frontend
+COPY frontend/package.json frontend/yarn.lock ./
+RUN yarn install --frozen-lockfile
+COPY frontend/ ./
+RUN yarn build
+
+FROM npmi_target_base AS npmi_runtime
+ARG BUILD_VERSION
+ARG BUILD_COMMIT
+ARG BUILD_DATE
+ENV NPM_BUILD_VERSION="${BUILD_VERSION}" \
+    NPM_BUILD_COMMIT="${BUILD_COMMIT}" \
+    NPM_BUILD_DATE="${BUILD_DATE}"
+WORKDIR /app
+COPY backend/ /app/
+COPY --from=frontend-builder /build/frontend/dist/ /app/frontend/
+
+RUN set -eux; \
+    test "$(node -p 'process.versions.node')" = '24.22.1'; \
+    /usr/sbin/nginx -v 2>&1 | grep -F 'nginx/1.31.8'; \
+    grep -a -q 'go1.27.3' /usr/local/bin/npm-improved-control-plane; \
+    node --test /app/test/release-versions.test.js /app/test/update-channels.test.js
+LABEL org.opencontainers.image.title="NPM Improved" \
+      org.opencontainers.image.version="${BUILD_VERSION}" \
+      org.opencontainers.image.revision="${BUILD_COMMIT}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.source="https://github.com/gigabytegrove/npm-improved"
