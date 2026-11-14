@@ -235,6 +235,11 @@ const startReleaseOperation = async (access, release, password, { reinstall = fa
 				: "No newer NPM Improved release is available on the selected channel.",
 		);
 	}
+	if (release.platform_available !== true) {
+		throw new errs.ValidationError(
+			`The published ${release.latest} release has no verified Docker archive for this host's architecture (${release.platform_arch || "unknown"}).`,
+		);
+	}
 	const parsedRelease = parseReleaseVersion(release.latest);
 	if (!parsedRelease || !release.latest.startsWith("v")) {
 		throw new errs.ValidationError("The published release tag is not a supported NPM Improved version.");
