@@ -25,6 +25,20 @@ export interface ControlPlaneHealth {
 	checks: Record<string, ComponentHealth>;
 }
 
+export interface FirewallHealth extends ComponentHealth {
+	status: "ok" | "degraded" | "disabled";
+	enabled: boolean;
+	enforced: boolean;
+	state: string;
+	configured: boolean;
+	helperReady: boolean;
+	helperError: string | null;
+	pendingUntil: string | null;
+	droppedPackets: number | null;
+	droppedBytes: number | null;
+	managementPort: number;
+}
+
 export interface SystemHealth {
 	status: "ok" | "degraded";
 	generatedAt: string;
@@ -36,6 +50,7 @@ export interface SystemHealth {
 		certificateEngine: ComponentHealth;
 		logEngine: ComponentHealth;
 		revisionEngine: ComponentHealth;
+		firewall: FirewallHealth;
 	};
 }
 
