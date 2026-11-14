@@ -30,7 +30,9 @@ exec 9>"$CACHE/.release.lock"
 flock -n 9 || { echo 'Another NPMi release is running.' >&2; exit 1; }
 # All large release artifacts stay on an explicitly selected filesystem.
 # A shared build machine must fail BEFORE writing multi-gigabyte workspaces.
-WORK_PARENT="${NPMI_WORK_PARENT:-/tmp}"
+# Default to NPMi's disk-backed cache rather than the host's limited /tmp tmpfs.
+# An override is allowed only when the operator explicitly selects another path.
+WORK_PARENT="${NPMI_WORK_PARENT:-$CACHE}"
 [[ -d "$WORK_PARENT" && ! -L "$WORK_PARENT" ]] || {
   echo "NPMI_WORK_PARENT must be an existing non-symlink directory." >&2; exit 1;
 }
@@ -200,7 +202,9 @@ for arch in amd64 arm64; do
     if [[ "$key" == stable ]]; then
       echo "=== Package stable $arch ==="
       mv -f "$out" "$WORK/dist/npm-improved-$tag-linux-$arch.tar.gz"
-      out="$WORK/dist/npm-improved-$tag-linux-$arch.tar.gz"
+      # Keep the packaged release archive until checksum verification and upload.
+      # Do not repoint the temporary variable to the final asset (cleanup below).
+      :
     else
       fw="ghcr.io/gigabytegrove/npm-improved-firewall:$tag"
       fw_tar="$WORK/dist/beta-$arch-firewall.tar.gz"
@@ -224,7 +228,9 @@ for arch in amd64 arm64; do
       CREATED_APP=''; CREATED_FW=''
     fi
     gzip -t "$WORK/dist/npm-improved-$tag-linux-$arch.tar.gz"
-    rm -f "$out" "${fw_tar:-}"
+    if [[ "$key" == beta ]]; then
+      rm -f -- "$out" "$fw_tar"
+    fi
   done
 done
 
