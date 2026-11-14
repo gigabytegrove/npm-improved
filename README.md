@@ -417,42 +417,82 @@ This protection is useful against application-layer abuse that reaches Nginx. It
 
 ## Quick start with Docker
 
-### Requirements
+### One-paste installation (Ubuntu / Debian)
 
-You need:
+On a **64-bit Ubuntu or Debian Linux server running systemd**, sign in as a user with `sudo` access. **Copy and paste the entire command block into a Bash terminal.** You do not need to install Docker first.
 
-- Docker Engine 24 or newer;
-- Docker Compose v2;
-- Git;
-- available host ports for the services you want to expose.
+The block installs Docker Engine and Docker Compose from [Docker's official apt repository](https://docs.docker.com/engine/install/) when Docker is missing, installs the other prerequisites, builds NPM Improved from the repository's `develop` branch, configures its native host updater, and starts the SQLite deployment. If Docker is already present, it is not replaced; the block checks for Compose v2 instead.
 
-### SQLite quick start
+```bash
+bash <<'NPMI_INSTALL'
+set -Eeuo pipefail
+. /etc/os-release
+if [ "$ID" != ubuntu ] && [ "$ID" != debian ]; then
+  echo 'This install block supports Ubuntu and Debian only.' >&2
+  exit 1
+fi
+if [ ! -d /run/systemd/system ]; then
+  echo 'A Linux host running systemd is required for NPM Improved updates.' >&2
+  exit 1
+fi
+if ! command -v sudo >/dev/null 2>&1; then
+  echo 'Sign in as a user with sudo access before installing.' >&2
+  exit 1
+fi
+sudo -v
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl git python3 iproute2
 
-For the simplest single-server setup:
+# Install Docker and Compose from Docker's official apt repository if needed.
+if ! command -v docker >/dev/null 2>&1; then
+  sudo install -m 0755 -d /etc/apt/keyrings
+  sudo curl -fsSL "https://download.docker.com/linux/$ID/gpg" -o /etc/apt/keyrings/docker.asc
+  sudo chmod a+r /etc/apt/keyrings/docker.asc
+  sudo tee /etc/apt/sources.list.d/docker.sources >/dev/null <<DOCKER_SOURCE
+Types: deb
+URIs: https://download.docker.com/linux/$ID
+Suites: $VERSION_CODENAME
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/docker.asc
+DOCKER_SOURCE
+  sudo apt-get update
+  sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+fi
+sudo systemctl enable --now docker
+if ! sudo docker compose version >/dev/null 2>&1; then
+  echo 'Docker is present, but Docker Compose v2 is missing. Install the Compose plugin before continuing.' >&2
+  exit 1
+fi
+if [ -e /opt/npm-improved ]; then
+  echo '/opt/npm-improved already exists; installation stopped to protect it.' >&2
+  exit 1
+fi
+sudo git clone --depth 1 --branch develop https://github.com/gigabytegrove/npm-improved.git /opt/npm-improved
+cd /opt/npm-improved
+sudo ./scripts/install-docker sqlite --auto-ports
+admin_port="$(sed -n 's/^ADMIN_PORT=//p' .env | tail -n 1)"
+printf '\nNPM Improved is ready. Open http://YOUR-SERVER-IP:%s\n' "$admin_port"
+NPMI_INSTALL
+```
+
+After it finishes, replace `YOUR-SERVER-IP` with your server's IP address in the printed management URL (usually port **81**). Complete the first-time setup in your browser. The installer uses free alternative host ports if 80, 81, or 443 are already occupied, without stopping other services.
+
+**Security:** Keep the management/recovery port (default **81**) restricted to your trusted network or VPN. Docker-published ports may bypass rules configured with UFW; review [Docker's firewall guidance](https://docs.docker.com/engine/network/packet-filtering-firewalls/) before exposing this host to the internet. Internet-facing HTTP/HTTPS normally require ports 80 and 443, so review any automatically changed port mappings.
+
+### If Docker and Compose are already installed
+
+To install manually without the Docker prerequisite steps:
 
 ```bash
 git clone https://github.com/gigabytegrove/npm-improved.git
 cd npm-improved
-./scripts/install-docker sqlite
+sudo ./scripts/install-docker sqlite --auto-ports
 ```
 
-The installer:
+The project's installer creates `.env` as needed, verifies Docker and Compose, validates the configured ports, builds the checked-out source, provisions the **native systemd updater** (no permanent helper container), starts the stack, waits for application health, and verifies that the running app is NPM Improved. It preserves existing NPM Improved data on repeat installs.
 
-1. creates `.env` when needed;
-2. checks Docker and Compose;
-3. validates the Compose configuration;
-4. checks whether the configured host ports are available;
-5. builds NPM Improved from the checked-out source;
-6. starts the stack;
-7. waits for the application health check.
-
-When startup finishes, open:
-
-```text
-http://<your-server>:81
-```
-
-and continue through the NPM Improved setup/login experience.
+For database variations, custom port mapping, and backups, see [DOCKER.md](DOCKER.md).
 
 ### If ports 80, 81, or 443 are already being used
 
