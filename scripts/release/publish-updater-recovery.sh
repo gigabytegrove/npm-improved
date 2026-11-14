@@ -71,24 +71,36 @@ echo '=== Reuse checksum-verified NPMi stable runtime ==='
 BASE_CACHE="$CACHE/$BASE_TAG"
 mkdir -p "$BASE_CACHE"
 BASE_SUM="npm-improved-$BASE_TAG-SHA256SUMS.txt"
-verified=0
-if [[ -s "$BASE_CACHE/$BASE_SUM" ]]; then
-  if ( cd "$BASE_CACHE" && sha256sum -c "$BASE_SUM" >/dev/null 2>&1 ); then
-    verified=1
-  fi
-fi
-if [[ "$verified" != 1 ]]; then
+BASE_AMD64="npm-improved-$BASE_TAG-linux-amd64.tar.gz"
+BASE_ARM64="npm-improved-$BASE_TAG-linux-arm64.tar.gz"
+
+# The published checksum manifest also lists the small host-updater archive,
+# but this stage deliberately downloads ONLY the two runtime image archives.
+# Verify each selected asset against the exact, published SHA-256 entry.
+verify_base_images() (
+  cd "$1"
+  [[ -s "$BASE_SUM" && -s "$BASE_AMD64" && -s "$BASE_ARM64" ]] || return 1
+  awk -v amd64="$BASE_AMD64" -v arm64="$BASE_ARM64" '
+    $2 == amd64 || $2 == arm64 {
+      if ($1 !~ /^[0-9a-fA-F]{64}$/ && (length($1) != 64 || $1 ~ /[^0-9a-fA-F]/)) exit 1
+      if ($2 == amd64) na++
+      if ($2 == arm64) nb++
+      print
+    }
+    END { if (na != 1 || nb != 1) exit 1 }
+  ' "$BASE_SUM" | sha256sum -c -
+)
+if ! verify_base_images "$BASE_CACHE"; then
   mkdir -p "$WORK/base-download"
   gh release download "$BASE_TAG" -R "$REPO" -D "$WORK/base-download" \
-    -p "npm-improved-$BASE_TAG-linux-amd64.tar.gz" \
-    -p "npm-improved-$BASE_TAG-linux-arm64.tar.gz" -p "$BASE_SUM"
-  ( cd "$WORK/base-download" && sha256sum -c "$BASE_SUM" )
+    -p "$BASE_AMD64" -p "$BASE_ARM64" -p "$BASE_SUM"
+  verify_base_images "$WORK/base-download"
   for arch in amd64 arm64; do
-    mv "$WORK/base-download/npm-improved-$BASE_TAG-linux-$arch.tar.gz" "$BASE_CACHE/"
+    mv -f "$WORK/base-download/npm-improved-$BASE_TAG-linux-$arch.tar.gz" "$BASE_CACHE/"
   done
-  mv "$WORK/base-download/$BASE_SUM" "$BASE_CACHE/"
+  mv -f "$WORK/base-download/$BASE_SUM" "$BASE_CACHE/"
 fi
-( cd "$BASE_CACHE" && sha256sum -c "$BASE_SUM" )
+verify_base_images "$BASE_CACHE"
 python3 "$WORK/source/stable/scripts/ci/docker-release-to-oci.py" "$BASE_CACHE" "$WORK/oci" "$BASE_TAG"
 
 echo '=== Select persistent, isolated NPMi BuildKit builder ==='
