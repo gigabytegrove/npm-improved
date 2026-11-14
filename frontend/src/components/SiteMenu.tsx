@@ -16,6 +16,7 @@ import React, { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { HasPermission } from "src/components";
 import { T } from "src/locale";
+import { useInstanceFirewall } from "src/hooks/useInstanceFirewall";
 import {
 	ACCESS_LISTS,
 	ADMIN,
@@ -82,7 +83,7 @@ const controlItems: MenuItem[] = [
 		to: "/security",
 		icon: IconShieldLock,
 		label: "instance-security",
-		literalLabel: "Instance Security",
+		literalLabel: "Firewall",
 		permissionSection: ADMIN,
 	},
 	{
@@ -204,6 +205,10 @@ function MenuGroup({
 
 export function SiteMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
 	const navigate = useNavigate();
+	const { data: firewall } = useInstanceFirewall();
+	const visibleControlItems = controlItems.filter(
+		(item) => item.to !== "/security" || firewall?.enabled === true,
+	);
 
 	const closeMenu = onClose;
 
@@ -251,7 +256,7 @@ export function SiteMenu({ open, onClose }: { open: boolean; onClose: () => void
 						</div>
 					</div>
 					<MenuGroup title="Routing" items={routingItems} onNavigate={closeMenu} />
-					<MenuGroup title="Control" items={controlItems} onNavigate={closeMenu} />
+					<MenuGroup title="Control" items={visibleControlItems} onNavigate={closeMenu} />
 					<MenuGroup title="System" items={observabilityItems} onNavigate={closeMenu} />
 				</nav>
 
