@@ -42,7 +42,16 @@ cleanup() {
   trap - EXIT
   if [[ -n "$CREATED_APP" ]]; then docker image rm "$CREATED_APP" >/dev/null 2>&1 || true; fi
   if [[ -n "$CREATED_FW" ]]; then docker image rm "$CREATED_FW" >/dev/null 2>&1 || true; fi
-  if [[ "$result" == 0 ]]; then rm -rf "$WORK"; else echo "Failed: $WORK retained" >&2; fi
+  if [[ "$result" == 0 ]]; then
+    rm -rf --one-file-system -- "$WORK"
+  else
+    # The OCI directory holds fully disposable, multi-gigabyte converted
+    # image layers. Never strand these when a release fails partway through.
+    if [[ -d "$WORK/oci" && ! -L "$WORK/oci" ]]; then
+      rm -rf --one-file-system -- "$WORK/oci"
+    fi
+    echo "Failed: $WORK retained (generated OCI layers removed)" >&2
+  fi
   exit "$result"
 }
 trap cleanup EXIT
@@ -83,6 +92,9 @@ for spec in "stable:$STABLE_BRANCH:$EXPECTED_STABLE_REV" "beta:$BETA_BRANCH:$BET
   python3 -m py_compile "$WORK/source/$key/scripts/host-update-dispatch.py" "$WORK/source/$key/scripts/host-update-maintenance.py"
   ( cd "$WORK/source/$key" && python3 -m unittest discover -s scripts -p 'test_host_updater*.py' -v )
 done
+
+echo '=== Regression test: OCI streaming conversion ==='
+( cd "$WORK/source/stable/scripts/ci" && python3 -m unittest test_docker_release_to_oci.py -v )
 
 echo '=== Reuse checksum-verified NPMi stable runtime ==='
 BASE_CACHE="$CACHE/$BASE_TAG"
