@@ -1,6 +1,7 @@
 import { Alert } from "react-bootstrap";
 import { Link, useLocation } from "react-router-dom";
 import { useInstanceFirewall } from "src/hooks/useInstanceFirewall";
+import { useUser } from "src/hooks";
 
 /**
  * Notify administrators only when a feature-enabled instance still needs
@@ -9,7 +10,8 @@ import { useInstanceFirewall } from "src/hooks/useInstanceFirewall";
  */
 export default function InstanceSecurityNotice() {
 	const location = useLocation();
-	const { data } = useInstanceFirewall();
+	const { data: me } = useUser("me");
+	const { data } = useInstanceFirewall(me?.roles.includes("admin") === true);
 
 	if (!data?.enabled || data.enforced || data.state === "unmanaged" ||
 		location.pathname === "/security" ||
