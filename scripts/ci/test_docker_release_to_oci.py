@@ -1,11 +1,12 @@
-"""Regression checks for bounded, gzip-layer OCI base conversion.
+"""Regression tests with valid TAR layers, both raw and already gzip-compressed.
 
-Uses synthetic Docker archives; does not contact Docker or the network.
+The previous fixture used arbitrary bytes rather than a Docker TAR layer; it
+could not detect double-compression and produced false reassurance.
 """
-import importlib.util
-import io
 import gzip
 import hashlib
+import importlib.util
+import io
 import json
 from pathlib import Path
 import tarfile
@@ -18,48 +19,82 @@ MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 
 
+def tar_bytes(entries):
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w") as archive:
+        for name, content in entries:
+            member = tarfile.TarInfo(name)
+            member.size = len(content)
+            archive.addfile(member, io.BytesIO(content))
+    return buf.getvalue()
+
+
 class OCIConverterTests(unittest.TestCase):
-    def test_streaming_content_addressed_layers_are_gzip(self):
+    def test_raw_and_already_gzip_layers(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             assets = root / "assets"
             assets.mkdir()
+            expected = {}
             for arch in ("amd64", "arm64"):
-                config_name = f"blobs/sha256/config-{arch}"
-                layer_name = f"blobs/sha256/content-layer-{arch}"
-                config = json.dumps({"os": "linux", "architecture": arch}).encode()
-                layer = (f"FROM {arch}\n".encode() + b"binary-content\x00" * 60000)
+                uncompressed = tar_bytes([("etc/npmi-verified", b"valid-release-archive" * 100)])
+                # Simulate classic Docker save on AMD64, content-addressed
+                # Docker save with an already compressed layer on ARM64.
+                layer = uncompressed if arch == "amd64" else gzip.compress(uncompressed)
+                config = json.dumps({
+                    "os": "linux", "architecture": arch,
+                    "rootfs": {"type": "layers", "diff_ids": [
+                        "sha256:" + hashlib.sha256(uncompressed).hexdigest(),
+                    ]},
+                }).encode()
                 manifest = json.dumps([{
-                    "Config": config_name,
+                    "Config": "blobs/sha256/config.json",
                     "RepoTags": ["ghcr.io/gigabytegrove/npm-improved:v1.7.8"],
-                    "Layers": [layer_name],
+                    "Layers": ["blobs/sha256/layer-data"],
                 }]).encode()
-                archive_path = assets / f"npm-improved-v1.7.8-linux-{arch}.tar.gz"
-                with tarfile.open(archive_path, mode="w:gz") as archive:
-                    for name, payload in (
-                        (config_name, config),
-                        (layer_name, layer),
-                        ("manifest.json", manifest),
-                    ):
-                        member = tarfile.TarInfo(name)
-                        member.size = len(payload)
-                        archive.addfile(member, io.BytesIO(payload))
-            dest = root / "oci"
-            MODULE.convert(assets, dest, "v1.7.8")
-            index = json.loads((dest / "index.json").read_text())
+                source = tar_bytes([
+                    ("manifest.json", manifest),
+                    ("blobs/sha256/config.json", config),
+                    ("blobs/sha256/layer-data", layer),
+                ])
+                (assets / f"npm-improved-v1.7.8-linux-{arch}.tar.gz").write_bytes(
+                    gzip.compress(source))
+                expected[arch] = uncompressed
+
+            destination = root / "oci"
+            MODULE.convert(assets, destination, "v1.7.8")
+            index = json.loads((destination / "index.json").read_text())
             self.assertEqual(len(index["manifests"]), 2)
-            for record in index["manifests"]:
-                arch = record["platform"]["architecture"]
-                blob = dest / "blobs" / "sha256" / record["digest"].split(":", 1)[1]
-                manifest = json.loads(blob.read_bytes())
-                entry = manifest["layers"][0]
-                self.assertEqual(entry["mediaType"], "application/vnd.oci.image.layer.v1.tar+gzip")
-                compressed = (dest / "blobs" / "sha256" / entry["digest"].split(":", 1)[1]).read_bytes()
-                plain = gzip.decompress(compressed)
-                self.assertTrue(plain.startswith(f"FROM {arch}".encode()))
-                self.assertLess(len(compressed), len(plain) // 8)
-                self.assertEqual(hashlib.sha256(compressed).hexdigest(), entry["digest"][7:])
-                self.assertEqual(len(compressed), entry["size"])
+            for entry in index["manifests"]:
+                arch = entry["platform"]["architecture"]
+                manifest_file = destination / "blobs/sha256" / entry["digest"][7:]
+                image = json.loads(manifest_file.read_text())
+                layer = image["layers"][0]
+                self.assertEqual(layer["mediaType"], MODULE.LAYER_GZIP if hasattr(MODULE, "LAYER_GZIP") else "application/vnd.oci.image.layer.v1.tar+gzip")
+                blob = (destination / "blobs/sha256" / layer["digest"][7:]).read_bytes()
+                self.assertEqual(hashlib.sha256(blob).hexdigest(), layer["digest"][7:])
+                self.assertEqual(len(blob), layer["size"])
+                self.assertEqual(gzip.decompress(blob), expected[arch])
+                with tarfile.open(fileobj=io.BytesIO(gzip.decompress(blob)), mode="r:") as check:
+                    self.assertIsNotNone(check.getmember("etc/npmi-verified"))
+
+    def test_invalid_tar_is_rejected_before_build(self):
+        with tempfile.TemporaryDirectory() as temp:
+            data = b"not a TAR" * 100
+            with self.assertRaisesRegex(ValueError, "invalid tar"):
+                MODULE.store(
+                    Path(temp), io.BytesIO(data), len(data), compress=True,
+                    expected_diff_id="sha256:" + "0" * 64,
+                )
+
+    def test_corrupt_layer_digest_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            data = tar_bytes([("test.txt", b"correct layer")])
+            with self.assertRaisesRegex(ValueError, "diff_ids"):
+                MODULE.store(
+                    Path(temp), io.BytesIO(data), len(data), compress=True,
+                    expected_diff_id="sha256:" + "0" * 64,
+                )
 
 
 if __name__ == "__main__":
