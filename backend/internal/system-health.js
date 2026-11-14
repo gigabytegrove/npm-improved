@@ -3,6 +3,7 @@ import db from "../db.js";
 import configRevisionModel from "../models/config_revision.js";
 import internalCertificate from "./certificate.js";
 import internalNginx from "./nginx.js";
+import { getInstanceSecurityStatus } from "./instance-security.js";
 
 const ok = (extra = {}) => ({ status: "ok", ...extra });
 const degraded = (extra = {}) => ({ status: "degraded", ...extra });
@@ -116,16 +117,42 @@ const checkCertificates = () => {
 	});
 };
 
+const checkFirewall = async () => {
+  try {
+    const firewall = await getInstanceSecurityStatus();
+    const health = !firewall.enabled ? "disabled" : firewall.enforced ? "ok" : "degraded";
+    return {
+      status: health,
+      enabled: firewall.enabled,
+      enforced: firewall.enforced,
+      state: firewall.state,
+      helper_ready: firewall.helperReady,
+      helper_error: firewall.helperError,
+      pending_until: firewall.pendingUntil,
+      dropped_packets: firewall.droppedPackets,
+      dropped_bytes: firewall.droppedBytes,
+      management_port: firewall.managementPort,
+      configured: firewall.config.configured,
+    };
+  } catch {
+    return degraded({
+      enabled: true, enforced: false, state: "needs_attention",
+      helper_ready: false, helper_error: "Firewall health could not be checked.",
+    });
+  }
+};
+
 const internalSystemHealth = {
 	get: async (access) => {
 		await access.can("settings:get", "system-health");
 
-		const [database, nginx, logs, revisions, controlPlane] = await Promise.all([
+		const [database, nginx, logs, revisions, controlPlane, firewall] = await Promise.all([
 			checkDatabase(),
 			checkNginx(),
 			checkLogs(),
 			checkRevisions(),
 			checkControlPlane(),
+			checkFirewall(),
 		]);
 
 		const checks = {
@@ -135,9 +162,10 @@ const internalSystemHealth = {
 			certificate_engine: checkCertificates(),
 			log_engine: logs,
 			revision_engine: revisions,
+			firewall,
 		};
 
-		const status = Object.values(checks).every((check) => check.status === "ok") ? "ok" : "degraded";
+		const status = Object.values(checks).every((check) => check.status === "ok" || check.status === "disabled") ? "ok" : "degraded";
 
 		return {
 			status,
