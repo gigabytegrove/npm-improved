@@ -18,9 +18,24 @@ The page refreshes automatically and reports:
 - certificate renewal and lifecycle timer state;
 - log directory read/write availability;
 - Configuration History Active, Pending, and Failed revision counts;
+- instance firewall feature state, verified enforcement, companion health,
+  dropped packet/byte counters, and activation confirmation;
 - backend process uptime.
 
 A component can be degraded without hiding the rest of the system state.
+
+## Firewall management
+
+System Health includes an administrator-only firewall control. Operators can
+enable or disable the feature, request a fresh policy reconciliation, and
+confirm an activation still within its two-minute safety window. Configuration
+of trusted management CIDRs, deployment mode, and port guidance remains in
+the dedicated **Firewall** page.
+
+A disabled feature is not a guarantee that old rules have been removed:
+the status remains degraded while the companion reports release pending or
+cannot verify rule removal. Existing ports, router settings, and other
+containers are never modified by these controls.
 
 ## Nginx last reload
 
@@ -70,6 +85,8 @@ Detailed health information remains available only through the authenticated Sys
 
 ## What System Health does not do yet
 
-System Health diagnoses component state; it is not a privileged repair console.
-
-Configuration repair remains subject to the normal authenticated transactional workflows and Configuration History restore. This avoids creating an unauthenticated emergency endpoint capable of changing Nginx or database state.
+System Health is not an unrestricted repair console. The authenticated
+firewall controls are narrowly scoped to this node's instance firewall.
+Nginx and database repair remain subject to normal authenticated workflows
+and Configuration History restore. These controls are not exposed by the
+unauthenticated degraded-mode endpoint.
