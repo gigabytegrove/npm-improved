@@ -56,7 +56,7 @@ def main():
             reinstall = request.get("reinstall", False)
             if not isinstance(reinstall, bool) or (reinstall and action != "update"):
                 raise ValueError("Invalid reinstall request")
-            stable = r"ghcr\.io/gigabytegrove/npm-improved:v[0-9]+\.[0-9]+\.[0-9]+"
+            release_image = r"ghcr\.io/gigabytegrove/npm-improved:v[0-9]+\.[0-9]+\.[0-9]+(?:-(?:alpha|beta|rc)\.[0-9]+)?"
             if action not in {"update", "restart", "rollback"}:
                 raise ValueError("Unsupported operation")
             if mode not in {"sqlite", "mysql", "postgres"}:
@@ -73,11 +73,29 @@ def main():
                 raise ValueError("Invalid destination version")
             if not isinstance(target, str):
                 raise ValueError("Invalid target image")
-            if action == "update" and not re.fullmatch(stable, target):
-                raise ValueError("Only official stable releases may be installed")
+            if action == "update" and not re.fullmatch(release_image, target):
+                raise ValueError("Only official NPMi release versions may be installed")
+            if action == "update":
+                release_channel = request.get("channel", "stable")
+                if release_channel not in {"stable", "beta", "alpha"}:
+                    raise ValueError("Unsupported update channel")
+                suffix = target.rsplit(":", 1)[1]
+                detected_channel = "beta" if "-beta." in suffix else (
+                    "alpha" if "-alpha." in suffix or "-rc." in suffix else "stable"
+                )
+                if detected_channel != release_channel:
+                    raise ValueError("The release tag does not match the selected channel")
+                if release_channel != "stable":
+                    ready_file = data / "host-updater-ready.json"
+                    try:
+                        ready = json.loads(ready_file.read_text(encoding="utf-8"))
+                    except (OSError, ValueError):
+                        ready = {}
+                    if ready.get("mode") != "native-host-service" or ready.get("project_dir") != str(root) or int(ready.get("protocol", 0)) < 2:
+                        raise ValueError("Prerelease updates require the verified protocol-2 host updater")
             if action == "update" and target.rsplit(":", 1)[1] != "v" + version.lstrip("v"):
                 raise ValueError("Requested image tag and version do not match")
-            if action == "rollback" and target != "npm-improved:local" and not re.fullmatch(stable, target):
+            if action == "rollback" and target != "npm-improved:local" and not re.fullmatch(release_image, target):
                 raise ValueError("Invalid rollback image")
             if action == "rollback" and target != "npm-improved:local" and target.rsplit(":", 1)[1] != "v" + version.lstrip("v"):
                 raise ValueError("Rollback image tag and version do not match")
@@ -101,14 +119,14 @@ def main():
             # An unreachable GitHub release must never undo a healthy app.
             # The host's periodic maintenance timer retries failed refreshes.
             app_release = version if action == "update" else source
-            if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", app_release.lstrip("v")):
+            if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-(?:alpha|beta|rc)\.[0-9]+)?", app_release.lstrip("v")):
                 try:
                     command = [str(maintenance), str(root), "--version", app_release.lstrip("v")]
                     if reinstall:
                         command.append("--force")
                     subprocess.run(command, check=True, timeout=110)
                 except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
-                    print(f"Native updater will retry maintenance: {error}", file=sys.stderr)
+                    print("Native updater housekeeping will retry on the next scheduled maintenance run.", file=sys.stderr)
         except (ValueError, TypeError, OSError, json.JSONDecodeError) as error:
             status_path = data / "update-status.json"
             try:
