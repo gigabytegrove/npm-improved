@@ -55,6 +55,23 @@ export function normalizeInstanceSecurity(input) {
   };
 }
 
+/**
+ * Preserve instance-specific management configuration while changing the
+ * firewall feature switch. Never reactivate default-deny implicitly.
+ */
+export function switchInstanceFirewall(current, enabled) {
+  if (typeof enabled !== "boolean") throw new RangeError("Firewall enabled must be true or false.");
+  if (!current || typeof current !== "object") throw new RangeError("Missing firewall configuration.");
+  return normalizeInstanceSecurity({
+    enabled,
+    mode: current.mode,
+    state: "deferred",
+    trustedNetworks: current.trustedNetworks,
+    hostLanIp: current.hostLanIp,
+    acknowledgedDmz: current.acknowledgedDmz,
+  });
+}
+
 export function compileInstancePorts(streams, managementPort = 81) {
   if (!Array.isArray(streams)) throw new TypeError("Streams must be an array.");
   const map = new Map();
