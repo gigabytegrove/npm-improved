@@ -67,7 +67,7 @@ const sections: SettingsSection[] = [
 	{
 		id: "firewall",
 		label: "Firewall",
-		description: "Enable or disable instance firewall functionality",
+		description: "Live rules, detected addresses, enforcement and policy",
 		icon: IconShieldLock,
 	},
 	{
