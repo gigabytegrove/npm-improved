@@ -1,5 +1,6 @@
 import express from "express";
 import jwtdecode from "../lib/express/jwt-decode.js";
+import internalAuditLog from "../internal/audit-log.js";
 import {
   addDynamicDNSRecord, deleteDynamicDNSRecord,
   listDynamicDNSProviders, listDynamicDNSRecords, refreshDynamicDNS,
@@ -22,7 +23,12 @@ router.get("/", async (_req, res, next) => {
 router.post("/", async (req, res, next) => {
   try {
     await write(res);
-    res.status(201).json(addDynamicDNSRecord(req.body));
+    const record = addDynamicDNSRecord(req.body);
+    await internalAuditLog.add(res.locals.access, {
+      action: "created", object_type: "dynamic_dns", object_id: 0,
+      meta: { provider: record.provider, hostname: record.hostname, record_type: record.recordType },
+    }).catch(() => {});
+    res.status(201).json(record);
   } catch (error) {
     if (error instanceof RangeError) return badInput(res, error);
     next(error);
@@ -33,6 +39,10 @@ router.delete("/:id", async (req, res, next) => {
   try {
     await write(res);
     const deleted = deleteDynamicDNSRecord(req.params.id);
+    if (deleted) await internalAuditLog.add(res.locals.access, {
+      action: "deleted", object_type: "dynamic_dns", object_id: 0,
+      meta: { record_id: req.params.id },
+    }).catch(() => {});
     res.status(deleted ? 200 : 404).json({ deleted });
   } catch (error) { next(error); }
 });
