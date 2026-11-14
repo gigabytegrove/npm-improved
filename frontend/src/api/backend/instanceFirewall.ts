@@ -7,6 +7,7 @@ export interface InstanceFirewallStatus {
 	enabled: boolean;
 	state: string;
 	enforced: boolean;
+	releasePending: boolean;
 	helperReady: boolean;
 	helperError: string | null;
 	pendingUntil: string | null;
