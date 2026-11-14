@@ -26,7 +26,7 @@ def tar_header_valid(header):
     if header == bytes(512):
         return True
     try:
-        checksum = int(header[148:156].strip(b" \\x00"), 8)
+        checksum = int(header[148:156].strip(b" \x00"), 8)
     except ValueError:
         return False
     return checksum == sum(header[:148]) + 8 * 32 + sum(header[156:512])
@@ -43,8 +43,8 @@ def store(blobs, stream, size, compress=False, expected_diff_id=None):
     first = stream.read(min(512, size))
     remaining = size - len(first)
     is_layer = expected_diff_id is not None
-    already_gzip = is_layer and first.startswith(b"\\x1f\\x8b\\x08")
-    if is_layer and first.startswith(b"\\x28\\xb5\\x2f\\xfd"):
+    already_gzip = is_layer and first.startswith(b"\x1f\x8b\x08")
+    if is_layer and first.startswith(b"\x28\xb5\x2f\xfd"):
         raise ValueError("Unsupported zstd Docker layer: refusing to mislabel as gzip")
     if is_layer and not already_gzip and not tar_header_valid(first):
         raise ValueError("Source Docker layer has an invalid tar header")
