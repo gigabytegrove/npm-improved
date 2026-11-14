@@ -8,10 +8,11 @@ import {
 
 export const FIREWALL_QUERY_KEY = ["instance-firewall"] as const;
 
-export function useInstanceFirewall() {
+export function useInstanceFirewall(enabled = true) {
 	return useQuery({
 		queryKey: FIREWALL_QUERY_KEY,
 		queryFn: getInstanceFirewallStatus,
+		enabled,
 		staleTime: 5_000,
 		refetchInterval: 10_000,
 		refetchOnWindowFocus: true,
