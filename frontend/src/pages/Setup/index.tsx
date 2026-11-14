@@ -21,7 +21,6 @@ export default function Setup() {
 	const [errorMsg, setErrorMsg] = useState<string | null>(null);
 	const [securityMode, setSecurityMode] = useState("deferred");
 	const [securityNetworks, setSecurityNetworks] = useState("10.0.0.0/8\n172.16.0.0/12\n192.168.0.0/16\nfc00::/7");
-	const [securityLanIp, setSecurityLanIp] = useState("");
 	const [acknowledgedDmz, setAcknowledgedDmz] = useState(false);
 
 	const onSubmit = async (values: Payload, { setSubmitting }: any) => {
@@ -44,7 +43,6 @@ export default function Setup() {
 					mode: securityMode as "static" | "forwarded" | "dmz" | "unmanaged",
 					state: "deferred",
 					trustedNetworks: securityNetworks.split(/\r?\n/).map((line) => line.trim()).filter(Boolean),
-					hostLanIp: securityLanIp.trim(),
 					acknowledgedDmz,
 				},
 			}, true);
@@ -230,15 +228,11 @@ export default function Setup() {
                         value={securityNetworks} rows={4} onChange={(e) => setSecurityNetworks(e.target.value)} />
                     </>
                   ) : null}
-                  {securityMode !== "deferred" ? (
-                    <>
-                      <label className="form-label" htmlFor="initial-security-lan">Docker host LAN IP (optional)</label>
-                      <input id="initial-security-lan" className="form-control mb-2" value={securityLanIp}
-                        onChange={(e) => setSecurityLanIp(e.target.value)}
-                        placeholder="Router-facing LAN IP, not the container's bridge address" />
-                    </>
-                  ) : null}
-                  <p className="text-secondary small mb-0">After signing in, use Instance Security to verify the helper, review open ports, and activate managed filtering. Docker publishing and router forwarding remain separate requirements.</p>
+                  <p className="text-secondary small mb-0">
+                    NPMi automatically reports its network-namespace IP and independently observes the public IPv4
+                    address after sign-in. On bridged Docker installations, the namespace IP is not the host's
+                    router-facing address. Review live rules and management access under Firewall before activation.
+                  </p>
                 </section>
 
                                 <Button
