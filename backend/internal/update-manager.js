@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import authModel from "../models/auth.js";
 import errs from "../lib/error.js";
+import { parseReleaseVersion } from "../lib/release-versions.js";
 import { evaluateNpmxRollingUpdate } from "../lib/rolling-update-policy.js";
 import internalAuditLog from "./audit-log.js";
 import internalDatabaseManager from "./database-manager.js";
@@ -44,7 +45,15 @@ const capabilities = () => {
 	const ready = readJsonFile(HOST_READY_FILE, null);
 	const hostReady = ready?.mode === "native-host-service" && ready.project_dir === projectDir && projectDir !== "";
 	const maintenance = readJsonFile(HOST_MAINTENANCE_FILE, null);
-	const maintained = ready?.maintenance === "automatic" && Number(ready?.protocol) === 1;
+	const maintained = ready?.maintenance === "automatic" && Number(ready?.protocol) >= 1;
+	const prereleaseSupported = hostReady && Number(ready?.protocol) >= 2;
+	const maintenanceRetry = maintenance?.status === "failed";
+	const maintenanceTimeout = /timed out|timeout|time limit/i.test(String(maintenance?.error || ""));
+	const maintenanceSummary = maintenanceRetry
+		? maintenanceTimeout
+			? "A routine host updater refresh took longer than expected. NPM Improved remains online; the scheduled maintenance task will retry."
+			: "A routine host updater refresh could not complete. NPM Improved remains online; maintenance will retry automatically."
+		: null;
 
 	return {
 		enabled: hostReady,
@@ -57,7 +66,12 @@ const capabilities = () => {
 		host_service_installed: hostReady,
 		host_updater_version: hostReady ? (ready?.component_version || "legacy") : null,
 		host_updater_automatic_maintenance: hostReady && maintained,
-		host_updater_maintenance_error: maintenance?.status === "failed" ? (maintenance.error || "Updater maintenance failed.") : null,
+		host_updater_prerelease_support: prereleaseSupported,
+		host_updater_maintenance_state: maintenanceRetry ? "retry_scheduled" : "current",
+		host_updater_maintenance_summary: maintenanceSummary,
+		// Keep the legacy property for older clients, but never expose command
+		// arguments, temporary paths, subprocess tracebacks, or raw timeouts.
+		host_updater_maintenance_error: maintenanceSummary,
 		reason: projectDir === ""
 			? "The installed deployment is missing NPM_HOST_PROJECT_DIR. Use the supported NPMi installer to configure native updates."
 			: !hostReady
@@ -216,12 +230,21 @@ const startReleaseOperation = async (access, release, password, { reinstall = fa
 	if (!release?.latest || (!reinstall && !release.update_available)) {
 		throw new errs.ValidationError(
 			reinstall
-				? "No published stable NPM Improved release is available to reinstall."
-				: "No newer stable NPM Improved release is available.",
+				? "No published NPM Improved release is available to reinstall."
+				: "No newer NPM Improved release is available on the selected channel.",
 		);
 	}
-	if (!/^v\d+\.\d+\.\d+$/.test(release.latest)) {
-		throw new errs.ValidationError("The published release tag is not a supported stable version.");
+	const parsedRelease = parseReleaseVersion(release.latest);
+	if (!parsedRelease || !release.latest.startsWith("v")) {
+		throw new errs.ValidationError("The published release tag is not a supported NPM Improved version.");
+	}
+	const channel = parsedRelease.stage === "beta" ? "beta" : parsedRelease.stage ? "alpha" : "stable";
+	if (channel !== (release.channel || "stable")) {
+		throw new errs.ValidationError("Selected release and update channel do not match.");
+	}
+	const caps = capabilities();
+	if (channel !== "stable" && !caps.host_updater_prerelease_support) {
+		throw new errs.ValidationError("This node must first enable prerelease updates through the verified host updater installation.");
 	}
 
 	if (reinstall && release.current !== release.latest && !release.update_available) {
