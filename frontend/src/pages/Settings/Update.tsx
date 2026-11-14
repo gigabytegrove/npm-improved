@@ -246,8 +246,10 @@ export default function Update() {
 								<span className="fw-bold">Software update</span>
 								{active ? (
 									<span className="badge bg-azure-lt text-azure">{statusLabel(data?.status?.state)}</span>
-								) : data?.releaseError || !data?.release?.latest ? (
-									<span className="badge bg-warning-lt text-warning">Not verified</span>
+								) : data?.releaseError ? (
+									<span className="badge bg-warning-lt text-warning">Check unavailable</span>
+								) : !data?.release?.latest ? (
+									<span className="badge bg-secondary-lt text-secondary">No published release</span>
 								) : updateAvailable ? (
 									<span className="badge bg-warning-lt text-warning">
 										{releaseChannel === "stable" ? "Update available" : "Prerelease available"}
