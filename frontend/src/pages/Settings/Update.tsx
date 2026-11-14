@@ -108,7 +108,7 @@ export default function Update() {
 
 	const active = ACTIVE_STATES.has(data?.status?.state || "");
 	const updateAvailable = Boolean(data?.release?.updateAvailable);
-	const installableUpdate = releaseChannel === "stable" && updateAvailable;
+	const installableUpdate = updateAvailable && (releaseChannel === "stable" || Boolean(data?.capabilities?.hostUpdaterPrereleaseSupport));
 	const updaterReady = Boolean(data?.capabilities?.enabled);
 	const reinstallHostReady = Boolean(
 		data?.capabilities?.hostUpdaterAutomaticMaintenance &&
@@ -230,7 +230,7 @@ export default function Update() {
 					<option value="beta">Beta — pre-release testing</option>
 					<option value="alpha">Alpha / RC — experimental</option>
 				</select>
-				{releaseChannel !== "stable" ? <span className="text-warning small">Prerelease discovery is available. Automatic installation requires a prerelease-capable native updater and is not yet supported by this installation.</span> : null}
+				{releaseChannel !== "stable" && !data?.capabilities?.hostUpdaterPrereleaseSupport && data?.release?.latest ? <span className="text-secondary small">This host needs the latest native updater to install prereleases.</span> : null}
 			</div>
 			{error ? <Alert variant="danger">{error.message}</Alert> : null}
 			{data?.releaseError ? <Alert variant="warning">GitHub release check unavailable: {data.releaseError}. Local updater progress and recovery controls remain available.</Alert> : null}
@@ -272,7 +272,7 @@ export default function Update() {
 										: updateAvailable && releaseChannel === "stable"
 											? `${data?.release?.releaseName || data?.release?.latest} is ready to install.`
 											: updateAvailable
-												? `${data?.release?.releaseName || data?.release?.latest} is published on GitHub for manual prerelease testing.`
+												? `${data?.release?.releaseName || data?.release?.latest} is available on the ${releaseChannel} channel.`
 												: `No newer ${releaseChannel} release is available.`}
 							</div>
 
