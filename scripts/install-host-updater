@@ -19,8 +19,8 @@ fi
   echo "Expected the existing NPMi .env and data directory in $ROOT." >&2; exit 1;
 }
 VERSION="$(tr -d '[:space:]' < "$SOURCE/../.version")"
-[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
-  echo "The updater package must have a stable version." >&2; exit 1;
+[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]] || {
+  echo "The updater package must contain a valid NPMi release version." >&2; exit 1;
 }
 ID="$(printf '%s' "$ROOT" | sha256sum | cut -c1-12)"
 UNIT="npm-improved-update-$ID"
@@ -35,6 +35,36 @@ for name in update-handoff.sh host-update-dispatch.py host-update-maintenance.py
   install -m 0755 "$SOURCE/$name" "$tempfile"
   mv -f "$tempfile" "$BIN/$name"
 done
+
+# Protocol-1 (v1.7.7) host maintenance accepts five program files only.
+# The 1.7.8 installer carries its trusted companion Compose definition
+# directly, so no sixth archive file or manual host migration is needed.
+firewall_fragment="$(mktemp "$BIN/.new-compose-firewall-XXXXXXXX")"
+cat >"$firewall_fragment" <<'NPMI_FIREWALL_OVERLAY'
+# Managed by NPMi native host updater for existing deployments.
+# Adds firewall service without changing the existing app ports or volumes.
+services:
+  firewall:
+    image: ${NPM_FIREWALL_IMAGE:-npm-improved-firewall:local}
+    restart: unless-stopped
+    network_mode: "service:app"
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN
+    group_add:
+      - "${PGID:-1000}"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    volumes:
+      - ./data/instance-security/firewall:/policy
+    depends_on:
+      app:
+        condition: service_started
+NPMI_FIREWALL_OVERLAY
+chmod 0644 "$firewall_fragment"
+mv -f "$firewall_fragment" "$BIN/compose.firewall.yaml"
 
 cat >"/etc/systemd/system/$UNIT.service" <<EOF
 [Unit]
@@ -92,13 +122,26 @@ Unit=$UNIT-maintenance.service
 WantedBy=timers.target
 EOF
 
+# This installer may itself be running inside the maintenance oneshot.
+# Do not synchronously wait on newly queued systemd jobs from within that
+# same service: it can exceed the maintenance execution window.
 systemctl daemon-reload
-systemctl enable --now "$UNIT.path" "$UNIT-maintenance.timer"
+systemctl enable "$UNIT.path" "$UNIT-maintenance.timer" >/dev/null
+systemctl start --no-block "$UNIT.path" "$UNIT-maintenance.timer"
+
+for attempt in 1 2 3 4 5 6 7 8 9 10; do
+  if systemctl is-active --quiet "$UNIT.path" &&
+     systemctl is-active --quiet "$UNIT-maintenance.timer"; then
+    break
+  fi
+  sleep 1
+done
+
 systemctl is-active --quiet "$UNIT.path" || {
-  echo "The native NPMi updater service failed to activate." >&2; exit 1;
+  echo "The native NPMi update request watcher did not activate." >&2; exit 1;
 }
 systemctl is-active --quiet "$UNIT-maintenance.timer" || {
-  echo "The native NPMi updater maintenance timer failed to activate." >&2; exit 1;
+  echo "The native NPMi maintenance timer did not activate." >&2; exit 1;
 }
 
 # Readiness is written only after all programs and systemd units are ready.
@@ -117,7 +160,7 @@ with os.fdopen(fd, "w", encoding="utf-8") as output:
                "project_dir": root,
                "unit": unit,
                "component_version": version,
-               "protocol": 1,
+               "protocol": 2,
                "maintenance": "automatic",
                "host_hostname": os.uname().nodename}, output)
     output.write("\n")
