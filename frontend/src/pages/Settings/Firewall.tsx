@@ -7,11 +7,12 @@ export default function FirewallSettings() {
 	const { data, isLoading, error, refetch } = useInstanceFirewall();
 	const { toggle } = useFirewallActions();
 	const [actionError, setActionError] = useState("");
+	const supported = typeof data?.enabled === "boolean";
 	const enabled = data?.enabled === true;
 	const saving = toggle.isPending;
 
 	async function setEnabled(next: boolean) {
-		if (saving || !data || next === enabled) return;
+		if (saving || !data || !supported || next === enabled) return;
 		if (!next && !window.confirm(
 			"Disable NPMi instance firewall functionality? This releases the instance's managed packet-filtering rules. Existing routing and proxy hosts remain unchanged.",
 		)) return;
@@ -40,7 +41,13 @@ export default function FirewallSettings() {
 				</div>
 			) : null}
 			{actionError ? <div className="alert alert-danger" role="alert">{actionError}</div> : null}
-			{data ? (
+			{data && !supported ? (
+				<div className="alert alert-info" role="status">
+					This node is still running an older NPMi backend. Update it to v1.8.0-beta.3
+					before using firewall controls. Existing proxy configuration has not changed.
+				</div>
+			) : null}
+			{data && supported ? (
 				<>
 					<div className="d-flex flex-wrap align-items-center justify-content-between gap-3 py-3 border-bottom">
 						<div className="d-flex align-items-start gap-3">
