@@ -8,6 +8,15 @@ const RELEASE_REQUEST_TIMEOUT_MS = 8_000;
 const MAX_RELEASE_RESPONSE_BYTES = 1024 * 1024;
 const VERSION_URL = "https://api.github.com/repos/gigabytegrove/npm-improved/releases/latest";
 const RELEASE_LIST_URL = "https://api.github.com/repos/gigabytegrove/npm-improved/releases?per_page=30";
+const targetArch = process.arch === "x64" ? "amd64" : process.arch === "arm64" ? "arm64" : null;
+const imageAssetFor = (version) =>
+    targetArch && version ? `npm-improved-${version}-linux-${targetArch}.tar.gz` : null;
+const releaseSupportsHost = (release) => {
+    const expected = imageAssetFor(release?.tag_name);
+    return Boolean(expected && Array.isArray(release?.assets) &&
+        release.assets.some((asset) => asset?.name === expected));
+};
+
 const getCurrentVersion = () => {
 	const build = parseReleaseVersion(process.env.NPM_BUILD_VERSION);
 	if (build) return build.tag;
@@ -22,6 +31,7 @@ const internalRemoteVersion = {
 		current: getCurrentVersion(), latest: null, update_available: false,
 		release_name: null, release_notes: null, published_at: null,
 		release_url: null, channel,
+		platform_available: false, platform_arch: targetArch,
 	}),
 	last_result: null,
 	last_fetch_time: null,
@@ -69,6 +79,8 @@ const internalRemoteVersion = {
 		return {
 			current: currentVersion,
 			latest: latestVersion,
+			platform_available: releaseSupportsHost(selected),
+			platform_arch: targetArch,
 			update_available: latestVersion
 				? isNewerRelease(currentVersion, latestVersion)
 				: false,
