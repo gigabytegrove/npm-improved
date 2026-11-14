@@ -170,7 +170,7 @@ class HostUpdaterBundleTests(unittest.TestCase):
         self.assertTrue(module.newer_than("1.4.2", "legacy"))
         for value in ("../../tmp/x", "1.4.2-rc", "", "latest"):
             with tempfile.TemporaryDirectory() as dirname:
-                with self.assertRaisesRegex(ValueError, "stable semantic version"):
+                with self.assertRaisesRegex(ValueError, "published NPMi release version"):
                     module.verify_and_extract(value, b"", b"", Path(dirname))
 
 
