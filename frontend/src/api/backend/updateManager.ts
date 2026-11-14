@@ -4,6 +4,8 @@ export interface UpdateRelease {
 	current: string | null;
 	latest: string | null;
 	updateAvailable: boolean;
+	platformAvailable: boolean;
+	platformArch: string | null;
 	releaseName: string | null;
 	releaseNotes: string | null;
 	publishedAt: string | null;
