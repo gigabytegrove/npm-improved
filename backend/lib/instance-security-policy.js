@@ -62,7 +62,7 @@ export function normalizeInstanceSecurity(input) {
 export function switchInstanceFirewall(current, enabled) {
   if (typeof enabled !== "boolean") throw new RangeError("Firewall enabled must be true or false.");
   if (!current || typeof current !== "object") throw new RangeError("Missing firewall configuration.");
-  return normalizeInstanceSecurity({
+  const next = normalizeInstanceSecurity({
     enabled,
     mode: current.mode,
     state: "deferred",
@@ -70,6 +70,8 @@ export function switchInstanceFirewall(current, enabled) {
     hostLanIp: current.hostLanIp,
     acknowledgedDmz: current.acknowledgedDmz,
   });
+  if (current.configured === false) next.configured = false;
+  return next;
 }
 
 export function compileInstancePorts(streams, managementPort = 81) {
