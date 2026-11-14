@@ -1,4 +1,5 @@
 import net from "node:net";
+import fs from "node:fs";
 import os from "node:os";
 
 /**
@@ -23,10 +24,31 @@ export function observedInterfaceAddresses(interfaces = os.networkInterfaces()) 
   });
 }
 
-export function observedNetworkIdentity(interfaces = os.networkInterfaces()) {
+export function primaryRouteInterface(routeTable) {
+  if (typeof routeTable !== "string") return null;
+  const candidates = routeTable.split(/\r?\n/).slice(1).map((line) => {
+    const columns = line.trim().split(/\s+/);
+    if (columns.length < 8 || columns[1] !== "00000000" || columns[7] !== "00000000") return null;
+    const flags = Number.parseInt(columns[3], 16);
+    const metric = Number(columns[6]);
+    if (!Number.isFinite(flags) || !(flags & 1) || !Number.isSafeInteger(metric) || metric < 0) return null;
+    return { name: columns[0], metric };
+  }).filter(Boolean);
+  candidates.sort((a, b) => a.metric - b.metric || a.name.localeCompare(b.name));
+  return candidates[0]?.name || null;
+}
+
+export function observedNetworkIdentity(interfaces = os.networkInterfaces(), routing = undefined) {
   const interfacesObserved = observedInterfaceAddresses(interfaces);
+  let routeTable = routing;
+  if (routeTable === undefined) {
+    try { routeTable = fs.readFileSync("/proc/net/route", "utf8"); }
+    catch { routeTable = ""; }
+  }
+  const routedInterface = primaryRouteInterface(routeTable);
+  const primary = interfacesObserved.find((entry) => entry.interface === routedInterface) || interfacesObserved[0];
   return {
-    instanceIp: interfacesObserved[0]?.address ?? null,
+    instanceIp: primary?.address ?? null,
     interfaces: interfacesObserved,
     // Docker network mode cannot be proved from an unprivileged container.
     // An explicitly supplied mode is useful metadata, not a network probe.
