@@ -1,0 +1,21 @@
+# Managed by NPMi native host updater for existing deployments.
+# Adds firewall service without changing the existing app ports or volumes.
+services:
+  firewall:
+    image: ${NPM_FIREWALL_IMAGE:-npm-improved-firewall:local}
+    restart: unless-stopped
+    network_mode: "service:app"
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN
+    group_add:
+      - "${PGID:-1000}"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    volumes:
+      - ./data/instance-security/firewall:/policy
+    depends_on:
+      app:
+        condition: service_started
