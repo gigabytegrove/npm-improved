@@ -101,13 +101,26 @@ Unit=$UNIT-maintenance.service
 WantedBy=timers.target
 EOF
 
+# This installer may itself be running inside the maintenance oneshot.
+# Do not synchronously wait on newly queued systemd jobs from within that
+# same service: it can exceed the maintenance execution window.
 systemctl daemon-reload
-systemctl enable --now "$UNIT.path" "$UNIT-maintenance.timer"
+systemctl enable "$UNIT.path" "$UNIT-maintenance.timer" >/dev/null
+systemctl start --no-block "$UNIT.path" "$UNIT-maintenance.timer"
+
+for attempt in 1 2 3 4 5 6 7 8 9 10; do
+  if systemctl is-active --quiet "$UNIT.path" &&
+     systemctl is-active --quiet "$UNIT-maintenance.timer"; then
+    break
+  fi
+  sleep 1
+done
+
 systemctl is-active --quiet "$UNIT.path" || {
-  echo "The native NPMi updater service failed to activate." >&2; exit 1;
+  echo "The native NPMi update request watcher did not activate." >&2; exit 1;
 }
 systemctl is-active --quiet "$UNIT-maintenance.timer" || {
-  echo "The native NPMi updater maintenance timer failed to activate." >&2; exit 1;
+  echo "The native NPMi maintenance timer did not activate." >&2; exit 1;
 }
 
 # Readiness is written only after all programs and systemd units are ready.
