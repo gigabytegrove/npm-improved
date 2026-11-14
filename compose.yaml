@@ -21,6 +21,7 @@ services:
       NPM_ADMIN_PORT: "81"
       NPM_HOST_PROJECT_DIR: ${NPM_HOST_PROJECT_DIR:-}
       NPM_NODE_HOSTNAME: ${NPM_NODE_HOSTNAME:-}
+      NPM_HOST_LAN_IP: ${NPM_HOST_LAN_IP:-}
       NPM_DEPLOYMENT_MODE: ${NPM_DEPLOYMENT_MODE:-sqlite}
       DISABLE_IPV6: ${DISABLE_IPV6:-false}
       INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-}
@@ -41,3 +42,24 @@ services:
       retries: 12
       start_period: 30s
     stop_grace_period: 30s
+
+  firewall:
+    image: ${NPM_FIREWALL_IMAGE:-npm-improved-firewall:local}
+    build:
+      context: .
+      dockerfile: docker/firewall/Dockerfile
+    restart: unless-stopped
+    # NET_ADMIN applies only in the app network namespace, never the host.
+    network_mode: "service:app"
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    volumes:
+      - ./data/instance-security:/policy
+    depends_on:
+      app:
+        condition: service_started

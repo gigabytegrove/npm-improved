@@ -1,4 +1,5 @@
 import { installPlugins } from "./lib/certbot.js";
+import { startInstanceSecurityReconciler } from "./internal/instance-security.js";
 import internalDisasterRecovery from "./internal/disaster-recovery.js";
 import utils from "./lib/utils.js";
 import { setup as logger } from "./logger.js";
@@ -212,4 +213,4 @@ const setupDisasterRecoveryBackups = () => {
 	return Promise.resolve();
 };
 
-export default () => setupDefaultUser().then(setupDefaultSettings).then(setupCertbotPlugins).then(setupLogrotation).then(setupDisasterRecoveryBackups);
+export default () => setupDefaultUser().then(setupDefaultSettings).then(setupCertbotPlugins).then(setupLogrotation).then(setupDisasterRecoveryBackups).then(startInstanceSecurityReconciler);

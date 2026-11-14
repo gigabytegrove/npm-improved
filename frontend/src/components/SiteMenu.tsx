@@ -72,6 +72,13 @@ const routingItems: MenuItem[] = [
 
 const controlItems: MenuItem[] = [
 	{
+		to: "/security",
+		icon: IconShieldLock,
+		label: "instance-security",
+		literalLabel: "Instance Security",
+		permissionSection: ADMIN,
+	},
+	{
 		to: "/access",
 		icon: IconLock,
 		label: "access-lists",

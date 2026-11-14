@@ -24,6 +24,7 @@ import streamsRoutes from "./nginx/streams.js";
 import reportsRoutes from "./reports.js";
 import schemaRoutes from "./schema.js";
 import settingsRoutes from "./settings.js";
+import instanceSecurityRoutes from "./instance-security.js";
 import tokensRoutes from "./tokens.js";
 import usersRoutes from "./users.js";
 import versionRoutes from "./version.js";
@@ -82,6 +83,8 @@ router.use("/database", databaseRoutes);
 router.use(internalDatabaseManager.writeGuard);
 // Analytics rules are explicitly node-local, even on NPMX secondaries.
 router.use("/analytics", analyticsRoutes);
+// Instance firewall policy is local to this physical NPMi node.
+router.use("/instance-security", instanceSecurityRoutes);
 router.use(internalInstanceSync.writeGuard);
 router.use("/tokens", tokensRoutes);
 router.use("/users", usersRoutes);

@@ -13,6 +13,13 @@ export interface NewUser {
 	isDisabled?: boolean;
 	auth?: AuthOptions;
 	roles?: string[];
+	networkSecurity?: {
+		mode: "static" | "forwarded" | "dmz" | "unmanaged";
+		state: "deferred";
+		trustedNetworks: string[];
+		hostLanIp: string;
+		acknowledgedDmz: boolean;
+	};
 }
 
 export async function createUser(item: NewUser, noAuth?: boolean): Promise<User> {
