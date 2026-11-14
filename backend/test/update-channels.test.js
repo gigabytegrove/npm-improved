@@ -66,3 +66,44 @@ test("current prerelease version is not incorrectly reduced to stable semver", a
 	assert.equal(result.latest, "v1.8.0-beta.1");
 	assert.equal(result.update_available, false);
 });
+
+test("stable, beta and alpha channels select independently with architecture-safe assets", async (t) => {
+	const prior = process.env.NPM_BUILD_VERSION;
+	const originalFetch = internalRemoteVersion.fetchUrl;
+	t.after(() => {
+		internalRemoteVersion.fetchUrl = originalFetch;
+		internalRemoteVersion.channel_cache.clear();
+		internalRemoteVersion.channel_fetched_at.clear();
+		if (prior === undefined) delete process.env.NPM_BUILD_VERSION;
+		else process.env.NPM_BUILD_VERSION = prior;
+	});
+	process.env.NPM_BUILD_VERSION = "1.7.9";
+	internalRemoteVersion.channel_cache.clear();
+	internalRemoteVersion.channel_fetched_at.clear();
+	const arch = process.arch === "arm64" ? "arm64" : "amd64";
+	const assetName = (tag) => `npm-improved-${tag}-linux-${arch}.tar.gz`;
+	internalRemoteVersion.fetchUrl = async (url) => ({
+		statusCode: 200,
+		rawData: JSON.stringify(url.endsWith("/latest")
+			? { tag_name: "v1.7.9", draft: false, prerelease: false, assets: [
+				{ name: assetName("v1.7.9") },
+			] }
+			: [
+				{ tag_name: "v1.7.9", draft: false, prerelease: false },
+				{ tag_name: "v1.8.0-beta.2", draft: false, prerelease: true, assets: [
+					{ name: assetName("v1.8.0-beta.2") },
+				] },
+				{ tag_name: "v1.8.0-alpha.2", draft: true, prerelease: true },
+			]),
+	});
+	const stable = await internalRemoteVersion.get(true, "stable");
+	assert.equal(stable.latest, "v1.7.9");
+	assert.equal(stable.update_available, false);
+	const beta = await internalRemoteVersion.get(true, "beta");
+	assert.equal(beta.latest, "v1.8.0-beta.2");
+	assert.equal(beta.update_available, true);
+	assert.equal(beta.platform_available, true);
+	const alpha = await internalRemoteVersion.get(true, "alpha");
+	assert.equal(alpha.latest, null, "Draft alpha cannot appear as installable");
+	assert.equal(alpha.platform_available, false);
+});
