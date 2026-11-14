@@ -1,6 +1,8 @@
 package main
 
 import (
+  "os"
+  "path/filepath"
   "strings"
   "testing"
 )
@@ -55,4 +57,22 @@ func TestDroppedCounterJSON(t *testing.T) {
   sample := []byte(`{"nftables":[{"metainfo":{"version":"1"}},{"rule":{"expr":[{"counter":{"packets":47,"bytes":2586}},{"drop":null}]}}]}`)
   packets, bytes := parseDroppedPackets(sample)
   if packets != 47 || bytes != 2586 { t.Fatalf("unexpected counters: %d, %d", packets, bytes) }
+}
+
+func TestLiveRulesetIsReadFromNftNotDesiredConfiguration(t *testing.T) {
+  dir := t.TempDir()
+  script := "#!/bin/sh\nprintf 'table inet npmi_instance { chain incoming { tcp dport 443 accept; counter drop; } }\\n'\n"
+  if err := os.WriteFile(filepath.Join(dir, "nft"), []byte(script), 0755); err != nil { t.Fatal(err) }
+  t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+  observed, err := liveRuleset()
+  if err != nil { t.Fatal(err) }
+  if !strings.Contains(observed, "tcp dport 443 accept") { t.Fatalf("missing observed rule: %q", observed) }
+  if !strings.Contains(observed, "counter drop") { t.Fatalf("missing observed default deny: %q", observed) }
+}
+
+func TestLiveRulesetRejectsMissingKernelOutput(t *testing.T) {
+  dir := t.TempDir()
+  if err := os.WriteFile(filepath.Join(dir, "nft"), []byte("#!/bin/sh\\nexit 0\\n"), 0755); err != nil { t.Fatal(err) }
+  t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+  if _, err := liveRuleset(); err == nil { t.Fatal("empty nftables observation was accepted") }
 }
