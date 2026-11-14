@@ -6,6 +6,7 @@ import streamModel from "../models/stream.js";
 import {
   DEFAULT_MANAGEMENT_NETWORKS,
   normalizeInstanceSecurity,
+  switchInstanceFirewall,
   buildInstancePolicy,
   compileInstancePorts,
 } from "../lib/instance-security-policy.js";
@@ -119,21 +120,7 @@ export async function setInstanceFirewallEnabled(enabled) {
   if (typeof enabled !== "boolean") throw new RangeError("Firewall enabled must be true or false.");
   const previous = currentSecurityConfiguration();
   if ((previous.enabled !== false) === enabled) return await getInstanceSecurityStatus();
-  const next = {
-    ...previous,
-    enabled,
-    state: "deferred",
-    pendingActivation: undefined,
-  };
-  // Persist a complete, normalized configuration so settings survive restarts.
-  const normalized = normalizeInstanceSecurity({
-    enabled: next.enabled,
-    mode: next.mode,
-    state: next.state,
-    trustedNetworks: next.trustedNetworks,
-    hostLanIp: next.hostLanIp,
-    acknowledgedDmz: next.acknowledgedDmz,
-  });
+  const normalized = switchInstanceFirewall(previous, enabled);
   atomicJSON(configPath, normalized);
   try {
     await reconcileInstanceSecurity();
