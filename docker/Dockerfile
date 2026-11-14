@@ -1,4 +1,5 @@
 ARG BASE_IMAGE=ghcr.io/gigabytegrove/npm-improved:v1.4.0
+ARG FRONTEND_BASE_IMAGE=ghcr.io/gigabytegrove/npm-improved:v1.4.0
 
 # Security runtime: use the upstream NGINX Open Source build containing the
 # 2026-10-14 fixes (and subsequent 1.31.8 fixes). The inherited NPMi v1.4
@@ -52,7 +53,9 @@ RUN set -eux; \
 # inherited NGINX and Node.js binaries and rebuild the Go control plane.
 # Every distributed architecture must pass the runtime security assertions.
 
-FROM --platform=$BUILDPLATFORM ${BASE_IMAGE} AS frontend-builder
+# Build frontend on the Docker host architecture, independently of the
+# platform-specific final runtime, so dockeradm can qualify both architectures.
+FROM --platform=$BUILDPLATFORM ${FRONTEND_BASE_IMAGE} AS frontend-builder
 ENV NODE_ENV=development NODE_OPTIONS=--openssl-legacy-provider
 WORKDIR /build/frontend
 COPY frontend/package.json frontend/yarn.lock ./
