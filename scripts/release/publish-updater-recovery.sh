@@ -28,7 +28,13 @@ CACHE='/var/cache/npm-improved/releases'
 mkdir -p "$CACHE"
 exec 9>"$CACHE/.release.lock"
 flock -n 9 || { echo 'Another NPMi release is running.' >&2; exit 1; }
-WORK="$(mktemp -d /tmp/npmi-release-recovery.XXXXXXXX)"
+# All large release artifacts stay on an explicitly selected filesystem.
+# A shared build machine must fail BEFORE writing multi-gigabyte workspaces.
+WORK_PARENT="${NPMI_WORK_PARENT:-/tmp}"
+[[ -d "$WORK_PARENT" && ! -L "$WORK_PARENT" ]] || {
+  echo "NPMI_WORK_PARENT must be an existing non-symlink directory." >&2; exit 1;
+}
+WORK="$(mktemp -d "$WORK_PARENT/npmi-release-recovery.XXXXXXXX")"
 CREATED_APP=''
 CREATED_FW=''
 cleanup() {
@@ -41,6 +47,17 @@ cleanup() {
 }
 trap cleanup EXIT
 mkdir -p "$WORK/source" "$WORK/dist" "$WORK/oci"
+# These two architectures need compressed OCI contexts, four release image
+# bundles, and intermediate beta packaging. This is a conservative, bounded
+# minimum for a shared host; never discover a full disk during extraction.
+free_bytes="$(df -B1 --output=avail "$WORK" | tail -n 1 | tr -d '[:space:]')"
+min_bytes=$((10 * 1024 * 1024 * 1024))
+if [[ ! "$free_bytes" =~ ^[0-9]+$ || "$free_bytes" -lt "$min_bytes" ]]; then
+  echo "Insufficient build workspace: need 10 GiB free before starting." >&2
+  df -h "$WORK" >&2
+  echo "Set NPMI_WORK_PARENT to an existing filesystem with sufficient space." >&2
+  exit 1
+fi
 export GIT_TERMINAL_PROMPT=0
 
 echo '=== Validate source and release state ==='
@@ -137,7 +154,7 @@ check_docker_tar() {
   python3 - "$1" "$2" "$3" "$4" "$5" <<'PY'
 import json,sys,tarfile
 archive,tag,arch,revision,version=sys.argv[1:]
-with tarfile.open(archive, 'r:') as tf:
+with tarfile.open(archive, 'r:gz') as tf:
     manifest=json.load(tf.extractfile('manifest.json'))
     assert len(manifest)==1, 'Docker image archive must contain one image'
     assert tag in manifest[0]['RepoTags'], 'Image tag does not match'
@@ -156,7 +173,7 @@ for arch in amd64 arm64; do
     if [[ "$key" == beta ]]; then version='1.8.0-beta.2'; revision="$BETA_REV"; tag="$BETA_TAG"; fi
     src="$WORK/source/$key"
     app="ghcr.io/gigabytegrove/npm-improved:$tag"
-    out="$WORK/dist/$key-$arch-app.tar"
+    out="$WORK/dist/$key-$arch-app.tar.gz"
     echo "=== Incremental $tag linux/$arch ==="
     docker buildx build --builder "$BUILDER" --progress plain --pull=false \
       --platform "linux/$arch" \
@@ -166,18 +183,19 @@ for arch in amd64 arm64; do
       --build-arg "BUILD_COMMIT=$revision" \
       --build-arg "BUILD_DATE=$DATE" \
       -f "$src/docker/Dockerfile.incremental-release" \
-      -t "$app" --output "type=docker,dest=$out" "$src"
+      -t "$app" --output "type=docker,dest=-" "$src" | gzip -1 > "$out"
     check_docker_tar "$out" "$app" "$arch" "$revision" "$version"
     if [[ "$key" == stable ]]; then
       echo "=== Package stable $arch ==="
-      gzip -1 < "$out" > "$WORK/dist/npm-improved-$tag-linux-$arch.tar.gz"
+      mv -f "$out" "$WORK/dist/npm-improved-$tag-linux-$arch.tar.gz"
+      out="$WORK/dist/npm-improved-$tag-linux-$arch.tar.gz"
     else
       fw="ghcr.io/gigabytegrove/npm-improved-firewall:$tag"
-      fw_tar="$WORK/dist/beta-$arch-firewall.tar"
+      fw_tar="$WORK/dist/beta-$arch-firewall.tar.gz"
       echo "=== Cross-compile and test beta firewall $arch ==="
       docker buildx build --builder "$BUILDER" --progress plain \
         --platform "linux/$arch" -f "$src/docker/firewall/Dockerfile" \
-        -t "$fw" --output "type=docker,dest=$fw_tar" "$src"
+        -t "$fw" --output "type=docker,dest=-" "$src" | gzip -1 > "$fw_tar"
       if docker image inspect "$app" >/dev/null 2>&1 || docker image inspect "$fw" >/dev/null 2>&1; then
         echo 'Existing release tag on Docker daemon; refusing overwrite.' >&2
         exit 1
