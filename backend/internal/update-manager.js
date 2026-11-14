@@ -199,7 +199,7 @@ const verifyCurrentPassword = async (access, password) => {
  * systemd.path watches this queue on the Docker host and performs Compose
  * actions directly. No helper container or Docker Hub dependency.
  */
-const launchHandoff = async ({ action, targetImage, sourceVersion, targetVersion, initiatedBy, reinstall = false }) => {
+const launchHandoff = async ({ action, targetImage, sourceVersion, targetVersion, initiatedBy, channel = "stable", reinstall = false }) => {
 	const caps = capabilities();
 	if (!caps.enabled) {
 		throw new errs.ValidationError(caps.reason || "The native host updater is unavailable.");
@@ -214,6 +214,7 @@ const launchHandoff = async ({ action, targetImage, sourceVersion, targetVersion
 		mode: caps.deployment_mode,
 		source_version: sourceVersion || "unknown",
 		target_version: targetVersion || "unknown",
+		channel,
 		initiated_by: String(initiatedBy || ""),
 		reinstall: Boolean(reinstall),
 	};
@@ -295,6 +296,7 @@ const startReleaseOperation = async (access, release, password, { reinstall = fa
 			sourceVersion,
 			targetVersion,
 			initiatedBy,
+			channel,
 			reinstall,
 		});
 		await internalAuditLog.add(access, {
