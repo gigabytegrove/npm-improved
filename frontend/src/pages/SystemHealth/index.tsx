@@ -174,7 +174,8 @@ const SystemHealth = () => {
 										: "none yet"}
 								</div>
 							</HealthCard>
-							<HealthCard title="Firewall" icon={IconShieldLock} check={data.checks.firewall}>
+							{data.checks.firewall ? (
+								<HealthCard title="Firewall" icon={IconShieldLock} check={data.checks.firewall}>
 								{firewallError ? <div className="alert alert-danger mt-2" role="alert">{firewallError}</div> : null}
 								{firewallMessage ? <div className="alert alert-success mt-2" role="status">{firewallMessage}</div> : null}
 								<div>
@@ -243,7 +244,8 @@ const SystemHealth = () => {
 									{data.checks.firewall.enabled ? <Link to="/security">Manage firewall policy</Link>
 										: <Link to="/settings?section=firewall">Open firewall settings</Link>}
 								</div>
-							</HealthCard>
+								</HealthCard>
+							) : null
 						</div>
 					</>
 				) : null}
