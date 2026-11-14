@@ -64,6 +64,7 @@ const HealthCard = ({
 
 const SystemHealth = () => {
 	const { data, isLoading, error, isFetching } = useSystemHealth();
+	const firewall = data?.checks.firewall;
 	const { toggle, reconcile, confirm } = useFirewallActions();
 	const [firewallError, setFirewallError] = useState("");
 	const [firewallMessage, setFirewallMessage] = useState("");
@@ -174,34 +175,34 @@ const SystemHealth = () => {
 										: "none yet"}
 								</div>
 							</HealthCard>
-							{data.checks.firewall ? (
-								<HealthCard title="Firewall" icon={IconShieldLock} check={data.checks.firewall}>
+							{firewall ? (
+								<HealthCard title="Firewall" icon={IconShieldLock} check={firewall}>
 								{firewallError ? <div className="alert alert-danger mt-2" role="alert">{firewallError}</div> : null}
 								{firewallMessage ? <div className="alert alert-success mt-2" role="status">{firewallMessage}</div> : null}
 								<div>
-									Feature: <strong>{data.checks.firewall.enabled ? "enabled" : "disabled"}</strong>
+									Feature: <strong>{firewall.enabled ? "enabled" : "disabled"}</strong>
 								</div>
 								<div>
-									Packet filtering: <strong>{data.checks.firewall.enforced ? "active and verified" : "not enforced"}</strong>
+									Packet filtering: <strong>{firewall.enforced ? "active and verified" : "not enforced"}</strong>
 								</div>
-								<div>Companion: {data.checks.firewall.helperReady ? "reporting" : "unavailable"}</div>
-								<div>Policy state: {data.checks.firewall.state.replace(/_/g, " ")}</div>
-								{data.checks.firewall.releasePending ? (
+								<div>Companion: {firewall.helperReady ? "reporting" : "unavailable"}</div>
+								<div>Policy state: {firewall.state.replace(/_/g, " ")}</div>
+								{firewall.releasePending ? (
 									<div className="text-warning-emphasis">Waiting for the companion to release filtering rules.</div>
 								) : null}
-								{data.checks.firewall.enforced && (
+								{firewall.enforced && (
 									<div>
-										Dropped: {(data.checks.firewall.droppedPackets ?? 0).toLocaleString()} packets;
-										{" "}{(data.checks.firewall.droppedBytes ?? 0).toLocaleString()} bytes
+										Dropped: {(firewall.droppedPackets ?? 0).toLocaleString()} packets;
+										{" "}{(firewall.droppedBytes ?? 0).toLocaleString()} bytes
 									</div>
 								)}
-								{data.checks.firewall.helperError && data.checks.firewall.enabled ? (
-									<div className="text-danger">{data.checks.firewall.helperError}</div>
+								{firewall.helperError && firewall.enabled ? (
+									<div className="text-danger">{firewall.helperError}</div>
 								) : null}
-								{data.checks.firewall.pendingUntil ? (
+								{firewall.pendingUntil ? (
 									<div className="text-warning-emphasis">
 										Activation confirmation required before
-										{" "}{new Date(data.checks.firewall.pendingUntil).toLocaleTimeString()}.
+										{" "}{new Date(firewall.pendingUntil).toLocaleTimeString()}.
 									</div>
 								) : null}
 								<HasPermission section={ADMIN} permission={MANAGE} hideError>
@@ -210,14 +211,14 @@ const SystemHealth = () => {
 											className="btn btn-sm btn-outline-secondary"
 											type="button"
 											disabled={firewallBusy}
-											onClick={() => changeFirewallState(!data.checks.firewall.enabled)}
+											onClick={() => changeFirewallState(!firewall.enabled)}
 										>
-											{data.checks.firewall.enabled ? "Disable firewall" : "Enable firewall"}
+											{firewall.enabled ? "Disable firewall" : "Enable firewall"}
 										</button>
 										<button
 											className="btn btn-sm btn-outline-primary"
 											type="button"
-											disabled={firewallBusy || !data.checks.firewall.enabled}
+											disabled={firewallBusy || !firewall.enabled}
 											onClick={() => void runFirewallAction(
 												() => reconcile.mutateAsync(),
 												"Firewall policy reconciliation requested.",
@@ -225,11 +226,11 @@ const SystemHealth = () => {
 										>
 											Refresh policy
 										</button>
-										{data.checks.firewall.pendingUntil ? (
+										{firewall.pendingUntil ? (
 											<button
 												className="btn btn-sm btn-primary"
 												type="button"
-												disabled={firewallBusy || !data.checks.firewall.enforced}
+												disabled={firewallBusy || !firewall.enforced}
 												onClick={() => void runFirewallAction(
 													() => confirm.mutateAsync(),
 													"Firewall activation confirmed.",
@@ -241,7 +242,7 @@ const SystemHealth = () => {
 									</div>
 								</HasPermission>
 								<div className="mt-3">
-									{data.checks.firewall.enabled ? <Link to="/security">Manage firewall policy</Link>
+									{firewall.enabled ? <Link to="/security">Manage firewall policy</Link>
 										: <Link to="/settings?section=firewall">Open firewall settings</Link>}
 								</div>
 								</HealthCard>
