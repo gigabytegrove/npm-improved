@@ -24,18 +24,26 @@ docker info >/dev/null
 docker buildx version >/dev/null
 gh auth status -h github.com >/dev/null
 
-CACHE='/var/cache/npm-improved/releases'
-mkdir -p "$CACHE"
+# Keep reusable release inputs and disposable build work under /root.
+# The source checkout is managed separately by the operator; published
+# releases remain on GitHub, and the isolated BuildKit cache is persistent.
+BUILD_ROOT='/root/npm-improved-build'
+CACHE="$BUILD_ROOT/cache"
+WORK_PARENT="${NPMI_WORK_PARENT:-$BUILD_ROOT/tmp}"
+mkdir -p -- "$BUILD_ROOT" "$CACHE"
+[[ -d "$BUILD_ROOT" && ! -L "$BUILD_ROOT" && -d "$CACHE" && ! -L "$CACHE" ]] || {
+  echo 'NPMi build root/cache must be real directories, not symlinks.' >&2; exit 1;
+}
+# An explicit alternate work parent must already exist; the default /root
+# scratch directory may be created automatically.
+if [[ -z "${NPMI_WORK_PARENT:-}" ]]; then
+  mkdir -p -- "$WORK_PARENT"
+fi
+[[ -d "$WORK_PARENT" && ! -L "$WORK_PARENT" ]] || {
+  echo 'NPMI_WORK_PARENT must be an existing non-symlink directory.' >&2; exit 1;
+}
 exec 9>"$CACHE/.release.lock"
 flock -n 9 || { echo 'Another NPMi release is running.' >&2; exit 1; }
-# All large release artifacts stay on an explicitly selected filesystem.
-# A shared build machine must fail BEFORE writing multi-gigabyte workspaces.
-# Default to NPMi's disk-backed cache rather than the host's limited /tmp tmpfs.
-# An override is allowed only when the operator explicitly selects another path.
-WORK_PARENT="${NPMI_WORK_PARENT:-$CACHE}"
-[[ -d "$WORK_PARENT" && ! -L "$WORK_PARENT" ]] || {
-  echo "NPMI_WORK_PARENT must be an existing non-symlink directory." >&2; exit 1;
-}
 WORK="$(mktemp -d "$WORK_PARENT/npmi-release-recovery.XXXXXXXX")"
 CREATED_APP=''
 CREATED_FW=''
