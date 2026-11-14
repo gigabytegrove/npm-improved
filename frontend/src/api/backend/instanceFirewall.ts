@@ -15,6 +15,29 @@ export interface InstanceFirewallStatus {
 	droppedBytes: number | null;
 	managementPort: number;
 	warning: string;
+	hostLanIp: string | null;
+	instanceIp: string | null;
+	networkMode: "host" | "bridge" | "unverified";
+	networkInterfaces: Array<{ interface: string; address: string }>;
+	publicIpv4: string | null;
+	publicIpObservedAt: string | null;
+	liveRules: string | null;
+	liveRulesObservedAt: string | null;
+	desiredPolicy: {
+		schemaVersion: number;
+		mode: FirewallMode;
+		state: FirewallState;
+		managementPort: number;
+		managementNetworks: string[];
+		confirmBy: string;
+		ports: Array<{ port: number; protocol: "tcp" | "udp" }>;
+	} | null;
+	ports: Array<{ port: number; protocol: "tcp" | "udp"; sources: string[] }>;
+	exposurePlan: { required: Array<{
+		port: number; protocol: "tcp" | "udp";
+		dockerInstruction: string; routerInstruction: string;
+	}>; warnings: string[] };
+
 	config: {
 		configured: boolean;
 		enabled: boolean;
