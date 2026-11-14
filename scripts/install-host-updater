@@ -92,8 +92,8 @@ cat >"/etc/systemd/system/$UNIT-maintenance.timer" <<EOF
 Description=Check NPM Improved native updater version ($ROOT)
 
 [Timer]
-OnBootSec=5min
-OnUnitActiveSec=6h
+OnBootSec=2min
+OnUnitInactiveSec=5min
 Persistent=true
 Unit=$UNIT-maintenance.service
 
@@ -101,20 +101,28 @@ Unit=$UNIT-maintenance.service
 WantedBy=timers.target
 EOF
 
-# This installer may itself be running inside the maintenance oneshot.
-# Do not synchronously wait on newly queued systemd jobs from within that
-# same service: it can exceed the maintenance execution window.
-systemctl daemon-reload
-systemctl enable "$UNIT.path" "$UNIT-maintenance.timer" >/dev/null
-systemctl start --no-block "$UNIT.path" "$UNIT-maintenance.timer"
-
-for attempt in 1 2 3 4 5 6 7 8 9 10; do
-  if systemctl is-active --quiet "$UNIT.path" &&
-     systemctl is-active --quiet "$UNIT-maintenance.timer"; then
-    break
-  fi
-  sleep 1
-done
+# A protocol-1 updater calls this installer while its OWN systemd service
+# is running. Reloading that service synchronously from inside itself can
+# exceed the protocol-1 maintenance timeout and leave the app on protocol 1.
+# Existing active units already point at the exact per-installation BIN paths;
+# replacing the executables is sufficient and does not require a reload.
+if systemctl is-active --quiet "$UNIT.path" &&
+   systemctl is-active --quiet "$UNIT-maintenance.timer" &&
+   systemctl is-enabled --quiet "$UNIT.path" &&
+   systemctl is-enabled --quiet "$UNIT-maintenance.timer"; then
+  echo "Existing native updater units active; verified program refresh will take effect without a synchronous self-reload."
+else
+  systemctl daemon-reload
+  systemctl enable "$UNIT.path" "$UNIT-maintenance.timer" >/dev/null
+  systemctl start --no-block "$UNIT.path" "$UNIT-maintenance.timer"
+  for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    if systemctl is-active --quiet "$UNIT.path" &&
+       systemctl is-active --quiet "$UNIT-maintenance.timer"; then
+      break
+    fi
+    sleep 1
+  done
+fi
 
 systemctl is-active --quiet "$UNIT.path" || {
   echo "The native NPMi update request watcher did not activate." >&2; exit 1;
