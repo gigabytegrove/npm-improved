@@ -19,11 +19,16 @@ export function normalizeNetwork(value) {
 
 export function normalizeInstanceSecurity(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new RangeError("Invalid instance security configuration.");
-  const allowed = ["mode", "state", "trustedNetworks", "trusted_networks", "hostLanIp", "host_lan_ip", "acknowledgedDmz", "acknowledged_dmz"];
+  const allowed = ["enabled", "mode", "state", "trustedNetworks", "trusted_networks", "hostLanIp", "host_lan_ip", "acknowledgedDmz", "acknowledged_dmz"];
   if (Object.keys(input).some((key) => !allowed.includes(key))) throw new RangeError("Unexpected security setting.");
   if (!DEPLOYMENT_MODES.includes(input.mode)) throw new RangeError("Choose a valid deployment model.");
+  if (input.enabled !== undefined && typeof input.enabled !== "boolean") {
+    throw new RangeError("Firewall enabled must be a boolean.");
+  }
+  const enabled = input.enabled !== false;
   const state = input.state || "deferred";
   if (!["active", "deferred"].includes(state)) throw new RangeError("Invalid firewall state.");
+  if (!enabled && state === "active") throw new RangeError("A disabled firewall cannot enforce a policy.");
   if (input.mode === "unmanaged" && state === "active") throw new RangeError("An external firewall is not managed by NPMi.");
   if (input.mode === "dmz" && (input.acknowledgedDmz ?? input.acknowledged_dmz) !== true) throw new RangeError("Acknowledge the router DMZ security warning.");
   const suppliedNetworks = input.trustedNetworks ?? input.trusted_networks;
@@ -41,6 +46,7 @@ export function normalizeInstanceSecurity(input) {
   }
   return {
     configured: true,
+    enabled,
     mode: input.mode,
     state,
     trustedNetworks,
@@ -76,7 +82,7 @@ export function buildInstancePolicy(config, streams, managementPort = 81) {
   return {
     schemaVersion: 1,
     mode: config.mode,
-    state: config.state,
+    state: config.enabled === false ? "deferred" : config.state,
     managementPort,
     managementNetworks: config.trustedNetworks,
     confirmBy: config.pendingActivation?.deadline || "",
