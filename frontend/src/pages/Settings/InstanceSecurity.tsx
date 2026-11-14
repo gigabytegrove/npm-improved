@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Alert } from "react-bootstrap";
+import { Link } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
+import { FIREWALL_QUERY_KEY } from "src/hooks/useInstanceFirewall";
 import * as api from "src/api/backend/base";
 
 type Mode = "static" | "forwarded" | "dmz" | "unmanaged";
@@ -10,6 +13,7 @@ type Configuration = {
   trustedNetworks: string[]; hostLanIp: string; acknowledgedDmz: boolean;
 };
 type SecurityStatus = {
+  enabled: boolean;
   config: Configuration;
   state: string;
   enforced: boolean;
@@ -39,6 +43,13 @@ const models: Array<{ value: Mode; title: string; description: string }> = [
 const defaultNetworks = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"].join("\n");
 
 export default function InstanceSecurity() {
+  const queryClient = useQueryClient();
+  const invalidateFirewall = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: FIREWALL_QUERY_KEY }),
+      queryClient.invalidateQueries({ queryKey: ["system-health"] }),
+    ]);
+  };
   const [status, setStatus] = useState<SecurityStatus | null>(null);
   const [mode, setMode] = useState<Mode>("unmanaged");
   const [networks, setNetworks] = useState(defaultNetworks);
@@ -69,6 +80,10 @@ export default function InstanceSecurity() {
 
   const save = async (nextState: FirewallState) => {
     if (busy) return;
+    if (status?.enabled !== true) {
+      setError("Enable firewall functionality in Settings before changing enforcement.");
+      return;
+    }
     setError("");
     setMessage("");
     if (mode === "dmz" && !acknowledgedDmz) {
@@ -84,6 +99,7 @@ export default function InstanceSecurity() {
       await api.put({
         url: "/instance-security",
         data: {
+          enabled: true,
           mode, state: mode === "unmanaged" ? "deferred" : nextState,
           trustedNetworks: networks.split(/\r?\n/).map((line) => line.trim()).filter(Boolean),
           hostLanIp: hostLanIp.trim(),
@@ -91,6 +107,7 @@ export default function InstanceSecurity() {
         },
       });
       await load();
+      await invalidateFirewall();
       setConfirmActivation(false);
       setMessage(nextState === "active" && mode !== "unmanaged"
         ? "Temporary policy applied. Verify connectivity and confirm activation within two minutes or it will automatically revert."
@@ -108,6 +125,7 @@ export default function InstanceSecurity() {
     try {
       await api.post({ url: "/instance-security/confirm", data: {} });
       await load();
+      await invalidateFirewall();
       setMessage("Firewall activation confirmed.");
     } catch (e: any) {
       setError(e?.message || "Unable to confirm firewall activation.");
@@ -115,6 +133,21 @@ export default function InstanceSecurity() {
   };
 
   if (loading) return <main aria-busy="true" className="p-4">Loading instance security...</main>;
+
+  if (status && !status.enabled) {
+    return (
+      <main className="container-fluid py-4" style={{ maxWidth: 1120 }}>
+        <h1 className="h2">Firewall disabled</h1>
+        <p className="text-secondary">
+          Firewall functionality was disabled for this instance. NPMi has released its
+          managed filtering rules. Existing proxy and stream routing remains unchanged.
+        </p>
+        <Link className="btn btn-primary" to="/settings?section=firewall">
+          Enable firewall in Settings
+        </Link>
+      </main>
+    );
+  }
 
   return (
     <main className="container-fluid py-4" style={{ maxWidth: 1120 }}>
