@@ -73,6 +73,24 @@ test("master switch validates booleans and refuses disabled active policies", ()
   assert.equal(buildInstancePolicy(disabled, []).state, "deferred");
 });
 
+test("master switch preserves incomplete first-run security setup", () => {
+  const initial = {
+    configured: false,
+    enabled: true,
+    mode: "static",
+    state: "deferred",
+    trustedNetworks: ["10.0.0.0/8"],
+    hostLanIp: "",
+    acknowledgedDmz: false,
+  };
+  const disabled = switchInstanceFirewall(initial, false);
+  assert.equal(disabled.configured, false);
+  assert.equal(disabled.enabled, false);
+  const restored = switchInstanceFirewall(disabled, true);
+  assert.equal(restored.configured, false);
+  assert.equal(restored.state, "deferred");
+});
+
 test("switching firewall off and back on preserves trusted networks, never auto-activates", () => {
   const initial = normalizeInstanceSecurity({
     enabled: true, mode: "forwarded", state: "active",
