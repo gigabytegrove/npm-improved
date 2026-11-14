@@ -2,6 +2,7 @@
 import hashlib
 import io
 import socket
+import subprocess
 from unittest import mock
 from urllib.error import HTTPError, URLError
 from pathlib import Path
@@ -46,6 +47,39 @@ class HostUpdaterBundleTests(unittest.TestCase):
                 set(file.relative_to(stage).as_posix() for file in stage.rglob("*") if file.is_file()),
                 set(module.PROGRAMS),
             )
+
+    def test_prerelease_package_requires_companion_overlay(self):
+        archive = io.BytesIO()
+        with tarfile.open(fileobj=archive, mode="w:gz") as tf:
+            for name in module.PROGRAMS + ("compose.firewall.yaml",):
+                content = (
+                    b"1.8.0-beta.1\n" if name == ".version"
+                    else b"services: {}\n" if name == "compose.firewall.yaml"
+                    else b"#!/bin/sh\nexit 0\n"
+                )
+                member = tarfile.TarInfo(name)
+                member.size = len(content)
+                tf.addfile(member, io.BytesIO(content))
+        payload = archive.getvalue()
+        checksum = (hashlib.sha256(payload).hexdigest()
+                    + "  npm-improved-v1.8.0-beta.1-host-updater.tar.gz\n").encode()
+        with tempfile.TemporaryDirectory() as dirname:
+            module.verify_and_extract("1.8.0-beta.1", checksum, payload, Path(dirname))
+            self.assertTrue((Path(dirname) / "compose.firewall.yaml").is_file())
+
+        missing = archive = io.BytesIO()
+        with tarfile.open(fileobj=missing, mode="w:gz") as tf:
+            for name in module.PROGRAMS:
+                content = b"1.8.0-beta.1\n" if name == ".version" else b"x"
+                member = tarfile.TarInfo(name)
+                member.size = len(content)
+                tf.addfile(member, io.BytesIO(content))
+        package = missing.getvalue()
+        checksum = (hashlib.sha256(package).hexdigest()
+                    + "  npm-improved-v1.8.0-beta.1-host-updater.tar.gz\n").encode()
+        with tempfile.TemporaryDirectory() as dirname:
+            with self.assertRaisesRegex(ValueError, "unexpected"):
+                module.verify_and_extract("1.8.0-beta.1", checksum, package, Path(dirname))
 
     def test_checksum_mismatch_rejected(self):
         tarball = self.archive()
@@ -142,6 +176,26 @@ class HostUpdaterBundleTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "downgrade"):
                     module.maintain(root, "1.6.15", force=True)
 
+    def test_prerelease_versions_are_ordered_without_downgrading_stable(self):
+        self.assertTrue(module.newer_than("1.8.0-beta.1", "1.7.7"))
+        self.assertTrue(module.newer_than("1.8.0-beta.2", "1.8.0-beta.1"))
+        self.assertTrue(module.newer_than("1.8.0-rc.1", "1.8.0-beta.5"))
+        self.assertTrue(module.newer_than("1.8.0", "1.8.0-rc.5"))
+        self.assertFalse(module.newer_than("1.8.0-beta.1", "1.8.0"))
+        self.assertFalse(module.newer_than("1.7.7", "1.8.0-beta.1"))
+
+    def test_maintenance_timeout_is_summarized_not_exposed(self):
+        error = subprocess.TimeoutExpired(
+            ["/bin/bash", "/tmp/sensitive/scripts/install-host-updater", "/opt/npm-improved"],
+            timeout=45,
+        )
+        message = module.explain_maintenance_error(error)
+        self.assertIn("maintenance", message.lower())
+        self.assertIn("retry", message.lower())
+        self.assertNotIn("/tmp/sensitive", message)
+        self.assertNotIn("/opt/npm-improved", message)
+        self.assertNotIn("45", message)
+
     def test_only_forward_versions_install(self):
         self.assertTrue(module.newer_than("1.4.2", "1.4.1"))
         self.assertFalse(module.newer_than("1.4.2", "1.4.2"))
@@ -149,7 +203,7 @@ class HostUpdaterBundleTests(unittest.TestCase):
         self.assertTrue(module.newer_than("1.4.2", "legacy"))
         for value in ("../../tmp/x", "1.4.2-rc", "", "latest"):
             with tempfile.TemporaryDirectory() as dirname:
-                with self.assertRaisesRegex(ValueError, "stable semantic version"):
+                with self.assertRaisesRegex(ValueError, "published NPMi release version"):
                     module.verify_and_extract(value, b"", b"", Path(dirname))
 
 
