@@ -90,7 +90,18 @@ verify_base_images() (
     END { if (na != 1 || nb != 1) exit 1 }
   ' "$BASE_SUM" | sha256sum -c -
 )
-if ! verify_base_images "$BASE_CACHE"; then
+if [[ -n "${NPMI_BASE_ARCHIVE_DIR:-}" ]]; then
+  # Reuse the retained, already-downloaded base images from an interrupted run.
+  # Explicit paths are read-only here; reject an invalid cache instead of
+  # overwriting its contents or silently downloading 1.2 GB again.
+  [[ -d "$NPMI_BASE_ARCHIVE_DIR" ]] || {
+    echo "Retained archive directory does not exist: $NPMI_BASE_ARCHIVE_DIR" >&2; exit 1;
+  }
+  verify_base_images "$NPMI_BASE_ARCHIVE_DIR" || {
+    echo "Retained base archives failed SHA-256 verification; nothing overwritten." >&2; exit 1;
+  }
+  BASE_CACHE="$NPMI_BASE_ARCHIVE_DIR"
+elif ! verify_base_images "$BASE_CACHE"; then
   mkdir -p "$WORK/base-download"
   gh release download "$BASE_TAG" -R "$REPO" -D "$WORK/base-download" \
     -p "$BASE_AMD64" -p "$BASE_ARM64" -p "$BASE_SUM"
