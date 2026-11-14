@@ -107,7 +107,8 @@ export default function Update() {
 
 	const active = ACTIVE_STATES.has(data?.status?.state || "");
 	const updateAvailable = Boolean(data?.release?.updateAvailable);
-	const installableUpdate = updateAvailable && (releaseChannel === "stable" || Boolean(data?.capabilities?.hostUpdaterPrereleaseSupport));
+	const installableUpdate = updateAvailable && data?.release?.platformAvailable === true &&
+		(releaseChannel === "stable" || Boolean(data?.capabilities?.hostUpdaterPrereleaseSupport));
 	const updaterReady = Boolean(data?.capabilities?.enabled);
 	const reinstallHostReady = Boolean(
 		data?.capabilities?.hostUpdaterAutomaticMaintenance &&
@@ -277,6 +278,11 @@ export default function Update() {
 												: `No newer ${releaseChannel} release is available.`}
 							</div>
 
+							{updateAvailable && data?.release?.platformAvailable === false ? (
+								<div className="text-secondary small mt-2" role="status">
+									Published release available, but no Docker image has been published for this host architecture ({data.release.platformArch || "unknown"}).
+								</div>
+							) : null}
 							{published ? (
 								<div className="text-secondary small mt-1">Latest release published {published}</div>
 							) : null}
