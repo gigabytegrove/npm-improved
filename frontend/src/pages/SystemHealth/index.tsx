@@ -185,6 +185,9 @@ const SystemHealth = () => {
 								</div>
 								<div>Companion: {data.checks.firewall.helperReady ? "reporting" : "unavailable"}</div>
 								<div>Policy state: {data.checks.firewall.state.replace(/_/g, " ")}</div>
+								{data.checks.firewall.releasePending ? (
+									<div className="text-warning-emphasis">Waiting for the companion to release filtering rules.</div>
+								) : null}
 								{data.checks.firewall.enforced && (
 									<div>
 										Dropped: {(data.checks.firewall.droppedPackets ?? 0).toLocaleString()} packets;
