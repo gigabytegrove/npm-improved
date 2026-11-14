@@ -120,11 +120,13 @@ const checkCertificates = () => {
 const checkFirewall = async () => {
   try {
     const firewall = await getInstanceSecurityStatus();
-    const health = !firewall.enabled ? "disabled" : firewall.enforced ? "ok" : "degraded";
+    const health = firewall.releasePending ? "degraded" :
+      !firewall.enabled ? "disabled" : firewall.enforced ? "ok" : "degraded";
     return {
       status: health,
       enabled: firewall.enabled,
       enforced: firewall.enforced,
+      release_pending: firewall.releasePending,
       state: firewall.state,
       helper_ready: firewall.helperReady,
       helper_error: firewall.helperError,
@@ -136,7 +138,7 @@ const checkFirewall = async () => {
     };
   } catch {
     return degraded({
-      enabled: true, enforced: false, state: "needs_attention",
+      enabled: true, enforced: false, release_pending: false, state: "needs_attention",
       helper_ready: false, helper_error: "Firewall health could not be checked.",
     });
   }
