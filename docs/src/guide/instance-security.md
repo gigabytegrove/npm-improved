@@ -109,5 +109,6 @@ namespace and do not include traffic dropped by upstream firewalls.
 The companion only mounts `./data/instance-security/firewall` and cannot
 read the separate encrypted Dynamic DNS records or encryption key in the
 parent `instance-security` directory. The parent remains mode `0700` owned
-by the NPMi runtime user; the firewall subdirectory is `0755`, and its
-policy and status files are readable by the non-root backend and companion.
+by the NPMi runtime user; the firewall subdirectory is `0770`, and the companion is a member of the
+NPMi runtime group. Neither service requires broad filesystem override
+capabilities, and the policy/status files remain readable to both.

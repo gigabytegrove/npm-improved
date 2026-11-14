@@ -13,6 +13,10 @@ export default function InstanceSecurityNotice() {
   const [unconfigured, setUnconfigured] = useState(false);
 
   useEffect(() => {
+    if (location.pathname === "/security") {
+      setUnconfigured(false);
+      return;
+    }
     let active = true;
     void api.get({ url: "/instance-security" })
       .then((status: { config?: { configured?: boolean } }) => {

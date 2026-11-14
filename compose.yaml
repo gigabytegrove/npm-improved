@@ -55,6 +55,9 @@ services:
       - ALL
     cap_add:
       - NET_ADMIN
+    # Match the NPMi runtime group: no CAP_DAC_OVERRIDE required.
+    group_add:
+      - "${PGID:-1000}"
     security_opt:
       - no-new-privileges:true
     read_only: true

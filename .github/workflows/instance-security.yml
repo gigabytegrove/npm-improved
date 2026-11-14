@@ -35,7 +35,7 @@ jobs:
         run: |
           set -euo pipefail
           POLICY_DIR="$(mktemp -d)"
-          chmod 755 "$POLICY_DIR"
+          chmod 770 "$POLICY_DIR"
           cat > "$POLICY_DIR/policy.json" <<'JSON'
           {
             "schemaVersion": 1,
@@ -54,7 +54,7 @@ jobs:
           chmod 644 "$POLICY_DIR/policy.json"
           docker run -d --name npmi-firewall-smoke \
             --network none --cap-drop ALL --cap-add NET_ADMIN \
-            --security-opt no-new-privileges:true \
+            --group-add "$(id -g)" --security-opt no-new-privileges:true \
             -v "$POLICY_DIR:/policy" npmi-firewall:ci
           trap 'docker rm -f npmi-firewall-smoke >/dev/null 2>&1 || true; rm -rf "$POLICY_DIR"' EXIT
           sleep 8

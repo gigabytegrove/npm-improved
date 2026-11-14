@@ -30,7 +30,8 @@ internet-reachable merely because a firewall permission is present.
 
 The companion receives **only** `./data/instance-security/firewall:/policy`.
 The separate DDNS key and encrypted records stay in the parent directory,
-which is not mounted into the firewall service. The policy directory is
-traversable, the policy file is world-readable inside the namespace (it
-contains no secrets), and the status file is readable by the non-root
-NPMi backend. The s6 startup process normalizes ownership safely.
+which is not mounted into the firewall service. The policy directory is owned by the NPMi runtime user/group with mode
+`0770`. The companion joins only that group via Compose `group_add`, so it
+can write status without CAP_DAC_OVERRIDE or exposing any other NPMi data.
+The policy file contains no secrets; the status file is readable by the
+non-root NPMi backend. The s6 startup process normalizes ownership safely.

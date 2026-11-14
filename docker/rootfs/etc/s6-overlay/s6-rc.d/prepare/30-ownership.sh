@@ -51,7 +51,7 @@ done
 mkdir -p /data/instance-security/firewall
 chown "$PUID:$PGID" /data/instance-security /data/instance-security/firewall
 chmod 0700 /data/instance-security
-chmod 0755 /data/instance-security/firewall
+chmod 0770 /data/instance-security/firewall
 
 # Ensure the JWT key file is owned by the runtime user, even when the /data
 # directory ownership already matches PUID:PGID (chownit skips recursion then)
