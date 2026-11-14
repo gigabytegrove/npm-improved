@@ -13,8 +13,9 @@ import { global as logger } from "../logger.js";
 
 const directory = process.env.NPM_INSTANCE_SECURITY_DIR || "/data/instance-security";
 const configPath = path.join(directory, "config.json");
-const policyPath = path.join(directory, "policy.json");
-const statusPath = path.join(directory, "status.json");
+const policyDirectory = path.join(directory, "firewall");
+const policyPath = path.join(policyDirectory, "policy.json");
+const statusPath = path.join(policyDirectory, "status.json");
 const managementPort = Number(process.env.NPM_ADMIN_PORT || "81");
 let reconciling = null;
 
@@ -29,9 +30,12 @@ function readJSON(filename, fallback) {
 
 function atomicJSON(filename, value) {
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  if (path.dirname(filename) === policyDirectory) {
+    fs.mkdirSync(policyDirectory, { recursive: true, mode: 0o755 });
+  }
   const temporary = filename + "." + crypto.randomUUID() + ".tmp";
   try {
-    fs.writeFileSync(temporary, JSON.stringify(value, null, 2) + "\n", { mode: 0o600, flag: "wx" });
+    fs.writeFileSync(temporary, JSON.stringify(value, null, 2) + "\n", { mode: filename === policyPath ? 0o644 : 0o600, flag: "wx" });
     fs.renameSync(temporary, filename);
   } finally {
     try { fs.unlinkSync(temporary); } catch { /* Temporary file already absent or cleanup failed. */ }

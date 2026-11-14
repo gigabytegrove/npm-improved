@@ -103,3 +103,11 @@ The companion records dropped packet and byte counters for the active policy.
 Counters reset when the policy changes; they are not a count of distinct
 attackers or blocked connections. These counters apply only to NPMi's network
 namespace and do not include traffic dropped by upstream firewalls.
+
+## Filesystem boundary
+
+The companion only mounts `./data/instance-security/firewall` and cannot
+read the separate encrypted Dynamic DNS records or encryption key in the
+parent `instance-security` directory. The parent remains mode `0700` owned
+by the NPMi runtime user; the firewall subdirectory is `0755`, and its
+policy and status files are readable by the non-root backend and companion.

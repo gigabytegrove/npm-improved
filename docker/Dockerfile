@@ -105,6 +105,8 @@ COPY docker/rootfs/etc/nginx/conf.d/include/force-ssl.conf /etc/nginx/conf.d/inc
 COPY docker/rootfs/etc/nginx/conf.d/default.conf /etc/nginx/conf.d/default.conf
 COPY docker/rootfs/etc/s6-overlay/s6-rc.d/prepare/00-all.sh /etc/s6-overlay/s6-rc.d/prepare/00-all.sh
 COPY docker/rootfs/etc/s6-overlay/s6-rc.d/prepare/26-analytics.sh /etc/s6-overlay/s6-rc.d/prepare/26-analytics.sh
+COPY docker/rootfs/etc/s6-overlay/s6-rc.d/prepare/20-paths.sh /etc/s6-overlay/s6-rc.d/prepare/20-paths.sh
+COPY docker/rootfs/etc/s6-overlay/s6-rc.d/prepare/30-ownership.sh /etc/s6-overlay/s6-rc.d/prepare/30-ownership.sh
 WORKDIR /app
 COPY backend/ /app/
 COPY --from=frontend-builder /build/frontend/dist/ /app/frontend/

@@ -59,7 +59,7 @@ services:
       - no-new-privileges:true
     read_only: true
     volumes:
-      - ./data/instance-security:/policy
+      - ./data/instance-security/firewall:/policy
     depends_on:
       app:
         condition: service_started

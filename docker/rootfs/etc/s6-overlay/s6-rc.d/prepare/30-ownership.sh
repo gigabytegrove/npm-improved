@@ -46,6 +46,13 @@ for loc in "${locations[@]}"; do
 	chownit "$loc"
 done
 
+# Keep sensitive DDNS credentials private to the backend. The nftables
+# companion sees only the dedicated firewall subdirectory bind mount.
+mkdir -p /data/instance-security/firewall
+chown "$PUID:$PGID" /data/instance-security /data/instance-security/firewall
+chmod 0700 /data/instance-security
+chmod 0755 /data/instance-security/firewall
+
 # Ensure the JWT key file is owned by the runtime user, even when the /data
 # directory ownership already matches PUID:PGID (chownit skips recursion then)
 if [ -f /data/keys.json ]; then
