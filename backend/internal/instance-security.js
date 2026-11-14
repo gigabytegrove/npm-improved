@@ -1,7 +1,8 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
+import { observedNetworkIdentity } from "../lib/instance-network-observation.js";
+import { observePublicIpv4 } from "../lib/dynamic-dns.js";
 import streamModel from "../models/stream.js";
 import {
   DEFAULT_MANAGEMENT_NETWORKS,
@@ -168,10 +169,15 @@ export async function getInstanceSecurityStatus() {
   const state = disabling ? "disabling" : disabledUnverified ? "disabled_unverified" : !enabled ? "disabled" : !config.configured ? "not_configured" : config.mode === "unmanaged" ? "unmanaged" :
     config.state === "deferred" ? "deferred" : enforced ?
       (config.pendingActivation ? "activation_pending" : "active") : "needs_attention";
-  // In bridge networking, the container's interface address is NOT the host's LAN address.
-  const containerAddresses = Object.values(os.networkInterfaces()).flat()
-    .filter((entry) => entry && !entry.internal && entry.family === "IPv4")
-    .map((entry) => entry.address);
+  // The addresses visible here are the container's in bridge mode, and the
+  // host's in host-network mode. Public IPv4 is independently observed and
+  // does not prove inbound reachability or router forwarding.
+  const network = observedNetworkIdentity();
+  const publicObservation = await observePublicIpv4();
+  const hostLanIp = config.hostLanIp || process.env.NPM_HOST_LAN_IP || null;
+  const observedRules = helperReady && helper?.state === "active" &&
+    helper.liveRulesObserved === true && typeof helper.liveRules === "string"
+      ? helper.liveRules : null;
   return {
     config: { ...config, enabled }, enabled, state, enforced, helperReady, releasePending,
     droppedPackets: enforced && Number.isSafeInteger(helper?.droppedPackets) ? helper.droppedPackets : null,
@@ -180,9 +186,20 @@ export async function getInstanceSecurityStatus() {
     helperError: helperReady ? (helper.error || null) : "Firewall helper is not reporting.",
     managementPort, ports,
     dockerPublishing: "unverified",
-    exposurePlan: buildExposurePlan(config.mode, ports, config.hostLanIp || process.env.NPM_HOST_LAN_IP || ""),
-    hostLanIp: config.hostLanIp || process.env.NPM_HOST_LAN_IP || null,
-    containerAddresses,
+    exposurePlan: buildExposurePlan(config.mode, ports, hostLanIp || ""),
+    hostLanIp,
+    instanceIp: network.instanceIp,
+    networkMode: network.networkMode,
+    networkInterfaces: network.interfaces,
+    containerAddresses: network.interfaces.map(({ address }) => address),
+    publicIpv4: publicObservation.address,
+    publicIpObservedAt: publicObservation.checkedAt
+      ? new Date(publicObservation.checkedAt).toISOString() : null,
+    // These are the actual kernel table rules read by the namespace-scoped
+    // companion, not an invented representation of the intended policy.
+    liveRules: observedRules,
+    liveRulesObservedAt: observedRules ? helper.checkedAt : null,
+    desiredPolicy: readJSON(policyPath, null),
     warning: "NPMi filters its Docker instance network namespace, not the router or other containers. Docker port publishing and router forwarding are independent.",
   };
 }
