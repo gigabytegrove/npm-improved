@@ -20,6 +20,8 @@ const (
   tableName = "npmi_instance"
 )
 
+var lastAppliedHash string
+
 type portRule struct {
   Port int
   Protocol string
@@ -131,12 +133,44 @@ func releasePolicy() error {
   return runNft("", "delete", "table", "inet", tableName)
 }
 
+func parseDroppedPackets(data []byte) (uint64, uint64) {
+  var document struct {
+    Nftables []struct {
+      Rule *struct { Expr []map[string]json.RawMessage `json:"expr"` } `json:"rule"`
+    } `json:"nftables"`
+  }
+  if err := json.Unmarshal(data, &document); err != nil { return 0, 0 }
+  for _, item := range document.Nftables {
+    if item.Rule == nil { continue }
+    expressions := item.Rule.Expr
+    for i, expression := range expressions {
+      if _, drops := expression["drop"]; !drops || i < 1 { continue }
+      var counter struct { Packets uint64 `json:"packets"`; Bytes uint64 `json:"bytes"` }
+      if data, ok := expressions[i-1]["counter"]; ok {
+        if json.Unmarshal(data, &counter) == nil { return counter.Packets, counter.Bytes }
+      }
+    }
+  }
+  return 0, 0
+}
+
+func droppedPackets() (uint64, uint64) {
+  output, err := exec.Command("nft", "-j", "list", "chain", "inet", tableName, "incoming").Output()
+  if err != nil { return 0, 0 }
+  return parseDroppedPackets(output)
+}
+
 func writeStatus(state, hash string, err error) {
   status := map[string]any {
     "checkedAt": time.Now().UTC().Format(time.RFC3339),
     "state": state, "policyHash": hash,
   }
   if err != nil { status["error"] = err.Error() }
+  if state == "active" {
+    packets, bytes := droppedPackets()
+    status["droppedPackets"] = packets
+    status["droppedBytes"] = bytes
+  }
   data, marshalErr := json.MarshalIndent(status, "", "  ")
   if marshalErr != nil { return }
   tmp := statusFile + ".tmp"
@@ -174,10 +208,14 @@ func reconcile() {
   }
   if p.Mode == "unmanaged" || p.State == "deferred" {
     if err := releasePolicy(); err != nil { writeStatus("needs_attention", "", err); return }
+    lastAppliedHash = ""
     writeStatus("deferred", hash, nil)
     return
   }
-  if err := applyPolicy(p); err != nil { writeStatus("needs_attention", "", err); return }
+  if lastAppliedHash != hash || runNft("", "list", "chain", "inet", tableName, "incoming") != nil {
+    if err := applyPolicy(p); err != nil { writeStatus("needs_attention", "", err); return }
+    lastAppliedHash = hash
+  }
   writeStatus("active", hash, nil)
 }
 

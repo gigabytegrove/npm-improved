@@ -1,5 +1,6 @@
 import { lazy, Suspense, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import InstanceSecurityNotice from "src/components/InstanceSecurityNotice";
 import {
 	ErrorNotFound,
 	LoadingPage,
@@ -104,6 +105,7 @@ function Router() {
 					<div className="npmi-workspace">
 						<SiteHeader menuOpen={mobileMenuOpen} onToggleMenu={() => setMobileMenuOpen((open) => !open)} />
 						<SiteContainer>
+							<InstanceSecurityNotice />
 							<Suspense fallback={<LoadingPage noLogo />}>
 								<Routes>
 									<Route path="*" element={<ErrorNotFound />} />

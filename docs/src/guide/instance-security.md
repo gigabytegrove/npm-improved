@@ -89,3 +89,17 @@ protect publicly published management port 81. Protect the management
 listener at the router/host firewall, and ideally do not forward port 81
 at all. The companion reports whether its instance rules were installed,
 not whether a particular remote client can bypass router restrictions.
+
+## Confirmation rollback and monitoring
+
+Activating managed filtering starts a 120-second confirmation window. The
+nftables companion automatically releases the temporary policy if the
+administrator does not confirm it in the UI, even if the NPMi backend stops
+responding. The backend also restores the previous policy after the deadline;
+if the previous policy was already active, it reinstates that known state.
+Policy status and the current policy digest must match before confirmation.
+
+The companion records dropped packet and byte counters for the active policy.
+Counters reset when the policy changes; they are not a count of distinct
+attackers or blocked connections. These counters apply only to NPMi's network
+namespace and do not include traffic dropped by upstream firewalls.

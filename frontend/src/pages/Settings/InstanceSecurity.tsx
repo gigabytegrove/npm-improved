@@ -21,6 +21,9 @@ type SecurityStatus = {
   dockerPublishing: string;
   ports: Port[];
   warning: string;
+  pendingUntil: string | null;
+  droppedPackets: number | null;
+  droppedBytes: number | null;
 };
 const models: Array<{ value: Mode; title: string; description: string }> = [
   { value: "static", title: "Static IP — Managed",
@@ -89,13 +92,25 @@ export default function InstanceSecurity() {
       await load();
       setConfirmActivation(false);
       setMessage(nextState === "active" && mode !== "unmanaged"
-        ? "Configuration saved. Verify the observed enforcement status below."
+        ? "Temporary policy applied. Verify connectivity and confirm activation within two minutes or it will automatically revert."
         : "Instance security configuration saved.");
     } catch (e: any) {
       setError(e?.message || "Unable to save instance security.");
     } finally {
       setBusy(false);
     }
+  };
+
+  const confirmPending = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await api.post({ url: "/instance-security/confirm", data: {} });
+      await load();
+      setMessage("Firewall activation confirmed.");
+    } catch (e: any) {
+      setError(e?.message || "Unable to confirm firewall activation.");
+    } finally { setBusy(false); }
   };
 
   if (loading) return <main aria-busy="true" className="p-4">Loading instance security...</main>;
@@ -110,17 +125,30 @@ export default function InstanceSecurity() {
       {error ? <Alert variant="danger" role="alert">{error}</Alert> : null}
       {message ? <Alert variant="success" role="status">{message}</Alert> : null}
 
+      {status?.pendingUntil ? (
+        <Alert variant="warning" role="alert">
+          <strong>Activation must be confirmed.</strong> This temporary firewall policy will automatically revert after {new Date(status.pendingUntil).toLocaleTimeString()} if not confirmed.
+          <div className="mt-2">
+            <button className="btn btn-primary" type="button" disabled={busy || !status.enforced}
+              onClick={() => void confirmPending()}>Confirm firewall activation</button>
+          </div>
+          {!status.enforced ? <p className="mt-2 mb-0">Awaiting a verified response from the firewall companion. Refresh status to retry.</p> : null}
+        </Alert>
+      ) : null}
       {status ? (
         <section className="mb-4" aria-label="Enforcement status">
           <h2 className="h4">Current protection</h2>
           <p className="mb-2"><strong>Firewall: {status.state.replace(/_/g, " ")}</strong>
-            {" — "}{status.enforced ? "The companion reported the policy applied inside the NPMi network namespace; upstream reachability and source-address fidelity are not verified." :
+            {" — "}{status.enforced ? "The companion reported the policy applied inside NPMi; router restrictions and source-address fidelity are not verified." :
               status.state === "unmanaged" ? "Network filtering is delegated to your external firewall." :
               status.state === "deferred" ? "NPMi is not filtering inbound network traffic." :
               "Enforcement has not been verified."}</p>
           {status.helperError && status.state !== "unmanaged" && status.state !== "deferred"
             ? <Alert variant="warning">{status.helperError}</Alert> : null}
           <p className="text-secondary small">{status.warning}</p>
+          {status.enforced && status.droppedPackets !== null ? (
+            <p className="mb-2"><strong>{status.droppedPackets.toLocaleString()}</strong> dropped packets · {status.droppedBytes?.toLocaleString() || "0"} bytes, since the current policy was applied.</p>
+          ) : null}
           <p className="text-secondary small mb-0">Firewall helper: {status.helperReady ? "Reporting" : "Unavailable"} · Docker port publication: not verified · Router forwarding: not verified</p>
         </section>
       ) : null}
@@ -154,7 +182,7 @@ export default function InstanceSecurity() {
 
       <section className="mb-4" aria-labelledby="management-heading">
         <h2 className="h4" id="management-heading">Management access</h2>
-        <p className="text-secondary">The instance firewall permits management traffic from these addresses on container TCP {status?.managementPort || 81}. Docker or a userland proxy may rewrite the source IP. Also restrict public access to management at the router or Docker host; do not rely on this source restriction alone.</p>
+        <p className="text-secondary">The instance policy permits management traffic from these addresses on container TCP {status?.managementPort || 81}. Docker or a userland proxy may rewrite source IPs. Also restrict public management access at the router or host; do not rely on this source restriction alone.</p>
         <label className="form-label" htmlFor="trusted-cidrs">Trusted IP addresses and CIDRs (one per line)</label>
         <textarea id="trusted-cidrs" className="form-control font-monospace mb-3" rows={5} value={networks}
           onChange={(e) => setNetworks(e.target.value)} disabled={busy || mode === "unmanaged"} />

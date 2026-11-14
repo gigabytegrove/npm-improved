@@ -50,3 +50,9 @@ func TestPendingActivationDeadline(t *testing.T) {
   p.State = "deferred"
   if err := validatePolicy(p); err == nil { t.Fatal("deferred policy accepted activation deadline") }
 }
+
+func TestDroppedCounterJSON(t *testing.T) {
+  sample := []byte(`{"nftables":[{"metainfo":{"version":"1"}},{"rule":{"expr":[{"counter":{"packets":47,"bytes":2586}},{"drop":null}]}}]}`)
+  packets, bytes := parseDroppedPackets(sample)
+  if packets != 47 || bytes != 2586 { t.Fatalf("unexpected counters: %d, %d", packets, bytes) }
+}

@@ -141,6 +141,8 @@ export async function getInstanceSecurityStatus() {
     .map((entry) => entry.address);
   return {
     config, state, enforced, helperReady,
+    droppedPackets: enforced && Number.isSafeInteger(helper?.droppedPackets) ? helper.droppedPackets : null,
+    droppedBytes: enforced && Number.isSafeInteger(helper?.droppedBytes) ? helper.droppedBytes : null,
     pendingUntil: config.pendingActivation?.deadline || null,
     helperError: helperReady ? (helper.error || null) : "Firewall helper is not reporting.",
     managementPort, ports,
