@@ -126,7 +126,14 @@ export async function setInstanceFirewallEnabled(enabled) {
     pendingActivation: undefined,
   };
   // Persist a complete, normalized configuration so settings survive restarts.
-  const normalized = normalizeInstanceSecurity(next);
+  const normalized = normalizeInstanceSecurity({
+    enabled: next.enabled,
+    mode: next.mode,
+    state: next.state,
+    trustedNetworks: next.trustedNetworks,
+    hostLanIp: next.hostLanIp,
+    acknowledgedDmz: next.acknowledgedDmz,
+  });
   atomicJSON(configPath, normalized);
   try {
     await reconcileInstanceSecurity();
