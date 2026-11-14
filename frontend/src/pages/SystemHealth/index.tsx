@@ -1,4 +1,6 @@
-import type { ElementType, ReactNode } from "react";
+import { useState, type ElementType, type ReactNode } from "react";
+import { Link } from "react-router-dom";
+import { useFirewallActions } from "src/hooks/useInstanceFirewall";
 import {
 	IconCertificate,
 	IconDatabase,
@@ -6,16 +8,17 @@ import {
 	IconHeartbeat,
 	IconHistory,
 	IconServer,
+	IconShieldLock,
 } from "@tabler/icons-react";
 import type { ComponentHealth } from "src/api/backend";
 import { HasPermission, Loading } from "src/components";
 import { useSystemHealth } from "src/hooks";
 import { T } from "src/locale";
-import { ADMIN, VIEW } from "src/modules/Permissions";
+import { ADMIN, MANAGE, VIEW } from "src/modules/Permissions";
 
 const statusBadge = (status?: string) => (
-	<span className={`badge ${status === "ok" ? "bg-green-lt" : "bg-red-lt"}`}>
-		{status === "ok" ? "Healthy" : "Degraded"}
+	<span className={`badge ${status === "ok" ? "bg-green-lt" : status === "disabled" ? "bg-secondary-lt" : "bg-red-lt"}`}>
+		{status === "ok" ? "Healthy" : status === "disabled" ? "Disabled" : "Degraded"}
 	</span>
 );
 
@@ -61,6 +64,29 @@ const HealthCard = ({
 
 const SystemHealth = () => {
 	const { data, isLoading, error, isFetching } = useSystemHealth();
+	const { toggle, reconcile, confirm } = useFirewallActions();
+	const [firewallError, setFirewallError] = useState("");
+	const [firewallMessage, setFirewallMessage] = useState("");
+	const firewallBusy = toggle.isPending || reconcile.isPending || confirm.isPending;
+
+	const runFirewallAction = async (action: () => Promise<unknown>, message: string) => {
+		setFirewallError("");
+		setFirewallMessage("");
+		try {
+			await action();
+			setFirewallMessage(message);
+		} catch (cause) {
+			setFirewallError(cause instanceof Error ? cause.message : "Firewall request failed.");
+		}
+	};
+
+	const changeFirewallState = (enabled: boolean) => {
+		if (!enabled && !window.confirm(
+			"Disable the NPM Improved firewall? This releases the instance's managed filtering rules.",
+		)) return;
+		void runFirewallAction(() => toggle.mutateAsync(enabled),
+			enabled ? "Firewall controls enabled. Filtering still requires policy activation." : "Firewall filtering disabled.");
+	};
 
 	return (
 		<HasPermission section={ADMIN} permission={VIEW} pageLoading loadingNoLogo>
@@ -146,6 +172,73 @@ const SystemHealth = () => {
 									{data.checks.revisionEngine.latestActiveRevisionId
 										? `#${data.checks.revisionEngine.latestActiveRevisionId}`
 										: "none yet"}
+								</div>
+							</HealthCard>
+							<HealthCard title="Firewall" icon={IconShieldLock} check={data.checks.firewall}>
+								{firewallError ? <div className="alert alert-danger mt-2" role="alert">{firewallError}</div> : null}
+								{firewallMessage ? <div className="alert alert-success mt-2" role="status">{firewallMessage}</div> : null}
+								<div>
+									Feature: <strong>{data.checks.firewall.enabled ? "enabled" : "disabled"}</strong>
+								</div>
+								<div>
+									Packet filtering: <strong>{data.checks.firewall.enforced ? "active and verified" : "not enforced"}</strong>
+								</div>
+								<div>Companion: {data.checks.firewall.helperReady ? "reporting" : "unavailable"}</div>
+								<div>Policy state: {data.checks.firewall.state.replace(/_/g, " ")}</div>
+								{data.checks.firewall.enforced && (
+									<div>
+										Dropped: {(data.checks.firewall.droppedPackets ?? 0).toLocaleString()} packets;
+										{" "}{(data.checks.firewall.droppedBytes ?? 0).toLocaleString()} bytes
+									</div>
+								)}
+								{data.checks.firewall.helperError && data.checks.firewall.enabled ? (
+									<div className="text-danger">{data.checks.firewall.helperError}</div>
+								) : null}
+								{data.checks.firewall.pendingUntil ? (
+									<div className="text-warning-emphasis">
+										Activation confirmation required before
+										{" "}{new Date(data.checks.firewall.pendingUntil).toLocaleTimeString()}.
+									</div>
+								) : null}
+								<HasPermission section={ADMIN} permission={MANAGE} hideError>
+									<div className="d-flex flex-wrap gap-2 mt-3">
+										<button
+											className="btn btn-sm btn-outline-secondary"
+											type="button"
+											disabled={firewallBusy}
+											onClick={() => changeFirewallState(!data.checks.firewall.enabled)}
+										>
+											{data.checks.firewall.enabled ? "Disable firewall" : "Enable firewall"}
+										</button>
+										<button
+											className="btn btn-sm btn-outline-primary"
+											type="button"
+											disabled={firewallBusy || !data.checks.firewall.enabled}
+											onClick={() => void runFirewallAction(
+												() => reconcile.mutateAsync(),
+												"Firewall policy reconciliation requested.",
+											)}
+										>
+											Refresh policy
+										</button>
+										{data.checks.firewall.pendingUntil ? (
+											<button
+												className="btn btn-sm btn-primary"
+												type="button"
+												disabled={firewallBusy || !data.checks.firewall.enforced}
+												onClick={() => void runFirewallAction(
+													() => confirm.mutateAsync(),
+													"Firewall activation confirmed.",
+												)}
+											>
+												Confirm activation
+											</button>
+										) : null}
+									</div>
+								</HasPermission>
+								<div className="mt-3">
+									{data.checks.firewall.enabled ? <Link to="/security">Manage firewall policy</Link>
+										: <Link to="/settings?section=firewall">Open firewall settings</Link>}
 								</div>
 							</HealthCard>
 						</div>
