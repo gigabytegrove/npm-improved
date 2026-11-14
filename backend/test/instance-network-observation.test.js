@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { observedInterfaceAddresses, observedNetworkIdentity } from "../lib/instance-network-observation.js";
+import { observedInterfaceAddresses, observedNetworkIdentity, primaryRouteInterface } from "../lib/instance-network-observation.js";
 
 const ipv4 = (address) => ({ address, family: "IPv4", internal: false });
 const internal = (address) => ({ address, family: "IPv4", internal: true });
@@ -31,4 +31,15 @@ test("link-local, IPv6, loopback and empty networks never create fake addresses"
 test("primary eth0 is selected consistently when several namespaces are present", () => {
   const data = { veth0: [ipv4("172.18.0.1")], eth0: [ipv4("172.18.0.3")] };
   assert.equal(observedNetworkIdentity(data).instanceIp, "172.18.0.3");
+});
+
+test("default route selects actual routed interface instead of assuming eth0", () => {
+  const routes = [
+    "Iface Destination Gateway Flags RefCnt Use Metric Mask MTU Window IRTT",
+    "eth0 00000000 0100000A 0003 0 0 200 00000000 0 0 0",
+    "enp1s0 00000000 0100A8C0 0003 0 0 10 00000000 0 0 0",
+  ].join("\n");
+  assert.equal(primaryRouteInterface(routes), "enp1s0");
+  const data = { eth0: [ipv4("10.0.0.2")], enp1s0: [ipv4("192.168.0.15")] };
+  assert.equal(observedNetworkIdentity(data, routes).instanceIp, "192.168.0.15");
 });
