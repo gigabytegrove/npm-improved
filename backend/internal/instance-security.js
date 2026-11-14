@@ -121,6 +121,9 @@ export async function setInstanceFirewallEnabled(enabled) {
   const previous = currentSecurityConfiguration();
   if ((previous.enabled !== false) === enabled) return await getInstanceSecurityStatus();
   const normalized = switchInstanceFirewall(previous, enabled);
+  // A master switch must not mark unreviewed management networks configured.
+  // Preserve first-run setup requirements across off/on transitions.
+  if (!previous.configured) normalized.configured = false;
   atomicJSON(configPath, normalized);
   try {
     await reconcileInstanceSecurity();
