@@ -195,19 +195,19 @@ async function discoverPublicIp(version) {
 let observedIpv4 = { address: null, checkedAt: 0 };
 let observingIpv4 = null;
 
-export async function observePublicIpv4() {
+export function observePublicIpv4() {
   const now = Date.now();
-  if (now - observedIpv4.checkedAt < 300000) return observedIpv4;
-  if (!observingIpv4) {
+  if (now - observedIpv4.checkedAt >= 300000 && !observingIpv4) {
+    // Stale-while-revalidate: a blocked detector must never delay navigation,
+    // firewall status polls, the master switch, or the 120-second confirmation.
     observingIpv4 = discoverPublicIp(4)
       .catch(() => null)
       .then((address) => {
         observedIpv4 = { address, checkedAt: Date.now() };
-        return observedIpv4;
       })
       .finally(() => { observingIpv4 = null; });
   }
-  return observingIpv4;
+  return observedIpv4;
 }
 
 function basic(username, password) {
