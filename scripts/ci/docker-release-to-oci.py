@@ -19,48 +19,86 @@ MAX_TOTAL = 16 * 1024**3
 MAX_ENTRIES = 5000
 
 
-def store(blobs, stream, size, compress=False):
-    """Stream a Docker tar layer into a content-addressed OCI blob.
+def tar_header_valid(header):
+    """Validate the TAR header checksum; do not rely on file extensions."""
+    if len(header) < 512:
+        return False
+    if header == bytes(512):
+        return True
+    try:
+        checksum = int(header[148:156].strip(b" \\x00"), 8)
+    except ValueError:
+        return False
+    return checksum == sum(header[:148]) + 8 * 32 + sum(header[156:512])
 
-    Compress each raw layer with gzip before storing it. OCI supports these
-    layers natively, and disk usage stays near the size of release archives
-    instead of their several-times-larger expanded tar content.
+
+def store(blobs, stream, size, compress=False, expected_diff_id=None):
+    """Copy Docker archive entry to OCI without double-compressing gzip layers.
+
+    Verify the *decompressed* layer SHA-256 against rootfs.diff_ids in the
+    Docker image config. Reject malformed layers before BuildKit sees them.
     """
-    digest = hashlib.sha256()
+    if size > MAX_ENTRY:
+        raise ValueError("Docker archive member exceeds size limit")
+    first = stream.read(min(512, size))
+    remaining = size - len(first)
+    is_layer = expected_diff_id is not None
+    already_gzip = is_layer and first.startswith(b"\\x1f\\x8b\\x08")
+    if is_layer and first.startswith(b"\\x28\\xb5\\x2f\\xfd"):
+        raise ValueError("Unsupported zstd Docker layer: refusing to mislabel as gzip")
+    if is_layer and not already_gzip and not tar_header_valid(first):
+        raise ValueError("Source Docker layer has an invalid tar header")
+    compressor = zlib.compressobj(level=1, wbits=31) if is_layer and not already_gzip else None
+    decompressor = zlib.decompressobj(wbits=31) if already_gzip else None
+    written_digest = hashlib.sha256()
+    plain_digest = hashlib.sha256()
+    first_plain = bytearray()
     written = 0
-    encoder = zlib.compressobj(level=1, wbits=31) if compress else None
-
     with tempfile.NamedTemporaryFile(dir=blobs, prefix=".npmi-", delete=False) as tmp:
         path = Path(tmp.name)
         try:
-            remaining = size
-            while remaining:
-                chunk = stream.read(min(1024 * 1024, remaining))
-                if not chunk:
-                    raise ValueError("Truncated Docker archive entry")
-                remaining -= len(chunk)
-                output = encoder.compress(chunk) if encoder else chunk
-                if output:
-                    digest.update(output)
-                    tmp.write(output)
-                    written += len(output)
-            if encoder:
-                output = encoder.flush()
-                if output:
-                    digest.update(output)
-                    tmp.write(output)
-                    written += len(output)
+            pending = [first]
+            while pending or remaining:
+                if pending:
+                    data = pending.pop()
+                else:
+                    data = stream.read(min(1024 * 1024, remaining))
+                    if not data:
+                        raise ValueError("Truncated Docker image archive")
+                    remaining -= len(data)
+                plain = decompressor.decompress(data) if decompressor else data
+                if is_layer:
+                    plain_digest.update(plain)
+                    if len(first_plain) < 512:
+                        first_plain.extend(plain[:512 - len(first_plain)])
+                encoded = compressor.compress(data) if compressor else data
+                if encoded:
+                    tmp.write(encoded)
+                    written_digest.update(encoded)
+                    written += len(encoded)
+            if compressor:
+                encoded = compressor.flush()
+                if encoded:
+                    tmp.write(encoded)
+                    written_digest.update(encoded)
+                    written += len(encoded)
+            if decompressor and not decompressor.eof:
+                raise ValueError("Truncated gzip-compressed Docker layer")
+            if is_layer:
+                if not tar_header_valid(first_plain):
+                    raise ValueError("Decompressed Docker layer is not a valid tar archive")
+                if "sha256:" + plain_digest.hexdigest() != expected_diff_id:
+                    raise ValueError("Docker layer does not match image config rootfs.diff_ids")
         except BaseException:
             path.unlink(missing_ok=True)
             raise
 
-    hex_digest = digest.hexdigest()
-    target = blobs / hex_digest
-    if target.is_file():
+    blob = blobs / written_digest.hexdigest()
+    if blob.is_file():
         path.unlink()
     else:
-        os.replace(path, target)
-    return {"digest": "sha256:" + hex_digest, "size": written}
+        os.replace(path, blob)
+    return {"digest": "sha256:" + written_digest.hexdigest(), "size": written}
 
 
 def convert(assets, output, tag):
@@ -87,6 +125,15 @@ def convert(assets, output, tag):
         record = matches[0]
         layer_names = set(record["Layers"])
         needed = layer_names | {record["Config"]}
+        with tarfile.open(source, mode="r:gz") as archive:
+            config_stream = archive.extractfile(record["Config"])
+            if config_stream is None:
+                raise ValueError("Docker image is missing its referenced config")
+            config = json.load(config_stream)
+        diff_ids = (config.get("rootfs") or {}).get("diff_ids", [])
+        if len(diff_ids) != len(record["Layers"]):
+            raise ValueError("Docker image layer count does not match rootfs.diff_ids")
+        layer_diff_ids = dict(zip(record["Layers"], diff_ids))
         members = {}
         count = total = 0
 
@@ -108,6 +155,7 @@ def convert(assets, output, tag):
                 members[entry.name] = store(
                     blobs, stream, entry.size,
                     compress=entry.name in layer_names,
+                    expected_diff_id=layer_diff_ids.get(entry.name),
                 )
         if set(members) != needed:
             raise ValueError("Docker archive is missing required image contents")
