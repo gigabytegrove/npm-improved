@@ -51,7 +51,7 @@ export interface SystemHealth {
 		certificateEngine: ComponentHealth;
 		logEngine: ComponentHealth;
 		revisionEngine: ComponentHealth;
-		firewall: FirewallHealth;
+		firewall?: FirewallHealth;
 	};
 }
 
