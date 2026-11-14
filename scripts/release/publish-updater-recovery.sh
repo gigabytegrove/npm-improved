@@ -1,0 +1,244 @@
+#!/usr/bin/env bash
+# Local dockeradm release: scoped stable recovery + complete beta architecture set.
+set -Eeuo pipefail
+umask 077
+
+REPO='gigabytegrove/npm-improved'
+STABLE_BRANCH='release/1.7.9-updater-recovery'
+BETA_BRANCH='release/1.8.0-beta.2'
+STABLE_TAG='v1.7.9'
+BETA_TAG='v1.8.0-beta.2'
+BASE_TAG='v1.7.8'
+BETA_REV='0532dd33454d2810e65bf55681a468bed6896ade'
+EXPECTED_STABLE_REV="${1:-}"
+
+[[ "$EXPECTED_STABLE_REV" =~ ^[0-9a-f]{40}$ ]] || {
+  echo 'Usage: release.sh EXACT_PINNED_STABLE_COMMIT_SHA' >&2
+  exit 2
+}
+
+for cmd in gh git docker python3 sha256sum gzip tar flock; do
+  command -v "$cmd" >/dev/null || { echo "Missing required command: $cmd" >&2; exit 1; }
+done
+docker info >/dev/null
+docker buildx version >/dev/null
+gh auth status -h github.com >/dev/null
+
+CACHE='/var/cache/npm-improved/releases'
+mkdir -p "$CACHE"
+exec 9>"$CACHE/.release.lock"
+flock -n 9 || { echo 'Another NPMi release is running.' >&2; exit 1; }
+WORK="$(mktemp -d /tmp/npmi-release-recovery.XXXXXXXX)"
+CREATED_APP=''
+CREATED_FW=''
+cleanup() {
+  result=$?
+  trap - EXIT
+  if [[ -n "$CREATED_APP" ]]; then docker image rm "$CREATED_APP" >/dev/null 2>&1 || true; fi
+  if [[ -n "$CREATED_FW" ]]; then docker image rm "$CREATED_FW" >/dev/null 2>&1 || true; fi
+  if [[ "$result" == 0 ]]; then rm -rf "$WORK"; else echo "Failed: $WORK retained" >&2; fi
+  exit "$result"
+}
+trap cleanup EXIT
+mkdir -p "$WORK/source" "$WORK/dist" "$WORK/oci"
+export GIT_TERMINAL_PROMPT=0
+
+echo '=== Validate source and release state ==='
+for spec in "stable:$STABLE_BRANCH:$EXPECTED_STABLE_REV" "beta:$BETA_BRANCH:$BETA_REV"; do
+  IFS=: read -r key branch revision <<< "$spec"
+  git clone --quiet --depth 1 --single-branch --branch "$branch" \
+    "https://github.com/$REPO.git" "$WORK/source/$key"
+  [[ "$(git -C "$WORK/source/$key" rev-parse HEAD)" == "$revision" ]] || {
+    echo "Unexpected $key source commit" >&2; exit 1;
+  }
+  tag="$STABLE_TAG"
+  [[ "$key" == beta ]] && tag="$BETA_TAG"
+  [[ "$(<"$WORK/source/$key/.version")" == "${tag#v}" ]] || { echo "Version mismatch: $tag" >&2; exit 1; }
+  [[ -s "$WORK/source/$key/.github/release-notes/$tag.md" ]] || { echo "Release notes missing: $tag" >&2; exit 1; }
+  if gh release view "$tag" -R "$REPO" >/dev/null 2>&1; then
+    echo "Release $tag exists: refusing to overwrite" >&2; exit 1
+  fi
+  if [[ -n "$(git -C "$WORK/source/$key" ls-remote --tags origin "refs/tags/$tag")" ]]; then
+    echo "Tag $tag exists: refusing to overwrite" >&2; exit 1
+  fi
+  bash -n "$WORK/source/$key/scripts/install-host-updater"
+  sh -n "$WORK/source/$key/scripts/update-handoff.sh"
+  python3 -m py_compile "$WORK/source/$key/scripts/host-update-dispatch.py" "$WORK/source/$key/scripts/host-update-maintenance.py"
+  ( cd "$WORK/source/$key" && python3 -m unittest discover -s scripts -p 'test_host_updater*.py' -v )
+done
+
+echo '=== Reuse checksum-verified NPMi stable runtime ==='
+BASE_CACHE="$CACHE/$BASE_TAG"
+mkdir -p "$BASE_CACHE"
+BASE_SUM="npm-improved-$BASE_TAG-SHA256SUMS.txt"
+verified=0
+if [[ -s "$BASE_CACHE/$BASE_SUM" ]]; then
+  if ( cd "$BASE_CACHE" && sha256sum -c "$BASE_SUM" >/dev/null 2>&1 ); then
+    verified=1
+  fi
+fi
+if [[ "$verified" != 1 ]]; then
+  mkdir -p "$WORK/base-download"
+  gh release download "$BASE_TAG" -R "$REPO" -D "$WORK/base-download" \
+    -p "npm-improved-$BASE_TAG-linux-amd64.tar.gz" \
+    -p "npm-improved-$BASE_TAG-linux-arm64.tar.gz" -p "$BASE_SUM"
+  ( cd "$WORK/base-download" && sha256sum -c "$BASE_SUM" )
+  for arch in amd64 arm64; do
+    mv "$WORK/base-download/npm-improved-$BASE_TAG-linux-$arch.tar.gz" "$BASE_CACHE/"
+  done
+  mv "$WORK/base-download/$BASE_SUM" "$BASE_CACHE/"
+fi
+( cd "$BASE_CACHE" && sha256sum -c "$BASE_SUM" )
+python3 "$WORK/source/stable/scripts/ci/docker-release-to-oci.py" "$BASE_CACHE" "$WORK/oci" "$BASE_TAG"
+
+echo '=== Select persistent, isolated NPMi BuildKit builder ==='
+BUILDER='npm-improved-release'
+if docker buildx inspect "$BUILDER" >/dev/null 2>&1; then
+  docker buildx inspect "$BUILDER" | grep -Eiq 'Driver:[[:space:]]+docker-container' || {
+    echo 'The NPMi-named builder is not an isolated Docker-container builder.' >&2
+    exit 1
+  }
+else
+  cat > "$WORK/buildkitd.toml" <<'TOML'
+[worker.oci]
+  max-parallelism = 2
+TOML
+  docker buildx create --name "$BUILDER" --driver docker-container \
+    --driver-opt 'memory=4g' --driver-opt 'cpu-quota=200000' \
+    --buildkitd-config "$WORK/buildkitd.toml" >/dev/null
+fi
+docker buildx inspect "$BUILDER" --bootstrap >/dev/null
+DATE="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+check_docker_tar() {
+  python3 - "$1" "$2" "$3" "$4" "$5" <<'PY'
+import json,sys,tarfile
+archive,tag,arch,revision,version=sys.argv[1:]
+with tarfile.open(archive, 'r:') as tf:
+    manifest=json.load(tf.extractfile('manifest.json'))
+    assert len(manifest)==1, 'Docker image archive must contain one image'
+    assert tag in manifest[0]['RepoTags'], 'Image tag does not match'
+    cfg=json.load(tf.extractfile(manifest[0]['Config']))
+    assert cfg['architecture']==arch and cfg['os']=='linux', 'Image platform mismatch'
+    labels=cfg['config'].get('Labels') or {}
+    assert labels.get('org.opencontainers.image.version')==version, 'Version label mismatch'
+    assert labels.get('org.opencontainers.image.revision')==revision, 'Revision label mismatch'
+print('Verified',tag,arch)
+PY
+}
+
+for arch in amd64 arm64; do
+  for key in stable beta; do
+    version='1.7.9'; revision="$EXPECTED_STABLE_REV"; tag="$STABLE_TAG"
+    if [[ "$key" == beta ]]; then version='1.8.0-beta.2'; revision="$BETA_REV"; tag="$BETA_TAG"; fi
+    src="$WORK/source/$key"
+    app="ghcr.io/gigabytegrove/npm-improved:$tag"
+    out="$WORK/dist/$key-$arch-app.tar"
+    echo "=== Incremental $tag linux/$arch ==="
+    docker buildx build --builder "$BUILDER" --progress plain --pull=false \
+      --platform "linux/$arch" \
+      --build-context "npmi_host_base=oci-layout://$WORK/oci:amd64" \
+      --build-context "npmi_target_base=oci-layout://$WORK/oci:$arch" \
+      --build-arg "BUILD_VERSION=$version" \
+      --build-arg "BUILD_COMMIT=$revision" \
+      --build-arg "BUILD_DATE=$DATE" \
+      -f "$src/docker/Dockerfile.incremental-release" \
+      -t "$app" --output "type=docker,dest=$out" "$src"
+    check_docker_tar "$out" "$app" "$arch" "$revision" "$version"
+    if [[ "$key" == stable ]]; then
+      echo "=== Package stable $arch ==="
+      gzip -1 < "$out" > "$WORK/dist/npm-improved-$tag-linux-$arch.tar.gz"
+    else
+      fw="ghcr.io/gigabytegrove/npm-improved-firewall:$tag"
+      fw_tar="$WORK/dist/beta-$arch-firewall.tar"
+      echo "=== Cross-compile and test beta firewall $arch ==="
+      docker buildx build --builder "$BUILDER" --progress plain \
+        --platform "linux/$arch" -f "$src/docker/firewall/Dockerfile" \
+        -t "$fw" --output "type=docker,dest=$fw_tar" "$src"
+      if docker image inspect "$app" >/dev/null 2>&1 || docker image inspect "$fw" >/dev/null 2>&1; then
+        echo 'Existing release tag on Docker daemon; refusing overwrite.' >&2
+        exit 1
+      fi
+      docker load -i "$out" >/dev/null
+      CREATED_APP="$app"
+      docker load -i "$fw_tar" >/dev/null
+      CREATED_FW="$fw"
+      [[ "$(docker image inspect --format '{{.Architecture}}' "$app")" == "$arch" ]]
+      [[ "$(docker image inspect --format '{{.Architecture}}' "$fw")" == "$arch" ]]
+      echo "=== Package beta $arch with firewall companion ==="
+      docker save "$app" "$fw" | gzip -1 > "$WORK/dist/npm-improved-$tag-linux-$arch.tar.gz"
+      docker image rm "$fw" "$app" >/dev/null
+      CREATED_APP=''; CREATED_FW=''
+    fi
+    gzip -t "$WORK/dist/npm-improved-$tag-linux-$arch.tar.gz"
+    rm -f "$out" "${fw_tar:-}"
+  done
+done
+
+echo '=== Package legacy-compatible stable and beta native host agents ==='
+for key in stable beta; do
+  tag="$STABLE_TAG"; [[ "$key" == beta ]] && tag="$BETA_TAG"
+  src="$WORK/source/$key"
+  ( cd "$src" && tar -czf "$WORK/dist/npm-improved-$tag-host-updater.tar.gz" \
+    scripts/install-host-updater scripts/host-update-dispatch.py \
+    scripts/host-update-maintenance.py scripts/update-handoff.sh .version \
+    $([[ "$key" == beta ]] && printf 'compose.firewall.yaml') )
+  ( cd "$WORK/dist" && sha256sum \
+    "npm-improved-$tag-linux-amd64.tar.gz" \
+    "npm-improved-$tag-linux-arm64.tar.gz" \
+    "npm-improved-$tag-host-updater.tar.gz" \
+    > "npm-improved-$tag-SHA256SUMS.txt" )
+  ( cd "$WORK/dist" && sha256sum -c "npm-improved-$tag-SHA256SUMS.txt" )
+  python3 - "$src/scripts/host-update-maintenance.py" "$WORK/dist" "$tag" <<'PY'
+import importlib.util,sys,tempfile
+from pathlib import Path
+file,assets,tag=sys.argv[1:]
+spec=importlib.util.spec_from_file_location('host_maintenance',file)
+mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+assets=Path(assets)
+with tempfile.TemporaryDirectory() as d:
+    mod.verify_and_extract(tag.removeprefix('v'),
+        (assets/f'npm-improved-{tag}-SHA256SUMS.txt').read_bytes(),
+        (assets/f'npm-improved-{tag}-host-updater.tar.gz').read_bytes(),Path(d))
+print('Verified native updater archive',tag)
+PY
+done
+
+echo '=== Final state check; do not publish partial assets ==='
+for tag in "$STABLE_TAG" "$BETA_TAG"; do
+  if gh release view "$tag" -R "$REPO" >/dev/null 2>&1; then
+    echo "A draft or release already exists for $tag." >&2; exit 1
+  fi
+done
+
+echo '=== Upload drafts (both versions fully qualified) ==='
+for key in stable beta; do
+  tag="$STABLE_TAG"; revision="$EXPECTED_STABLE_REV"
+  if [[ "$key" == beta ]]; then tag="$BETA_TAG"; revision="$BETA_REV"; fi
+  args=()
+  [[ "$key" == beta ]] && args+=(--prerelease)
+  gh release create "$tag" -R "$REPO" --target "$revision" \
+    --title "NPM Improved $tag" --draft "${args[@]}" \
+    --notes-file "$WORK/source/$key/.github/release-notes/$tag.md" \
+    "$WORK/dist/npm-improved-$tag-linux-amd64.tar.gz" \
+    "$WORK/dist/npm-improved-$tag-linux-arm64.tar.gz" \
+    "$WORK/dist/npm-improved-$tag-host-updater.tar.gz" \
+    "$WORK/dist/npm-improved-$tag-SHA256SUMS.txt"
+  assets="$(gh release view "$tag" -R "$REPO" --json assets --jq '.assets[].name')"
+  for expected in "npm-improved-$tag-linux-amd64.tar.gz" \
+                  "npm-improved-$tag-linux-arm64.tar.gz" \
+                  "npm-improved-$tag-host-updater.tar.gz" \
+                  "npm-improved-$tag-SHA256SUMS.txt"; do
+    grep -Fxq "$expected" <<< "$assets" || { echo "Missing uploaded $expected" >&2; exit 1; }
+  done
+done
+
+echo '=== Publish stable, then beta ==='
+gh release edit "$STABLE_TAG" -R "$REPO" --draft=false --prerelease=false --latest
+gh release edit "$BETA_TAG" -R "$REPO" --draft=false --prerelease
+[[ "$(gh api "repos/$REPO/releases/latest" --jq .tag_name)" == "$STABLE_TAG" ]]
+[[ "$(gh api "repos/$REPO/releases/tags/$BETA_TAG" --jq .prerelease)" == true ]]
+echo "Stable: https://github.com/$REPO/releases/tag/$STABLE_TAG"
+echo "Beta:   https://github.com/$REPO/releases/tag/$BETA_TAG"
+echo 'Both release bundles include AMD64 and ARM64; beta includes firewall agent.'
+echo 'No proxy installation, other project builder, or shared Docker settings changed.'
