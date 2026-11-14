@@ -12,10 +12,30 @@ policy; Nginx HTTP access lists continue to act at the application layer.
 | Dynamic IP — DMZ | NPMi-managed | Router sends unsolicited traffic to NPMi's destination |
 | Unmanaged | External firewall | NPMi retains threat monitoring and HTTP protections |
 
-The default is **not configured / deferred**. Firewall management is not
-activated silently by installation or by a software update. Initial setup
-records the selected model; an authenticated administrator reviews management
-network access and explicitly activates enforcement in **Instance Security**.
+## Firewall controls and default behavior
+
+On supported beta installations, **Settings → Firewall** provides a master
+feature switch that is **enabled by default**. The feature switch does not claim
+the companion is enforcing packet filtering. A new installation starts with
+the feature enabled and packet filtering **deferred**, until an administrator
+reviews access paths and activates an instance-wide policy.
+
+The top-level **Firewall** item appears only when the feature switch is on.
+When switched off, the main navigation item disappears, but the switch is
+always accessible under Settings. **System Health → Firewall** also exposes
+the switch to administrators, shows helper availability and packet/byte drops,
+permits a manual policy refresh, and confirms a pending activation.
+
+Turning the feature off asks the helper to release its instance filtering
+rules. Until the helper acknowledges release, NPMi reports **disabling** or
+**disabled but unverified** rather than claiming the firewall is off.
+Re-enabling retains the trusted networks and deployment mode but leaves
+default-deny enforcement deferred until explicitly activated and confirmed.
+
+**Never interpret "Enabled" as "Filtering active."** The current protection
+display must report both the feature state and whether the companion verified
+that the desired rule digest is applied. Existing installations with configured
+active enforcement retain that configuration.
 
 **Do not treat DMZ as universally recommended.** Selective port forwarding is
 safer. Router DMZ may forward unsolicited connections to the Docker host's
