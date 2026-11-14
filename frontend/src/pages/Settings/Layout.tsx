@@ -17,6 +17,7 @@ import DefaultSite from "./DefaultSite";
 import DisasterRecovery from "./DisasterRecovery";
 import InstanceSync from "./InstanceSync";
 import Protection from "./Protection";
+import FirewallSettings from "./Firewall";
 import Update from "./Update";
 import styles from "./Layout.module.css";
 
@@ -25,6 +26,7 @@ type SettingsPage =
 	| "certificate-lifecycle"
 	| "management-certificate"
 	| "protection"
+	| "firewall"
 	| "database"
 	| "instance-sync"
 	| "disaster-recovery"
@@ -60,6 +62,12 @@ const sections: SettingsSection[] = [
 		id: "protection",
 		label: "Protection",
 		description: "Managed HTTP and connection limits",
+		icon: IconShieldLock,
+	},
+	{
+		id: "firewall",
+		label: "Firewall",
+		description: "Enable or disable instance firewall functionality",
 		icon: IconShieldLock,
 	},
 	{
@@ -112,6 +120,8 @@ export default function Layout() {
 				return <CertificateLifecycle />;
 			case "protection":
 				return <Protection />;
+			case "firewall":
+				return <FirewallSettings />;
 			case "database":
 				return <Database />;
 			case "instance-sync":
