@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  normalizeNetwork, normalizeInstanceSecurity, compileInstancePorts, buildInstancePolicy,
+  normalizeNetwork, normalizeInstanceSecurity, switchInstanceFirewall, compileInstancePorts, buildInstancePolicy,
 } from "../lib/instance-security-policy.js";
 
 test("four instance deployment models remain distinct", () => {
@@ -54,4 +54,39 @@ test("activation deadline is propagated only when pending", () => {
   assert.equal(buildInstancePolicy(config, []).confirmBy, "");
   config.pendingActivation = { deadline: "2026-11-14T14:00:00.000Z" };
   assert.equal(buildInstancePolicy(config, []).confirmBy, "2026-11-14T14:00:00.000Z");
+});
+
+test("firewall functionality defaults to enabled but never enforces before confirmation", () => {
+  const config = normalizeInstanceSecurity({ mode: "static", state: "deferred" });
+  assert.equal(config.enabled, true);
+  assert.equal(config.state, "deferred");
+  assert.equal(buildInstancePolicy(config, []).state, "deferred");
+});
+
+test("master switch validates booleans and refuses disabled active policies", () => {
+  assert.throws(() => normalizeInstanceSecurity({ enabled: "false", mode: "static", state: "deferred" }));
+  assert.throws(() => normalizeInstanceSecurity({ enabled: false, mode: "static", state: "active" }));
+  const active = normalizeInstanceSecurity({ enabled: true, mode: "static", state: "active" });
+  const disabled = switchInstanceFirewall(active, false);
+  assert.equal(disabled.enabled, false);
+  assert.equal(disabled.state, "deferred");
+  assert.equal(buildInstancePolicy(disabled, []).state, "deferred");
+});
+
+test("switching firewall off and back on preserves trusted networks, never auto-activates", () => {
+  const initial = normalizeInstanceSecurity({
+    enabled: true, mode: "forwarded", state: "active",
+    trustedNetworks: ["192.168.0.0/24", "fd00::/8"],
+    hostLanIp: "192.168.0.105",
+  });
+  const off = switchInstanceFirewall(initial, false);
+  assert.deepEqual(off.trustedNetworks, initial.trustedNetworks);
+  assert.equal(off.mode, "forwarded");
+  assert.equal(off.hostLanIp, "192.168.0.105");
+  assert.equal(off.enabled, false);
+  const restored = switchInstanceFirewall(off, true);
+  assert.equal(restored.enabled, true);
+  assert.equal(restored.state, "deferred");
+  assert.deepEqual(restored.trustedNetworks, initial.trustedNetworks);
+  assert.throws(() => switchInstanceFirewall(off, "yes"));
 });
