@@ -355,16 +355,13 @@ export default function Update() {
 							</Button>
 						</details>
 					) : <div className="mt-2">Set NPM_HOST_PROJECT_DIR and install the managed native updater on the Docker host.</div>}
-					{data?.capabilities?.hostUpdaterMaintenanceError ? (
-						<div className="mt-2 text-danger">
-							Last host-updater maintenance error: {data.capabilities.hostUpdaterMaintenanceError}
-						</div>
-					) : null}
-				</Alert>
-			) : data?.capabilities?.hostUpdaterMaintenanceError ? (
-				<Alert variant="warning">
-					Host updater maintenance reported: {data.capabilities.hostUpdaterMaintenanceError}
-				</Alert>
+					</Alert>
+			) : null}
+			{data?.capabilities?.hostUpdaterMaintenanceState === "retry_scheduled" ? (
+				<details className="text-secondary small mb-3">
+					<summary>Native updater maintenance: retry scheduled</summary>
+					<p className="mt-2 mb-0">{data.capabilities.hostUpdaterMaintenanceSummary || "Routine updater housekeeping will retry automatically. NPM Improved remains available."}</p>
+				</details>
 			) : null}
 			{data?.status?.error ? (
 				<Alert variant="danger">
