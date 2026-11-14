@@ -7,12 +7,13 @@ import {
 	selectReleaseForChannel,
 } from "../lib/release-versions.js";
 
-test("recognizes the exact dockeradm beta tag", () => {
-	assert.deepEqual(parseReleaseVersion("v1.7.8-beta.1"), {
-		major: 1, minor: 7, patch: 8, stage: "beta", iteration: 1,
-		tag: "v1.7.8-beta.1",
+test("recognizes the exact v1.8.0 dockeradm beta release identity", () => {
+	assert.deepEqual(parseReleaseVersion("v1.8.0-beta.1"), {
+		major: 1, minor: 8, patch: 0, stage: "beta", iteration: 1,
+		tag: "v1.8.0-beta.1",
 	});
-	assert.equal(isNewerRelease("v1.7.7", "v1.7.8-beta.1"), true);
+	assert.equal(isNewerRelease("v1.7.7", "v1.8.0-beta.1"), true);
+	assert.equal(isNewerRelease("v1.8.0-beta.1", "v1.7.7"), false);
 });
 
 test("retains prerelease identity for a running beta image", () => {
