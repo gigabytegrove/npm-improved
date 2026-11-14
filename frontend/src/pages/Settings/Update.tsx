@@ -121,6 +121,10 @@ export default function Update() {
 	const bootstrapCommand = data?.capabilities?.hostProjectDir && data?.release?.current
 		? hostUpdaterBootstrap(data.capabilities.hostProjectDir, data.release.current)
 		: null;
+	const prereleaseBootstrapRequired = releaseChannel !== "stable" && updaterReady && !data?.capabilities?.hostUpdaterPrereleaseSupport;
+	const prereleaseBootstrapCommand = prereleaseBootstrapRequired && data?.capabilities?.hostProjectDir && data?.release?.latest
+		? hostUpdaterBootstrap(data.capabilities.hostProjectDir, data.release.latest)
+		: null;
 
 	const published = useMemo(() => {
 		if (!data?.release?.publishedAt) return null;
@@ -230,8 +234,30 @@ export default function Update() {
 					<option value="beta">Beta — pre-release testing</option>
 					<option value="alpha">Alpha / RC — experimental</option>
 				</select>
-				{releaseChannel !== "stable" && !data?.capabilities?.hostUpdaterPrereleaseSupport && data?.release?.latest ? <span className="text-secondary small">This host needs the latest native updater to install prereleases.</span> : null}
+				{prereleaseBootstrapRequired && data?.release?.latest ? <span className="text-secondary small">A one-time host updater refresh is needed before installing this prerelease.</span> : null}
 			</div>
+			{prereleaseBootstrapRequired && prereleaseBootstrapCommand ? (
+				<details className="mb-3">
+					<summary className="fw-semibold">Enable {releaseChannel} updates on this host</summary>
+					<p className="small text-secondary mt-2">
+						The existing native updater can install stable releases. Refresh its host-side
+						component from the verified {data?.release?.latest} release bundle to enable
+						authenticated prerelease updates, without replacing the running application.
+					</p>
+					<pre className="mt-2 p-2 border rounded overflow-auto user-select-all"><code>{prereleaseBootstrapCommand}</code></pre>
+					<Button type="button" onClick={() => {
+						if (!navigator.clipboard?.writeText) {
+							setActionError("Clipboard unavailable. Select and copy the command above.");
+							return;
+						}
+						void navigator.clipboard.writeText(prereleaseBootstrapCommand).catch((err) =>
+							setActionError(err instanceof Error ? err.message : "Clipboard unavailable. Select and copy the command above."),
+						);
+					}}>
+						Copy verified host updater command
+					</Button>
+				</details>
+			) : null}
 			{error ? <Alert variant="danger">{error.message}</Alert> : null}
 			{data?.releaseError ? <Alert variant="warning">GitHub release check unavailable: {data.releaseError}. Local updater progress and recovery controls remain available.</Alert> : null}
 			{actionError ? <Alert variant="danger">{actionError}</Alert> : null}
