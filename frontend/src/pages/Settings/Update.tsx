@@ -20,7 +20,6 @@ import {
 } from "src/api/backend";
 import { Button, Loading } from "src/components";
 import styles from "./Update.module.css";
-import { hostUpdaterBootstrap } from "./hostUpdaterBootstrap";
 
 const ACTIVE_STATES = new Set([
 	"preflight",
@@ -118,13 +117,7 @@ export default function Update() {
 	const rolling = Boolean(data?.coordination?.instanceSyncEnabled);
 	const canRollback = Boolean(data?.status?.previousImage);
 	const progress = UPDATE_PROGRESS[data?.status?.state || "idle"] ?? 0;
-	const bootstrapCommand = data?.capabilities?.hostProjectDir && data?.release?.current
-		? hostUpdaterBootstrap(data.capabilities.hostProjectDir, data.release.current)
-		: null;
-	const prereleaseBootstrapRequired = releaseChannel !== "stable" && updaterReady && !data?.capabilities?.hostUpdaterPrereleaseSupport;
-	const prereleaseBootstrapCommand = prereleaseBootstrapRequired && data?.capabilities?.hostProjectDir && data?.release?.latest
-		? hostUpdaterBootstrap(data.capabilities.hostProjectDir, data.release.latest)
-		: null;
+	const prereleaseHostRefreshPending = releaseChannel !== "stable" && updaterReady && !data?.capabilities?.hostUpdaterPrereleaseSupport;
 
 	const published = useMemo(() => {
 		if (!data?.release?.publishedAt) return null;
@@ -234,30 +227,12 @@ export default function Update() {
 					<option value="beta">Beta — pre-release testing</option>
 					<option value="alpha">Alpha / RC — experimental</option>
 				</select>
-				{prereleaseBootstrapRequired && data?.release?.latest ? <span className="text-secondary small">A one-time host updater refresh is needed before installing this prerelease.</span> : null}
+				{prereleaseHostRefreshPending && data?.release?.latest ? (
+					<span className="text-secondary small" role="status">
+						Native updater synchronization is pending. The existing host service refreshes automatically after stable updates.
+					</span>
+				) : null}
 			</div>
-			{prereleaseBootstrapRequired && prereleaseBootstrapCommand ? (
-				<details className="mb-3">
-					<summary className="fw-semibold">Enable {releaseChannel} updates on this host</summary>
-					<p className="small text-secondary mt-2">
-						The existing native updater can install stable releases. Refresh its host-side
-						component from the verified {data?.release?.latest} release bundle to enable
-						authenticated prerelease updates, without replacing the running application.
-					</p>
-					<pre className="mt-2 p-2 border rounded overflow-auto user-select-all"><code>{prereleaseBootstrapCommand}</code></pre>
-					<Button type="button" onClick={() => {
-						if (!navigator.clipboard?.writeText) {
-							setActionError("Clipboard unavailable. Select and copy the command above.");
-							return;
-						}
-						void navigator.clipboard.writeText(prereleaseBootstrapCommand).catch((err) =>
-							setActionError(err instanceof Error ? err.message : "Clipboard unavailable. Select and copy the command above."),
-						);
-					}}>
-						Copy verified host updater command
-					</Button>
-				</details>
-			) : null}
 			{error ? <Alert variant="danger">{error.message}</Alert> : null}
 			{data?.releaseError ? <Alert variant="warning">GitHub release check unavailable: {data.releaseError}. Local updater progress and recovery controls remain available.</Alert> : null}
 			{actionError ? <Alert variant="danger">{actionError}</Alert> : null}
@@ -351,37 +326,13 @@ export default function Update() {
 			) : null}
 
 			{updaterReady && !data?.capabilities?.hostUpdaterAutomaticMaintenance ? (
-				<Alert variant="warning">
-					<strong>Native host updater: legacy — one-time host upgrade needed</strong>
-					<div className="mt-1">
-						The application has updated successfully, but its root-owned host updater
-						cannot upgrade itself from inside Docker. The host service still needs
-						a one-time managed installation to enable future automatic maintenance
-						and report the physical hostname. No new containers are involved.
-					</div>
-					{bootstrapCommand ? (
-						<details className="mt-2">
-							<summary className="fw-semibold">One-time command for this host</summary>
-							<div className="small mt-2">
-								Run on the Linux Docker host for this NPMi installation (not inside the container).
-								The official release archive is checked against its published SHA-256 checksum
-								before the native service is installed.
-							</div>
-							<pre className="mt-2 p-2 border rounded overflow-auto user-select-all"><code>{bootstrapCommand}</code></pre>
-							<Button type="button" onClick={() => {
-								if (!navigator.clipboard?.writeText) {
-									setActionError("Clipboard access is unavailable here. Select and copy the command above.");
-									return;
-								}
-								void navigator.clipboard.writeText(bootstrapCommand).catch((err) =>
-									setActionError(err instanceof Error ? err.message : "Clipboard unavailable. Select and copy the command above."),
-								);
-							}}>
-								Copy host command
-							</Button>
-						</details>
-					) : <div className="mt-2">Set NPM_HOST_PROJECT_DIR and install the managed native updater on the Docker host.</div>}
-					</Alert>
+				<details className="text-secondary small mb-3">
+					<summary>Host updater maintenance is not yet enabled</summary>
+					<p className="mt-2 mb-0">
+						The native updater will attempt to complete its automatic maintenance cycle after the next stable update.
+						Application traffic is unaffected.
+					</p>
+				</details>
 			) : null}
 			{data?.capabilities?.hostUpdaterMaintenanceState === "retry_scheduled" ? (
 				<details className="text-secondary small mb-3">
