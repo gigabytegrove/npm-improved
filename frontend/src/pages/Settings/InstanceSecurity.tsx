@@ -37,7 +37,6 @@ const defaultNetworks = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00:
 export default function InstanceSecurity() {
   const [status, setStatus] = useState<SecurityStatus | null>(null);
   const [mode, setMode] = useState<Mode>("unmanaged");
-  const [state, setState] = useState<FirewallState>("deferred");
   const [networks, setNetworks] = useState(defaultNetworks);
   const [hostLanIp, setHostLanIp] = useState("");
   const [acknowledgedDmz, setAcknowledgedDmz] = useState(false);
@@ -51,7 +50,6 @@ export default function InstanceSecurity() {
     const result = await api.get({ url: "/instance-security" }) as SecurityStatus;
     setStatus(result);
     setMode(result.config.mode);
-    setState(result.config.state);
     setNetworks(result.config.trustedNetworks.join("\n"));
     setHostLanIp(result.config.hostLanIp || "");
     setAcknowledgedDmz(result.config.acknowledgedDmz);
@@ -135,7 +133,7 @@ export default function InstanceSecurity() {
           {models.map((item) => (
             <label key={item.value} className="d-flex gap-3 py-3 border-bottom" style={{ cursor: "pointer" }}>
               <input type="radio" className="form-check-input mt-1" name="deployment" checked={mode === item.value}
-                onChange={() => { setMode(item.value); setState("deferred"); setConfirmActivation(false); }} />
+                onChange={() => { setMode(item.value); setConfirmActivation(false); }} />
               <span><strong className="d-block">{item.title}</strong>
                 <span className="text-secondary">{item.description}</span></span>
             </label>

@@ -1,0 +1,32 @@
+name: Instance Firewall
+
+on:
+  pull_request:
+    paths:
+      - "docker/firewall/**"
+      - ".github/workflows/instance-security.yml"
+      - "compose.yaml"
+  push:
+    branches: ["develop"]
+    paths:
+      - "docker/firewall/**"
+      - ".github/workflows/instance-security.yml"
+      - "compose.yaml"
+
+jobs:
+  companion:
+    name: Validate firewall companion
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.27.3"
+      - name: Go policy tests
+        run: GO111MODULE=off go test -v ./docker/firewall
+      - name: Build companion Docker image
+        run: docker build --file docker/firewall/Dockerfile --tag npmi-firewall:ci .
+      - name: Validate Compose
+        run: docker compose -f compose.yaml config --quiet

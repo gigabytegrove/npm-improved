@@ -25,6 +25,7 @@ import reportsRoutes from "./reports.js";
 import schemaRoutes from "./schema.js";
 import settingsRoutes from "./settings.js";
 import instanceSecurityRoutes from "./instance-security.js";
+import dynamicDNSRoutes from "./dynamic-dns.js";
 import tokensRoutes from "./tokens.js";
 import usersRoutes from "./users.js";
 import versionRoutes from "./version.js";
@@ -85,6 +86,7 @@ router.use(internalDatabaseManager.writeGuard);
 router.use("/analytics", analyticsRoutes);
 // Instance firewall policy is local to this physical NPMi node.
 router.use("/instance-security", instanceSecurityRoutes);
+router.use("/dynamic-dns", dynamicDNSRoutes);
 router.use(internalInstanceSync.writeGuard);
 router.use("/tokens", tokensRoutes);
 router.use("/users", usersRoutes);

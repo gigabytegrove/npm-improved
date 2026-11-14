@@ -34,7 +34,7 @@ function atomicJSON(filename, value) {
     fs.writeFileSync(temporary, JSON.stringify(value, null, 2) + "\n", { mode: 0o600, flag: "wx" });
     fs.renameSync(temporary, filename);
   } finally {
-    try { fs.unlinkSync(temporary); } catch (error) { if (error.code !== "ENOENT") throw error; }
+    try { fs.unlinkSync(temporary); } catch { /* Temporary file already absent or cleanup failed. */ }
   }
 }
 
@@ -75,7 +75,7 @@ export async function configureInstanceSecurity(input, { initial = false } = {})
   }
   if (config.state === "active") {
     const helper = readJSON(statusPath, null);
-    const age = helper?.checkedAt ? Date.now() - Date.parse(helper.checkedAt) : Infinity;
+    const age = helper?.checkedAt ? Date.now() - Date.parse(helper.checkedAt) : Number.POSITIVE_INFINITY;
     if (!Number.isFinite(age) || age > 20000) {
       throw new Error("Firewall helper is unavailable. Managed filtering cannot be activated.");
     }
@@ -99,7 +99,7 @@ export async function getInstanceSecurityStatus() {
   const helper = readJSON(statusPath, null);
   let desiredHash = null;
   try { desiredHash = crypto.createHash("sha256").update(fs.readFileSync(policyPath)).digest("hex"); } catch {}
-  const checkedAge = helper?.checkedAt ? Date.now() - Date.parse(helper.checkedAt) : Infinity;
+  const checkedAge = helper?.checkedAt ? Date.now() - Date.parse(helper.checkedAt) : Number.POSITIVE_INFINITY;
   const helperReady = Number.isFinite(checkedAge) && checkedAge >= 0 && checkedAge < 20000;
   const enforced = config.mode !== "unmanaged" && config.state === "active" &&
     helperReady && helper.state === "active" && helper.policyHash === desiredHash;
