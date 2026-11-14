@@ -59,14 +59,15 @@ router
 		try {
 			await res.locals.access.can("settings:get");
 			const refresh = req.query.refresh === "1" || req.query.refresh === "true";
+			const channel = req.query.channel || "stable";
 			// Progress is local and must not depend on GitHub availability.
 			let releaseError = null;
 			let release;
 			try {
-				release = await internalRemoteVersion.get(refresh);
+				release = await internalRemoteVersion.get(refresh, channel);
 			} catch (error) {
 				releaseError = error instanceof Error ? error.message : "Release check unavailable";
-				release = internalRemoteVersion.unavailable();
+				release = internalRemoteVersion.unavailable(channel);
 				debug(logger, `Remote version unavailable: ${releaseError}`);
 			}
 			await internalUpdateManager.reconcileAudit().catch((err) => {
