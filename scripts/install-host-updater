@@ -36,6 +36,15 @@ for name in update-handoff.sh host-update-dispatch.py host-update-maintenance.py
   mv -f "$tempfile" "$BIN/$name"
 done
 
+# Install the firewall Compose fragment beside trusted host executables, never
+# in the application-writable data directory or the user's existing Compose.
+[ -f "$SOURCE/../compose.firewall.yaml" ] || {
+  echo "Missing authenticated NPMi firewall Compose fragment" >&2; exit 1;
+}
+firewall_fragment="$(mktemp "$BIN/.new-compose-firewall-XXXXXXXX")"
+install -m 0644 "$SOURCE/../compose.firewall.yaml" "$firewall_fragment"
+mv -f "$firewall_fragment" "$BIN/compose.firewall.yaml"
+
 cat >"/etc/systemd/system/$UNIT.service" <<EOF
 [Unit]
 Description=NPM Improved native in-place updater ($ROOT)
