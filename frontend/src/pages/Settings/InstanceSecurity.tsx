@@ -21,6 +21,7 @@ type SecurityStatus = {
   dockerPublishing: string;
   ports: Port[];
   warning: string;
+  exposurePlan?: { required: Array<{port: number; protocol: "tcp" | "udp"; dockerInstruction: string; routerInstruction: string; dockerPublishing: string; routerForwarding: string}>; warnings: string[] };
   pendingUntil: string | null;
   droppedPackets: number | null;
   droppedBytes: number | null;
@@ -198,11 +199,11 @@ export default function InstanceSecurity() {
         <p className="text-secondary">This policy is generated from active NPMi services. Adding, disabling, or deleting a stream automatically updates the instance rule set.</p>
         <div className="table-responsive">
           <table className="table">
-            <thead><tr><th scope="col">Protocol</th><th scope="col">Incoming port</th><th scope="col">Required by</th><th scope="col">Docker publication</th></tr></thead>
+            <thead><tr><th scope="col">Protocol</th><th scope="col">Incoming port</th><th scope="col">Required by</th><th scope="col">Docker publication</th><th scope="col">Router / network action</th></tr></thead>
             <tbody>{status?.ports.map((port) => (
               <tr key={port.protocol + port.port}>
                 <td>{port.protocol.toUpperCase()}</td><td>{port.port}</td>
-                <td>{port.sources.join(", ")}</td><td>Not verified</td>
+                <td>{port.sources.join(", ")}</td><td><strong>Unverified.</strong> {status?.exposurePlan?.required.find((item) => item.port === port.port && item.protocol === port.protocol)?.dockerInstruction || "Verify container port publishing."}</td><td>{status?.exposurePlan?.required.find((item) => item.port === port.port && item.protocol === port.protocol)?.routerInstruction || "Verify upstream routing."}</td>
               </tr>
             ))}</tbody>
           </table>

@@ -10,6 +10,7 @@ import {
   compileInstancePorts,
 } from "../lib/instance-security-policy.js";
 import { global as logger } from "../logger.js";
+import { buildExposurePlan } from "../lib/instance-exposure.js";
 
 const directory = process.env.NPM_INSTANCE_SECURITY_DIR || "/data/instance-security";
 const configPath = path.join(directory, "config.json");
@@ -151,6 +152,7 @@ export async function getInstanceSecurityStatus() {
     helperError: helperReady ? (helper.error || null) : "Firewall helper is not reporting.",
     managementPort, ports,
     dockerPublishing: "unverified",
+    exposurePlan: buildExposurePlan(config.mode, ports, config.hostLanIp || process.env.NPM_HOST_LAN_IP || ""),
     hostLanIp: config.hostLanIp || process.env.NPM_HOST_LAN_IP || null,
     containerAddresses,
     warning: "NPMi filters its Docker instance network namespace, not the router or other containers. Docker port publishing and router forwarding are independent.",

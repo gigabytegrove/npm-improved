@@ -2,39 +2,31 @@ import https from "node:https";
 import { ProxyAgent } from "proxy-agent";
 import { debug, remoteVersion as logger } from "../logger.js";
 import pjson from "../package.json" with { type: "json" };
+import { isNewerRelease, parseReleaseVersion, selectReleaseForChannel } from "../lib/release-versions.js";
 
 const RELEASE_REQUEST_TIMEOUT_MS = 8_000;
 const MAX_RELEASE_RESPONSE_BYTES = 1024 * 1024;
 const VERSION_URL = "https://api.github.com/repos/gigabytegrove/npm-improved/releases/latest";
 const RELEASE_LIST_URL = "https://api.github.com/repos/gigabytegrove/npm-improved/releases?per_page=30";
-const BUILD_VERSION_PATTERN = /^v?(\d+)\.(\d+)\.(\d+)/;
-
 const getCurrentVersion = () => {
-	const buildVersion = process.env.NPM_BUILD_VERSION?.trim();
-	const match = buildVersion?.match(BUILD_VERSION_PATTERN);
-
-	if (match) {
-		return `v${match[1]}.${match[2]}.${match[3]}`;
-	}
-
-	const packageMatch = pjson.version.match(BUILD_VERSION_PATTERN);
-	if (!packageMatch) {
-		throw new Error(`Invalid NPM Improved package version: ${pjson.version}`);
-	}
-
-	return `v${packageMatch[1]}.${packageMatch[2]}.${packageMatch[3]}`;
+	const build = parseReleaseVersion(process.env.NPM_BUILD_VERSION);
+	if (build) return build.tag;
+	const fallback = parseReleaseVersion(pjson.version);
+	if (!fallback) throw new Error(`Invalid NPM Improved package version: ${pjson.version}`);
+	return fallback.tag;
 };
 
 const internalRemoteVersion = {
 	cache_timeout: 1000 * 60 * 15,
-	unavailable: () => ({
+	unavailable: (channel = "stable") => ({
 		current: getCurrentVersion(), latest: null, update_available: false,
 		release_name: null, release_notes: null, published_at: null,
-		release_url: null,
+		release_url: null, channel,
 	}),
 	last_result: null,
 	last_fetch_time: null,
 	channel_cache: new Map(),
+	channel_fetched_at: new Map(),
 
 	/**
 	 * Fetch the latest NPM Improved release. A repository with no published
@@ -48,8 +40,8 @@ const internalRemoteVersion = {
 		if (
 			refresh ||
 			!internalRemoteVersion.channel_cache.has(channel) ||
-			!internalRemoteVersion.last_fetch_time ||
-			Date.now() - internalRemoteVersion.last_fetch_time > internalRemoteVersion.cache_timeout
+			!internalRemoteVersion.channel_fetched_at.has(channel) ||
+			Date.now() - internalRemoteVersion.channel_fetched_at.get(channel) > internalRemoteVersion.cache_timeout
 		) {
 			const response = await internalRemoteVersion.fetchUrl(channel === "stable" ? VERSION_URL : RELEASE_LIST_URL);
 
@@ -61,15 +53,13 @@ const internalRemoteVersion = {
 				const payload = JSON.parse(response.rawData);
 				if (channel !== "stable") {
 					if (!Array.isArray(payload)) throw new Error("Unexpected release list response");
-					internalRemoteVersion.channel_cache.set(channel, payload.find((item) =>
-						!item.draft && typeof item.tag_name === "string" &&
-						(channel === "beta" ? /-beta(?:[.-]|$)/i.test(item.tag_name) : /-(?:alpha|rc)(?:[.-]|$)/i.test(item.tag_name))
-					) || { tag_name: null });
+					internalRemoteVersion.channel_cache.set(channel, selectReleaseForChannel(payload, channel));
 				} else internalRemoteVersion.channel_cache.set(channel, payload);
 				internalRemoteVersion.last_result = internalRemoteVersion.channel_cache.get(channel);
 			}
 
 			internalRemoteVersion.last_fetch_time = Date.now();
+			internalRemoteVersion.channel_fetched_at.set(channel, internalRemoteVersion.last_fetch_time);
 		} else {
 			debug(logger, "Using cached NPM Improved remote version result");
 		}
@@ -80,7 +70,7 @@ const internalRemoteVersion = {
 			current: currentVersion,
 			latest: latestVersion,
 			update_available: latestVersion
-				? internalRemoteVersion.compareVersions(currentVersion, latestVersion)
+				? isNewerRelease(currentVersion, latestVersion)
 				: false,
 			release_name: selected?.name || null,
 			channel,
@@ -125,22 +115,8 @@ const internalRemoteVersion = {
 		});
 	},
 
-	compareVersions: (current, latest) => {
-		const cleanCurrent = current.replace(/^v/, "");
-		const cleanLatest = latest.replace(/^v/, "");
+	compareVersions: isNewerRelease,
 
-		const currentParts = cleanCurrent.split(/[.-]/).slice(0,3).map(Number);
-		const latestParts = cleanLatest.split(/[.-]/).slice(0,3).map(Number);
-
-		for (let i = 0; i < Math.max(currentParts.length, latestParts.length); i++) {
-			const curr = currentParts[i] || 0;
-			const lat = latestParts[i] || 0;
-
-			if (lat > curr) return true;
-			if (lat < curr) return false;
-		}
-		return false;
-	},
 };
 
 export default internalRemoteVersion;

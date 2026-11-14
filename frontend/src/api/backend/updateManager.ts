@@ -21,6 +21,9 @@ export interface UpdateCapabilities {
 	hostServiceInstalled: boolean;
 	hostUpdaterVersion: string | null;
 	hostUpdaterAutomaticMaintenance: boolean;
+	hostUpdaterPrereleaseSupport: boolean;
+	hostUpdaterMaintenanceState: "current" | "retry_scheduled";
+	hostUpdaterMaintenanceSummary: string | null;
 	hostUpdaterMaintenanceError: string | null;
 	reason: string | null;
 }

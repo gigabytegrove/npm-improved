@@ -16,6 +16,20 @@ STATUS_FILE="${NPM_UPDATE_STATUS_FILE:-$ROOT/data/update-status.json}"
 ENV_FILE="$ROOT/.env"
 PREVIOUS_ENV="$ROOT/.env.npm-update-previous"
 ROLLBACK_SOURCE_ENV="$ROOT/.env.npm-update-rollback-source"
+FIREWALL_OVERLAY="$(dirname "$0")/compose.firewall.yaml"
+FIREWALL_IMAGE_PREFIX="ghcr.io/gigabytegrove/npm-improved-firewall:"
+
+is_prerelease() {
+  printf '%s\n' "$1" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+-(alpha|beta|rc)\.[0-9]+$'
+}
+
+is_official_image() {
+  printf '%s\n' "$1" | grep -Eq '^ghcr\.io/gigabytegrove/npm-improved:v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$'
+}
+
+has_firewall_service() {
+  compose config --services 2>/dev/null | grep -Fxq firewall
+}
 
 case "$MODE" in
 	sqlite) COMPOSE_FILE="$ROOT/compose.yaml" ;;
@@ -95,7 +109,13 @@ set_env() {
 }
 
 compose() {
-	docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"
+  if grep -Eq '^  firewall:' "$COMPOSE_FILE"; then
+    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"
+  elif [ -r "$FIREWALL_OVERLAY" ]; then
+    docker compose -f "$COMPOSE_FILE" -f "$FIREWALL_OVERLAY" --env-file "$ENV_FILE" "$@"
+  else
+    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"
+  fi
 }
 
 detect_release_arch() {
@@ -179,6 +199,11 @@ load_release_bundle() {
 		return 1
 	fi
 
+  if is_prerelease "$version" && ! docker image inspect "${FIREWALL_IMAGE_PREFIX}${version}" >/dev/null 2>&1; then
+    RELEASE_BUNDLE_ERROR="The prerelease archive does not contain its matching firewall image."
+    return 1
+  fi
+
 	return 0
 }
 
@@ -217,6 +242,10 @@ restore_previous() {
 	if ! compose up -d --no-deps --no-build --force-recreate app; then
 		return 1
 	fi
+  PREVIOUS_TARGET="$(get_env NPM_IMAGE)"
+  if is_prerelease "${PREVIOUS_TARGET##*:}" && has_firewall_service; then
+    compose up -d --no-deps --no-build --force-recreate firewall || return 1
+  fi
 	ROLLBACK_CID="$(wait_healthy || true)"
 	[ -n "$ROLLBACK_CID" ]
 }
@@ -249,13 +278,18 @@ sleep 2
 
 case "$ACTION" in
 	update)
-		case "$TARGET_IMAGE" in
-			ghcr.io/gigabytegrove/npm-improved:v[0-9]*.[0-9]*.[0-9]*) ;;
-			*)
-				write_status "failed" "Update rejected." "Target image is not an official stable NPM Improved release image." "" "$SOURCE_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-				exit 1
-				;;
-		esac
+    if ! is_official_image "$TARGET_IMAGE" || [ "$TARGET_IMAGE" != "ghcr.io/gigabytegrove/npm-improved:$TARGET_VERSION" ]; then
+      write_status "failed" "Update rejected." "Target image is not an official NPMi release version." "" "$SOURCE_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+      exit 1
+    fi
+    PRERELEASE=0
+    if is_prerelease "$TARGET_VERSION"; then
+      PRERELEASE=1
+      if ! has_firewall_service; then
+        write_status "failed" "Prerelease requirements unavailable." "The native host updater has no instance firewall companion." "" "$SOURCE_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+        exit 1
+      fi
+    fi
 
 		PREVIOUS_IMAGE="$(get_env NPM_IMAGE)"
 		[ -n "$PREVIOUS_IMAGE" ] || PREVIOUS_IMAGE="npm-improved:local"
@@ -298,7 +332,15 @@ case "$ACTION" in
 		PULL_LOG="$ROOT/data/update-pull.log"
 		rm -f "$PULL_LOG"
 		PULL_DETAIL=""
-		if [ "$REINSTALL" = "1" ]; then
+		if [ "$PRERELEASE" -eq 1 ]; then
+      # The dockeradm prerelease contains both checksum-verified images.
+      if load_release_bundle "$TARGET_VERSION" "$TARGET_IMAGE"; then
+        UPDATE_SOURCE="verified GitHub prerelease bundle"
+      else
+        write_status "failed" "Prerelease image unavailable." "$RELEASE_BUNDLE_ERROR" "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+        exit 1
+      fi
+		elif [ "$REINSTALL" = "1" ]; then
 			# Reinstall prioritizes the exact architecture bundle attached to
 			# the current GitHub Release, verified against published SHA256SUMS.
 			if load_release_bundle "$TARGET_VERSION" "$TARGET_IMAGE"; then
@@ -331,6 +373,11 @@ case "$ACTION" in
 		fi
 		rm -f "$PULL_LOG"
 
+    if [ "$PRERELEASE" -eq 1 ] && ! docker image inspect "${FIREWALL_IMAGE_PREFIX}${TARGET_VERSION}" >/dev/null 2>&1; then
+      write_status "failed" "Prerelease image unavailable." "The matching firewall companion is missing." "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+      exit 1
+    fi
+
 		TARGET_DIGEST="$(docker image inspect --format '{{if .RepoDigests}}{{index .RepoDigests 0}}{{else}}{{.Id}}{{end}}' "$TARGET_IMAGE" 2>/dev/null || true)"
 		cp "$ENV_FILE" "$PREVIOUS_ENV"
 		chmod 600 "$PREVIOUS_ENV" 2>/dev/null || true
@@ -340,6 +387,9 @@ case "$ACTION" in
 			set_env NPM_IMAGE "$PREVIOUS_IMAGE" "$PREVIOUS_ENV"
 		fi
 		set_env NPM_IMAGE "$TARGET_IMAGE"
+    if [ "$PRERELEASE" -eq 1 ]; then
+      set_env NPM_FIREWALL_IMAGE "${FIREWALL_IMAGE_PREFIX}${TARGET_VERSION}"
+    fi
 
 		write_status "staging" "The update image is ready from ${UPDATE_SOURCE:-the official release channel}. Preparing the replacement container."
 		if ! compose config --quiet; then
@@ -349,6 +399,9 @@ case "$ACTION" in
 		fi
 
 		write_status "restarting" "Replacing NPM Improved. The Control Center will reconnect automatically."
+    if has_firewall_service; then
+      compose stop firewall >/dev/null 2>&1 || true
+    fi
 		if ! compose up -d --no-deps --no-build --force-recreate app; then
 			if restore_previous "Docker Compose could not start the target image."; then
 				write_status "rolled_back" "Update failed and the previous image was restored." "Docker Compose could not start the target image." "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "$TARGET_DIGEST" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
@@ -357,6 +410,26 @@ case "$ACTION" in
 			fi
 			exit 1
 		fi
+
+		if [ "$PRERELEASE" -eq 1 ]; then
+      if ! compose up -d --no-deps --no-build --force-recreate firewall; then
+        if restore_previous "Firewall companion failed to start."; then
+          write_status "rolled_back" "Update failed and previous image restored." "Firewall companion startup failure." "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "$TARGET_DIGEST" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+        else
+          write_status "failed" "Firewall startup and rollback failed." "Firewall companion startup failure." "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "$TARGET_DIGEST" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+        fi
+        exit 1
+      fi
+      FW_CID="$(compose ps -q firewall)"
+      if [ -z "$FW_CID" ] || [ "$(docker inspect --format '{{.State.Status}}' "$FW_CID" 2>/dev/null || true)" != "running" ]; then
+        if restore_previous "Firewall companion exited after startup."; then
+          write_status "rolled_back" "Update failed and previous image restored." "Firewall companion exited early." "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "$TARGET_DIGEST" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+        else
+          write_status "failed" "Firewall exited and rollback failed." "Firewall companion exited early." "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "$TARGET_DIGEST" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+        fi
+        exit 1
+      fi
+    fi
 
 		write_status "verifying" "The new container is running. Verifying health and build identity."
 		NEW_CID="$(wait_healthy || true)"
@@ -380,7 +453,7 @@ case "$ACTION" in
 
 		LIVE_VERSION="$(docker exec "$NEW_CID" sh -c 'printf "%s" "$NPM_BUILD_VERSION"' 2>/dev/null || true)"
 		EXPECTED_VERSION="${TARGET_VERSION#v}"
-		if [ "$LIVE_VERSION" != "$EXPECTED_VERSION" ]; then
+		if [ "${LIVE_VERSION#v}" != "$EXPECTED_VERSION" ]; then
 			if restore_previous "The live build identity did not match the requested release."; then
 				write_status "rolled_back" "Build verification failed; the previous image was restored." "Expected $EXPECTED_VERSION but the new container reported ${LIVE_VERSION:-missing}." "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "$TARGET_DIGEST" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 			else
@@ -398,13 +471,10 @@ case "$ACTION" in
 		;;
 
 	rollback)
-		case "$TARGET_IMAGE" in
-			npm-improved:local|ghcr.io/gigabytegrove/npm-improved:v[0-9]*.[0-9]*.[0-9]*) ;;
-			*)
-				write_status "failed" "Rollback rejected." "The stored rollback image is not an allowed NPM Improved image." "" "$SOURCE_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-				exit 1
-				;;
-		esac
+		if [ "$TARGET_IMAGE" != "npm-improved:local" ] && ! is_official_image "$TARGET_IMAGE"; then
+      write_status "failed" "Rollback rejected." "The stored rollback image is not an allowed NPM Improved image." "" "$SOURCE_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+      exit 1
+    fi
 
 		CURRENT_IMAGE="$(get_env NPM_IMAGE)"
 		[ -n "$CURRENT_IMAGE" ] || CURRENT_IMAGE="npm-improved:local"
@@ -427,6 +497,9 @@ case "$ACTION" in
 		fi
 
 		set_env NPM_IMAGE "$TARGET_IMAGE"
+		if has_firewall_service; then
+      compose stop firewall >/dev/null 2>&1 || true
+    fi
 		if ! compose config --quiet || ! compose up -d --no-deps --no-build --force-recreate app; then
 			cp "$ROLLBACK_SOURCE_ENV" "$ENV_FILE"
 			compose up -d --no-deps --no-build --force-recreate app >/dev/null 2>&1 || true
@@ -434,6 +507,14 @@ case "$ACTION" in
 			exit 1
 		fi
 
+		if is_prerelease "$TARGET_VERSION" && has_firewall_service; then
+      if ! compose up -d --no-deps --no-build --force-recreate firewall; then
+        cp "$ROLLBACK_SOURCE_ENV" "$ENV_FILE"
+        compose up -d --no-deps --no-build --force-recreate app >/dev/null 2>&1 || true
+        write_status "failed" "Rollback firewall failed to start." "Previous deployment settings restored." "$CURRENT_IMAGE" "$SOURCE_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+        exit 1
+      fi
+    fi
 		ROLLBACK_CID="$(wait_healthy || true)"
 		if [ -z "$ROLLBACK_CID" ]; then
 			cp "$ROLLBACK_SOURCE_ENV" "$ENV_FILE"
