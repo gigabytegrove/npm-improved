@@ -243,7 +243,7 @@ restore_previous() {
 		return 1
 	fi
   PREVIOUS_TARGET="$(get_env NPM_IMAGE)"
-  if is_prerelease "$PREVIOUS_TARGET" && has_firewall_service; then
+  if is_prerelease "${PREVIOUS_TARGET##*:}" && has_firewall_service; then
     compose up -d --no-deps --no-build --force-recreate firewall || return 1
   fi
 	ROLLBACK_CID="$(wait_healthy || true)"
