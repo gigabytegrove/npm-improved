@@ -77,7 +77,7 @@ export default function FirewallSettings() {
 						<div className="d-flex align-items-center gap-2 mb-2">
 							<IconActivityHeartbeat size={22} aria-hidden="true" />
 							<strong>{data.enforced ? "Filtering active and verified" :
-								!enabled ? "Disabled" : data.state === "not_configured" ?
+								!enabled ? (data.releasePending ? "Disabling — awaiting companion" : "Disabled") : data.state === "not_configured" ?
 									"Setup required" : data.state === "unmanaged" ?
 										"Externally managed" : "Not enforcing"}</strong>
 						</div>
@@ -86,6 +86,12 @@ export default function FirewallSettings() {
 							{" "}Deployment: {data.config.mode.replace(/-/g, " ")}.
 							{" "}Control port: {data.managementPort}.
 						</p>
+						{!enabled && data.releasePending ? (
+							<div className="alert alert-info" role="status">
+								The firewall switch is off. The companion is releasing its filtering rules;
+								this page will update when removal is confirmed.
+							</div>
+						) : null}
 						{enabled && !data.enforced ? (
 							<div className="alert alert-warning" role="status">
 								The firewall feature is enabled, but NPMi has not verified active packet
