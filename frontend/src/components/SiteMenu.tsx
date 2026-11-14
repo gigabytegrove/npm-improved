@@ -17,6 +17,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { HasPermission } from "src/components";
 import { T } from "src/locale";
 import { useInstanceFirewall } from "src/hooks/useInstanceFirewall";
+import { useUser } from "src/hooks";
 import { showFirewallNavigation } from "src/modules/instanceFirewallVisibility";
 import {
 	ACCESS_LISTS,
@@ -206,7 +207,8 @@ function MenuGroup({
 
 export function SiteMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
 	const navigate = useNavigate();
-	const { data: firewall } = useInstanceFirewall();
+	const { data: me } = useUser("me");
+	const { data: firewall } = useInstanceFirewall(me?.roles.includes("admin") === true);
 	const visibleControlItems = controlItems.filter(
 		(item) => item.to !== "/security" || showFirewallNavigation(firewall?.enabled),
 	);
