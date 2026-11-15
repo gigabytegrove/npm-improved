@@ -73,13 +73,14 @@ export const createNpmxHeaders = ({ secret, nodeId, method, path, body }) => {
 	};
 };
 
-export const createNpmxPairingCode = ({ primaryUrl, tokenId, tokenSecret, expiresAt }) => {
+export const createNpmxPairingCode = ({ primaryUrl, tokenId, tokenSecret, expiresAt, targetPeerId = "" }) => {
 	const payload = {
 		v: NPMX_VERSION,
 		url: String(primaryUrl || "").replace(/\/$/, ""),
 		id: String(tokenId || ""),
 		token: String(tokenSecret || ""),
 		exp: String(expiresAt || ""),
+		...(targetPeerId ? { peer: String(targetPeerId) } : {}),
 	};
 	if (!payload.url || !payload.id || !payload.token || !payload.exp) {
 		throw new Error("NPMX pairing code payload is incomplete");
@@ -101,6 +102,9 @@ export const parseNpmxPairingCode = (code) => {
 		throw new Error("Invalid NPMX pairing code");
 	}
 
+	if (payload?.peer !== undefined && (typeof payload.peer !== "string" || payload.peer.length < 1 || payload.peer.length > 100)) {
+		throw new Error("NPMX repair code has an invalid peer identity");
+	}
 	if (
 		payload?.v !== NPMX_VERSION ||
 		typeof payload.url !== "string" ||
