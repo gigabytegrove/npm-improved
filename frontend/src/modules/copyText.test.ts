@@ -2,7 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { copyText } from "./copyText";
 
 describe("NPMX code copying on HTTP-administered nodes", () => {
+	const initialExecCommand = Object.getOwnPropertyDescriptor(document, "execCommand");
 	afterEach(() => {
+		if (initialExecCommand) Object.defineProperty(document, "execCommand", initialExecCommand);
+		else Reflect.deleteProperty(document, "execCommand");
 		vi.restoreAllMocks();
 	});
 
