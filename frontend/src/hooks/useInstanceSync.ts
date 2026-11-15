@@ -45,7 +45,7 @@ const useRunInstanceSync = () => {
 const useCreateNpmxPairingCode = () => {
 	const queryClient = useQueryClient();
 	return useMutation({
-		mutationFn: (primaryUrl?: string) => createNpmxPairingCode(primaryUrl),
+		mutationFn: (options: { primaryUrl?: string; targetPeerId?: string }) => createNpmxPairingCode(options),
 		onSuccess: async () => {
 			await queryClient.invalidateQueries({ queryKey: ["instance-sync"] });
 		},
@@ -55,7 +55,7 @@ const useCreateNpmxPairingCode = () => {
 const useJoinNpmxPairing = () => {
 	const queryClient = useQueryClient();
 	return useMutation({
-		mutationFn: (pairingCode: string) => joinNpmxPairing(pairingCode),
+		mutationFn: (options: { pairingCode: string; confirmExistingPeer?: boolean }) => joinNpmxPairing(options),
 		onSuccess: async () => {
 			await queryClient.invalidateQueries({ queryKey: ["instance-sync"] });
 		},
