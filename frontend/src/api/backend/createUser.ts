@@ -17,7 +17,7 @@ export interface NewUser {
 		mode: "static" | "forwarded" | "dmz" | "unmanaged";
 		state: "deferred";
 		trustedNetworks: string[];
-		hostLanIp: string;
+		hostLanIp?: string;
 		acknowledgedDmz: boolean;
 	};
 }
