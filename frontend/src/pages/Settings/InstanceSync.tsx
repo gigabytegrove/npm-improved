@@ -582,6 +582,113 @@ export default function InstanceSync() {
 							</Button>
 						</div>
 					</div>
+
+					<Modal show={showCodeModal} onHide={() => setShowCodeModal(false)} centered>
+						<Modal.Header closeButton>
+							<Modal.Title>Secondary pairing code</Modal.Title>
+						</Modal.Header>
+						<Modal.Body>
+							<p className="text-secondary">
+								Copy this code and paste it into the Reconnect dialog for this node on the primary.
+							</p>
+							<label className="form-label" htmlFor="npmx-secondary-code">Pairing code</label>
+							<textarea id="npmx-secondary-code" className="form-control font-monospace"
+								rows={5} readOnly value={pairingCode} />
+							<div className="small text-secondary mt-2">
+								One use only. Expires {formatDate(pairingExpires)}.
+							</div>
+							{modalError ? <Alert variant="danger" className="mt-3">{modalError}</Alert> : null}
+						</Modal.Body>
+						<Modal.Footer>
+							<Button type="button" onClick={() => setShowCodeModal(false)}>Close</Button>
+							<Button type="button" actionType="primary" onClick={async () => {
+								setModalError("");
+								try { await navigator.clipboard.writeText(pairingCode); }
+								catch (err) { setModalError(err instanceof Error ? err.message : "Unable to copy code."); }
+							}}><IconClipboard size={16} /> Copy code</Button>
+						</Modal.Footer>
+					</Modal>
+
+					<Modal show={Boolean(editingPeerId)}
+						onHide={() => { if (!updatePeer.isPending) setEditingPeerId(""); }} centered>
+						<Modal.Header closeButton={!updatePeer.isPending}>
+							<Modal.Title>Edit NPMX node</Modal.Title>
+						</Modal.Header>
+						<Modal.Body>
+							<p className="small text-secondary">
+								Changes the existing node record only. Its identity and pairing stay unchanged.
+							</p>
+							<label className="form-label" htmlFor="npmx-edit-name">Node name</label>
+							<input id="npmx-edit-name" type="text" required maxLength={100}
+								className="form-control mb-3"
+								value={peerDraft.nodeName}
+								onChange={(event) => setPeerDraft((v) => ({ ...v, nodeName: event.target.value }))}/>
+							<label className="form-label" htmlFor="npmx-edit-url">Node address</label>
+							<input id="npmx-edit-url" type="url" className="form-control"
+								value={peerDraft.publicUrl}
+								placeholder="http://192.168.0.18:81"
+								onChange={(event) => setPeerDraft((v) => ({ ...v, publicUrl: event.target.value }))}/>
+							{modalError ? <Alert variant="danger" className="mt-3">{modalError}</Alert> : null}
+						</Modal.Body>
+						<Modal.Footer>
+							<Button type="button" disabled={updatePeer.isPending}
+								onClick={() => setEditingPeerId("")}>Cancel</Button>
+							<Button type="button" actionType="primary"
+								disabled={updatePeer.isPending || !peerDraft.nodeName.trim()}
+								isLoading={updatePeer.isPending}
+								onClick={async () => {
+									setModalError("");
+									try {
+										await updatePeer.mutateAsync({
+											nodeId: editingPeerId,
+											nodeName: peerDraft.nodeName.trim(),
+											publicUrl: peerDraft.publicUrl.trim(),
+										});
+										setEditingPeerId("");
+										setMessage("Node settings saved.");
+									} catch (err) { setModalError(err instanceof Error ? err.message : String(err)); }
+								}}>Save changes</Button>
+						</Modal.Footer>
+					</Modal>
+
+					<Modal show={Boolean(reconnectingPeerId)}
+						onHide={() => { if (!reconnectPeer.isPending) setReconnectingPeerId(""); }} centered>
+						<Modal.Header closeButton={!reconnectPeer.isPending}>
+							<Modal.Title>Reconnect NPMX secondary</Modal.Title>
+						</Modal.Header>
+						<Modal.Body>
+							<p className="text-secondary">
+								Paste the pairing code generated on the disconnected secondary.
+								This reconnects the existing node, without creating another record.
+							</p>
+							<label className="form-label" htmlFor="npmx-reconnect-code">Secondary pairing code</label>
+							<textarea id="npmx-reconnect-code" className="form-control font-monospace"
+								rows={5} value={reconnectCode}
+								onChange={(event) => setReconnectCode(event.target.value)}
+								placeholder="npmxr1."/>
+							{modalError ? <Alert variant="danger" className="mt-3">{modalError}</Alert> : null}
+						</Modal.Body>
+						<Modal.Footer>
+							<Button type="button" disabled={reconnectPeer.isPending}
+								onClick={() => setReconnectingPeerId("")}>Cancel</Button>
+							<Button type="button" actionType="primary"
+								disabled={reconnectPeer.isPending || !reconnectCode.trim()}
+								isLoading={reconnectPeer.isPending}
+								onClick={async () => {
+									setModalError("");
+									try {
+										await reconnectPeer.mutateAsync({
+											nodeId: reconnectingPeerId,
+											pairingCode: reconnectCode.trim(),
+											primaryUrl: window.location.origin,
+										});
+										setReconnectingPeerId("");
+										setReconnectCode("");
+										setMessage("Existing NPMX secondary reconnected successfully.");
+									} catch (err) { setModalError(err instanceof Error ? err.message : String(err)); }
+								}}>Reconnect</Button>
+						</Modal.Footer>
+					</Modal>
 				</Form>
 			)}
 		</Formik>
