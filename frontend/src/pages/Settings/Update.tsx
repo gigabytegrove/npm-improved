@@ -77,11 +77,28 @@ const badgeClass = (state?: string) => {
 };
 
 
+type ReleaseChannel = "stable" | "beta" | "alpha";
+const RELEASE_CHANNEL_KEY = "npm-improved.update.release-channel";
+
+const readReleaseChannel = (): ReleaseChannel => {
+	try {
+		const value = window.localStorage.getItem(RELEASE_CHANNEL_KEY);
+		return value === "beta" || value === "alpha" ? value : "stable";
+	} catch {
+		return "stable";
+	}
+};
+
+const persistReleaseChannel = (value: ReleaseChannel) => {
+	try { window.localStorage.setItem(RELEASE_CHANNEL_KEY, value); }
+	catch { /* The selected channel still works for this page when storage is blocked. */ }
+};
+
 type AuthAction = "update" | "reinstall" | "rollback" | "restart";
 
 export default function Update() {
 	const initialStatusLoad = useRef(true);
-	const [releaseChannel, setReleaseChannel] = useState<"stable" | "beta" | "alpha">("stable");
+	const [releaseChannel, setReleaseChannel] = useState<ReleaseChannel>(readReleaseChannel);
 	const {
 		data,
 		isLoading,
@@ -223,7 +240,11 @@ export default function Update() {
 				<label htmlFor="npmi-release-channel" className="fw-semibold">Release channel</label>
 				<select id="npmi-release-channel" className="form-select" style={{ maxWidth: "18rem" }}
 					value={releaseChannel} disabled={active || runningAction !== null}
-					onChange={(event) => setReleaseChannel(event.target.value as "stable" | "beta" | "alpha")}>
+					onChange={(event) => {
+					const channel = event.target.value as ReleaseChannel;
+					setReleaseChannel(channel);
+					persistReleaseChannel(channel);
+				}}>
 					<option value="stable">Stable — recommended</option>
 					<option value="beta">Beta — pre-release testing</option>
 					<option value="alpha">Alpha / RC — experimental</option>
