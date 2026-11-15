@@ -99,3 +99,12 @@ test("explicit full disaster recovery continues to replace all settings", async 
   assert.equal(h.state.setting.some((row) => row.id === "instance-sync"), false);
   assert.deepEqual(h.state.proxy_host, snapshot().proxy_host);
 });
+
+test("configuration restore preserves destination pairing even if backup contains foreign identity", async () => {
+  const h = harness();
+  const data = snapshot();
+  data.setting.push({ id: "instance-sync", value: "enabled", meta: JSON.stringify({ role: "primary", node_id: "foreign-primary" }) });
+  await replace(h, data, "configuration");
+  assert.deepEqual(h.state.setting.find((row) => row.id === "instance-sync"), original().setting[0]);
+  assert.deepEqual(h.state.proxy_host, data.proxy_host);
+});
