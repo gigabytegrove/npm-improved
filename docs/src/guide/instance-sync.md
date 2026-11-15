@@ -57,6 +57,61 @@ On the secondary:
 
 The primary URL, persistent cluster authentication material, and secondary relationship are established automatically.
 
+## Edit and repair an existing secondary
+
+**A previously paired secondary must not be enrolled as a new node.** The primary
+keeps the original peer ID, and its NPMX peer manager now supports edits to the
+display name and advertised management URL without modifying that identity.
+
+On the primary:
+
+1. Open **Settings → Instance Synchronization → Manage enrolled secondaries**.
+2. Choose the existing secondary by its original ID.
+3. Edit the display name or management URL, and select **Save and refresh repair code**.
+4. Copy the **repair** code shown in the pairing section. Unlike a new-node code,
+   this token is cryptographically linked to the selected peer ID and expires
+   after ten minutes. Saving and refreshing a code invalidates an earlier unused
+   pairing code for that primary.
+
+On the affected secondary:
+
+1. Open **Settings → Instance Synchronization**. If this formerly paired node
+   mistakenly reports **Primary**, select **Repair this node as an existing
+   secondary**. This changes the form only, not the stored role.
+2. Paste the repair code, select **Review pairing code**, and verify the primary
+   URL, current ID, and original secondary ID supplied by the primary.
+3. Confirm **Repair existing pairing**. NPMX authenticates the one-time token
+   and reuses the primary's original secondary ID; it does not add a second
+   peer record.
+4. **Synchronization stays disabled.** Pairing does not import users, host
+   configuration, certificates or files. To resume, select **Create backup and
+   activate synchronization** and explicitly confirm that future snapshots
+   will be primary-authoritative.
+
+Before the first synchronized update after repair, NPMi preserves the
+secondary's current synchronized database and filesystem configuration as
+an encrypted, retained `npmx-pre-activation-*.npmibak` file under
+`/data/backups`. This backup is available through **Download encrypted
+recovery snapshot** in the NPMX UI. It uses the active cluster credential for
+encryption; preserve that credential if you need to restore the snapshot later.
+The snapshot intentionally excludes this node's local pairing identity.
+
+**Safety rules:**
+
+- A repair code can only target a secondary already enrolled on the primary.
+  A new-node code cannot be used to overwrite a node that already has NPMX
+  credentials or a configured active role.
+- A primary that still has enrolled secondaries cannot be converted through
+  the repair workflow.
+- If the target ID differs from the secondary's current stored ID, recovery
+  requires explicit confirmation before the original identity is restored.
+- Pairing and snapshot application cannot execute concurrently.
+- Saving the ordinary NPMX settings form cannot bypass the staged recovery
+  backup and activation requirement.
+- A secondary does not run NPMX snapshot pulls until activation succeeds.
+  The original secondary configuration remains available as an encrypted
+  recovery snapshot if it is replaced afterward.
+
 ## Pairing cryptography
 
 NPMX v1 pairing uses:
