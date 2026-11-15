@@ -1773,6 +1773,7 @@ const internalInstanceSync = {
 				last_attempt: attempt,
 				last_error: null,
 				primary_status: {
+					role: "primary",
 					node_id: peer.node_id,
 					node_name: peer.node_name,
 					public_url: peer.public_url || primaryUrl,
