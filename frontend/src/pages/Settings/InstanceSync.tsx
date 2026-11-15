@@ -402,6 +402,35 @@ export default function InstanceSync() {
 							</div>
 						</div>
 
+						{data.recoveryPending ? (
+							<Alert variant="warning" className="mb-4">
+								<strong>Secondary pairing restored — synchronization paused.</strong>
+								<p className="mt-2">No proxy configuration has been overwritten. Activation saves an encrypted copy of this node's current synchronized state before it can pull data from the primary.</p>
+								<Button type="button" actionType="primary" disabled={activatePair.isPending} isLoading={activatePair.isPending}
+									onClick={async () => {
+										if (!window.confirm("Create an encrypted recovery backup, then enable primary-authoritative NPMX synchronization? Future pulls may replace this node's local proxy, certificate and user configuration.")) return;
+										setActionError("");
+										try {
+											const result = await activatePair.mutateAsync();
+											setFieldValue("enabled", true);
+											setMessage(`Synchronization activated. Local encrypted recovery snapshot saved as ${result.backup}.`);
+										} catch (err) { setActionError(err instanceof Error ? err.message : String(err)); }
+									}}>
+									Create backup and activate synchronization
+								</Button>
+							</Alert>
+						) : null}
+						{data.recoveryBackup ? (
+							<div className="mb-4">
+								<div className="small text-secondary mb-2">Pre-activation recovery snapshot: {data.recoveryBackup}</div>
+								<Button type="button" onClick={async () => {
+									setActionError("");
+									try { await downloadNpmxRecoveryBackup(); }
+									catch (err) { setActionError(err instanceof Error ? err.message : String(err)); }
+								}}>Download encrypted recovery snapshot</Button>
+							</div>
+						) : null}
+
 						<div className="card mb-4">
 							<div className="card-header">
 								<h3 className="card-title">Cluster configuration</h3>
