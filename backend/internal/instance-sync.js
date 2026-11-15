@@ -37,6 +37,7 @@ import pjson from "../package.json" with { type: "json" };
 import { global as logger } from "../logger.js";
 import internalDisasterRecovery from "./disaster-recovery.js";
 import db from "../db.js";
+import { assertSafeRepairJoin, findRepairPeer, mergePeerHeartbeat } from "../lib/npmx-repair-policy.js";
 import { describeNpmxWrite, recordFingerprint } from "../lib/npmx-write-policy.js";
 import {
 	applyAuthorizedWrite,
@@ -272,6 +273,8 @@ const sanitizedStatus = async () => {
 		primaryUrl: meta.primary_url || "",
 		intervalSeconds: meta.interval_seconds || 30,
 		secretConfigured: Boolean(readSecret()),
+		recoveryPending: Boolean(meta.recovery_pending),
+		recoveryBackup: meta.recovery_backup || null,
 		// A primary never pulls. Its successful sync timestamp is reported by
 		// secondaries after the snapshot has been applied, NOT on pairing.
 		lastSync: primary ? latestSuccessfulPeerSync(peers) : (meta.last_sync || null),
@@ -813,6 +816,25 @@ const internalInstanceSync = {
 		};
 	},
 
+	updatePeer: async (nodeId, data) => {
+		const row = await getRow();
+		if (row.meta?.role !== "primary") throw new errs.ValidationError("Only the primary can edit secondary peers");
+		const peer = findRepairPeer(row.meta.peers, nodeId);
+		const patch = {};
+		if (typeof data.nodeName === "string") {
+			const name = data.nodeName.trim();
+			if (!name || name.length > 100) throw new errs.ValidationError("Secondary name must be 1-100 characters");
+			patch.configured_name = name;
+		}
+		if (typeof data.publicUrl === "string") {
+			patch.configured_url = normalizeUrl(data.publicUrl, "Secondary address", false);
+		}
+		if (Object.keys(patch).length === 0) throw new errs.ValidationError("No editable secondary settings were supplied");
+		const peers = row.meta.peers.map((item) => item.node_id === peer.node_id ? { ...item, ...patch } : item);
+		await settingModel.query().findById(SETTING_ID).patch({ meta: { ...row.meta, peers } });
+		return sanitizedStatus();
+	},
+
 	createPairingCode: async (data = {}) => {
 		if (sharedDatabaseMode()) {
 			throw new errs.ValidationError("Shared MySQL nodes do not use NPMX Primary/Secondary pairing");
@@ -823,6 +845,7 @@ const internalInstanceSync = {
 			throw new errs.ValidationError("Only a primary node can create an NPMX pairing code");
 		}
 
+		const targetNodeId = data.peerNodeId ? findRepairPeer(meta.peers, data.peerNodeId).node_id : null;
 		const primaryUrl = normalizeUrl(
 			data.primaryUrl || meta.public_url,
 			"Primary node URL",
@@ -834,6 +857,8 @@ const internalInstanceSync = {
 
 		ensureSecret();
 		writePairingState({
+			mode: targetNodeId ? "repair" : "enroll",
+			target_node_id: targetNodeId,
 			token_id: tokenId,
 			token_secret_hash: hashNpmxSecret(tokenSecret),
 			expires_at: expiresAt,
@@ -850,11 +875,14 @@ const internalInstanceSync = {
 			protocolVersion: NPMX_VERSION,
 			primaryUrl,
 			expiresAt,
+			mode: targetNodeId ? "repair" : "enroll",
+			targetNodeId,
 			pairingCode: createNpmxPairingCode({
 				primaryUrl,
 				tokenId,
 				tokenSecret,
 				expiresAt,
+				targetNodeId,
 			}),
 		};
 	},
@@ -872,6 +900,21 @@ const internalInstanceSync = {
 			Date.parse(state.expires_at) <= Date.now()
 		) {
 			throw new errs.TokenRevokedError("NPMX pairing code is invalid, expired, or already used");
+		}
+		// A repair token is scoped to exactly one enrolled secondary identity.
+		// Do not accept it as a new peer or allow a new enrollment to collide.
+		const mode = state.mode || "enroll";
+		if (mode === "repair") {
+			const current = await getRow();
+			findRepairPeer(current.meta?.peers, state.target_node_id);
+			if (data.node_id !== state.target_node_id) {
+				throw new errs.TokenRevokedError("Repair code is bound to another secondary node identity");
+			}
+		} else {
+			const current = await getRow();
+			if (current.meta?.peers?.some((peer) => peer.node_id === data.node_id)) {
+				throw new errs.ValidationError("This secondary already exists; use Repair existing secondary rather than enrolling a duplicate");
+			}
 		}
 		if (!timestampIsCurrent(data.timestamp)) {
 			throw new errs.TokenRevokedError("NPMX pairing request timestamp is outside the allowed window");
@@ -934,6 +977,7 @@ const internalInstanceSync = {
 				version: data.version,
 				build_commit: data.build_commit || null,
 				last_sync: null,
+				repair_pending: mode === "repair",
 				protocol: NPMX_PROTOCOL,
 				protocol_version: NPMX_VERSION,
 			},
@@ -954,7 +998,27 @@ const internalInstanceSync = {
 		};
 	},
 
-	joinNpmxPairing: async (pairingCode) => {
+	previewPairingCode: async (pairingCode) => {
+		const parsed = parseNpmxPairingCode(pairingCode);
+		const row = await getRow();
+		let policy;
+		try {
+			policy = assertSafeRepairJoin({ code: parsed, current: row, configuredSecret: readSecret(), restoreIdentity: true });
+		} catch (err) {
+			throw new errs.ValidationError(err instanceof Error ? err.message : String(err));
+		}
+		return {
+			mode: parsed.mode,
+			primaryUrl: normalizeUrl(parsed.url, "Primary URL", true),
+			currentNodeId: row.meta?.node_id || "",
+			targetNodeId: parsed.target_node_id,
+			identityRestoreRequired: policy.identityRestoreRequired,
+			willPauseSynchronization: true,
+			configurationWillBeReplaced: false,
+		};
+	},
+
+	joinNpmxPairing: async (pairingCode, { restoreIdentity = false } = {}) => {
 		if (sharedDatabaseMode()) {
 			throw new errs.ValidationError("Shared MySQL nodes do not use NPMX Primary/Secondary pairing");
 		}
@@ -967,20 +1031,31 @@ const internalInstanceSync = {
 
 		const row = await getRow();
 		const meta = row.meta || {};
+		let decision;
+		try {
+			decision = assertSafeRepairJoin({
+				code: parsed,
+				current: row,
+				configuredSecret: readSecret(),
+				restoreIdentity,
+			});
+		} catch (err) {
+			throw new errs.ValidationError(err instanceof Error ? err.message : String(err));
+		}
 		const primaryUrl = normalizeUrl(parsed.url, "Primary node URL", true);
 		const ephemeral = generateNpmxEphemeralKeyPair();
 		const timestamp = new Date().toISOString();
 		const nonce = generateNpmxNonce();
 		const proofDetails = {
 			tokenId: parsed.id,
-			nodeId: meta.node_id,
+			nodeId: decision.nodeId,
 			nodePublicKey: ephemeral.publicKey,
 			timestamp,
 			nonce,
 		};
 		const requestBody = {
 			token_id: parsed.id,
-			node_id: meta.node_id,
+			node_id: decision.nodeId,
 			node_name: meta.node_name || os.hostname(),
 			public_url: meta.public_url || "",
 			version: currentVersion(),
@@ -1033,26 +1108,37 @@ const internalInstanceSync = {
 		const secret = decryptNpmxPairingSecret(
 			payload,
 			key,
-			`${parsed.id}:${meta.node_id}`,
+			`${parsed.id}:${decision.nodeId}`,
 		);
-		writeSecret(secret);
-
+		if (payload.node_id !== decision.nodeId ||
+			payload.primary?.role !== "primary") {
+			throw new errs.ValidationError("Repair response does not match the requested primary or target secondary identity");
+		}
+		// Pause all snapshot pulls before changing credentials or node identity.
+		// No synchronized host/certificate records are modified by pairing.
 		await settingModel.query().findById(SETTING_ID).patch({
-			value: "enabled",
+			value: "disabled",
 			meta: {
 				...meta,
+				node_id: decision.nodeId,
 				role: "secondary",
 				primary_url: primaryUrl,
+				recovery_pending: true,
+				recovery_backup: null,
 				write_session_floor: Math.ceil(Date.now() / 1000),
 				last_error: null,
 				primary_status: payload.primary || null,
 			},
 		});
-		internalInstanceSync.reschedule(1000);
+		writeSecret(secret);
+		internalInstanceSync.reschedule();
 		internalInstanceSync.startAcmePolling();
 
 		return {
 			ok: true,
+			mode: parsed.mode,
+			configurationPreserved: true,
+			activationRequired: true,
 			protocol: NPMX_PROTOCOL,
 			protocolVersion: NPMX_VERSION,
 			primary: payload.primary,
@@ -1163,7 +1249,8 @@ const internalInstanceSync = {
 			throw new errs.ValidationError("Heartbeat node identity is required");
 		}
 		const peers = Array.isArray(meta.peers) ? [...meta.peers] : [];
-		const peer = {
+		const index = peers.findIndex((item) => item.node_id === nodeId);
+		const peer = mergePeerHeartbeat(index >= 0 ? peers[index] : null, {
 			node_id: nodeId,
 			node_name: nodeName.slice(0, 100),
 			public_url: normalizeUrl(data.public_url, "Peer public URL", false),
@@ -1171,12 +1258,11 @@ const internalInstanceSync = {
 			version: String(data.version || "unknown"),
 			build_commit: data.build_commit || null,
 			last_sync: data.last_sync || null,
+			repair_pending: data.repair_pending === true,
 			protocol: data.protocol || null,
 			protocol_version: data.protocol_version || null,
-			last_seen: new Date().toISOString(),
 			remote_address: remoteAddress || null,
-		};
-		const index = peers.findIndex((item) => item.node_id === nodeId);
+		}, new Date().toISOString());
 		if (index >= 0) peers[index] = peer;
 		else peers.push(peer);
 
