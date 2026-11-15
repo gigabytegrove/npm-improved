@@ -192,7 +192,7 @@ PY
 for arch in amd64 arm64; do
   for key in beta; do
     version='1.7.9'; revision="$EXPECTED_STABLE_REV"; tag="$STABLE_TAG"
-    if [[ "$key" == beta ]]; then version='1.8.0-beta.4'; revision="$BETA_REV"; tag="$BETA_TAG"; fi
+    if [[ "$key" == beta ]]; then version='1.8.0-beta.5'; revision="$BETA_REV"; tag="$BETA_TAG"; fi
     src="$WORK/source/$key"
     app="ghcr.io/gigabytegrove/npm-improved:$tag"
     out="$WORK/dist/$key-$arch-app.tar.gz"
