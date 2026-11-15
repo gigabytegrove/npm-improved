@@ -19,6 +19,7 @@ import {
 	startManagedUpdate,
 } from "src/api/backend";
 import { Button, Loading } from "src/components";
+import { useReleaseChannel, type ReleaseChannel } from "src/hooks/useReleaseChannel";
 import styles from "./Update.module.css";
 
 const ACTIVE_STATES = new Set([
@@ -77,28 +78,11 @@ const badgeClass = (state?: string) => {
 };
 
 
-type ReleaseChannel = "stable" | "beta" | "alpha";
-const RELEASE_CHANNEL_KEY = "npm-improved.update.release-channel";
-
-const readReleaseChannel = (): ReleaseChannel => {
-	try {
-		const value = window.localStorage.getItem(RELEASE_CHANNEL_KEY);
-		return value === "beta" || value === "alpha" ? value : "stable";
-	} catch {
-		return "stable";
-	}
-};
-
-const persistReleaseChannel = (value: ReleaseChannel) => {
-	try { window.localStorage.setItem(RELEASE_CHANNEL_KEY, value); }
-	catch { /* The selected channel still works for this page when storage is blocked. */ }
-};
-
 type AuthAction = "update" | "reinstall" | "rollback" | "restart";
 
 export default function Update() {
 	const initialStatusLoad = useRef(true);
-	const [releaseChannel, setReleaseChannel] = useState<ReleaseChannel>(readReleaseChannel);
+	const [releaseChannel, setReleaseChannel] = useReleaseChannel();
 	const {
 		data,
 		isLoading,
@@ -241,10 +225,8 @@ export default function Update() {
 				<select id="npmi-release-channel" className="form-select" style={{ maxWidth: "18rem" }}
 					value={releaseChannel} disabled={active || runningAction !== null}
 					onChange={(event) => {
-					const channel = event.target.value as ReleaseChannel;
-					setReleaseChannel(channel);
-					persistReleaseChannel(channel);
-				}}>
+						setReleaseChannel(event.target.value as ReleaseChannel);
+					}}>
 					<option value="stable">Stable — recommended</option>
 					<option value="beta">Beta — pre-release testing</option>
 					<option value="alpha">Alpha / RC — experimental</option>
