@@ -587,7 +587,9 @@ const applyClusterPayload = async (bundle) => {
 	}
 	assertAccessListSnapshot(bundle.database, bundle.filesystem);
 
-	const previousDatabase = await captureDatabase("cluster");
+	// The rollback snapshot must exclude node-local NPMX identity, just like
+	// an incoming cluster snapshot. replaceDatabase preserves it atomically.
+	const previousDatabase = await captureClusterDatabase();
 	const rollbackRoot = snapshotLiveFilesystem();
 
 	restoreInProgress = true;
