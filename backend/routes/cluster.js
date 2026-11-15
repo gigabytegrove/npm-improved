@@ -240,6 +240,7 @@ router.post("/npmx/pairing-code", async (req, res, next) => {
 				additionalProperties: false,
 				properties: {
 					primary_url: { type: "string", maxLength: 2048 },
+					target_peer_id: { type: "string", minLength: 1, maxLength: 100 },
 				},
 			},
 			req.body || {},
@@ -247,6 +248,7 @@ router.post("/npmx/pairing-code", async (req, res, next) => {
 		res.status(200).send(
 			await internalInstanceSync.createPairingCode({
 				primaryUrl: data.primary_url,
+				targetPeerId: data.target_peer_id,
 			}),
 		);
 	} catch (err) {
@@ -264,11 +266,14 @@ router.post("/npmx/join", async (req, res, next) => {
 				additionalProperties: false,
 				properties: {
 					pairing_code: { type: "string", minLength: 32, maxLength: 8192 },
+					confirm_existing_peer: { type: "boolean" },
 				},
 			},
 			req.body,
 		);
-		res.status(200).send(await internalInstanceSync.joinNpmxPairing(data.pairing_code));
+		res.status(200).send(await internalInstanceSync.joinNpmxPairing(data.pairing_code, {
+			confirmExistingPeer: data.confirm_existing_peer === true,
+		}));
 	} catch (err) {
 		debug(logger, `POST /cluster/npmx/join: ${err}`);
 		next(err);
@@ -298,6 +303,7 @@ router.put("/settings", async (req, res, next) => {
 					primary_url: { type: "string", maxLength: 2048 },
 					interval_seconds: { type: "integer", minimum: 15, maximum: 3600 },
 					shared_secret: { type: "string", minLength: 24, maxLength: 1024 },
+					approve_recovery_sync: { type: "boolean" },
 				},
 			},
 			req.body,
@@ -311,6 +317,7 @@ router.put("/settings", async (req, res, next) => {
 				primaryUrl: data.primary_url,
 				intervalSeconds: data.interval_seconds,
 				sharedSecret: data.shared_secret,
+				approveRecoverySync: data.approve_recovery_sync === true,
 			}),
 		);
 	} catch (err) {
