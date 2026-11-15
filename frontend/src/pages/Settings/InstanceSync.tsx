@@ -314,8 +314,9 @@ export default function InstanceSync() {
 											</>
 										) : null}
 									</>
-								) : (
-									<>
+								) : null}
+								{(data.role === "secondary" || !(data.peers?.length)) ? (
+									<div className={values.role === "primary" ? "border-top pt-3 mt-3" : ""}>
 										<label className="form-label" htmlFor="npmx-join-code">
 											Pairing code from the primary
 										</label>
@@ -340,6 +341,7 @@ export default function InstanceSync() {
 														if (!window.confirm("Repair or pair this node? Its stored proxy configuration will remain unchanged. Synchronization is paused until you approve the first snapshot.")) return;
 														const result = await joinPairing.mutateAsync({ pairingCode: joinCode.trim(), confirmExistingPeer: true });
 														setFieldValue("enabled", false);
+														setFieldValue("role", "secondary");
 														setFieldValue("primaryUrl", result.status.primaryUrl);
 														setJoinCode("");
 														setMessage(
@@ -358,8 +360,8 @@ export default function InstanceSync() {
 												exchange; it is not displayed or copied manually.
 											</span>
 										</div>
-									</>
-								)}
+									</div>
+								) : null}
 							</div>
 						</div>
 
