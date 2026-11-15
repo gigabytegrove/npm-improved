@@ -917,6 +917,67 @@ const internalInstanceSync = {
 		return { ok: true, nodeId, status: await sanitizedStatus() };
 	},
 
+	// This public endpoint accepts ONLY the code generated on this secondary.
+	// The primary's existing secret arrives encrypted under ephemeral X25519.
+	acceptSecondaryReconnect: async (data) => {
+		if (sharedDatabaseMode()) throw new errs.ValidationError("NPMX is unavailable in shared database mode");
+		const state = readReconnectState();
+		if (!state.token_id || state.token_id !== data.token_id || state.used ||
+			!state.private_key || !state.expires_at || Date.parse(state.expires_at) <= Date.now()) {
+			throw new errs.TokenRevokedError("Reconnect code is expired or already used");
+		}
+		if (!timestampIsCurrent(data.timestamp) ||
+			!verifyReconnectPayload(state.token_secret_hash, data)) {
+			throw new errs.TokenRevokedError("Reconnect request could not be authenticated");
+		}
+		if (data.version !== currentVersion()) {
+			throw new errs.ValidationError("Both NPMX nodes must have the same version to reconnect");
+		}
+		const row = await getRow();
+		const meta = row.meta || {};
+		if (meta.role === "primary" && Array.isArray(meta.peers) && meta.peers.length) {
+			throw new errs.ValidationError("An established primary cannot become a secondary");
+		}
+		const origin = new URL(normalizeUrl(data.primary_url, "Primary URL", true));
+		if (origin.username || origin.password || origin.pathname !== "/" || origin.search || origin.hash) {
+			throw new errs.ValidationError("Primary URL must be a direct http(s) origin");
+		}
+		let secret;
+		try {
+			const key = deriveNpmxPairingKey({
+				privateKey: crypto.createPrivateKey(state.private_key),
+				peerPublicKey: data.server_public_key,
+				tokenSecretHash: state.token_secret_hash,
+			});
+			secret = decryptNpmxPairingSecret(data, key, data.token_id + ":" + data.node_id);
+		} catch {
+			throw new errs.TokenRevokedError("Encrypted NPMX credential could not be decrypted");
+		}
+		if (!secret || secret.length < MIN_SECRET_LENGTH) {
+			throw new errs.TokenRevokedError("NPMX reconnect credential is invalid");
+		}
+		// A token is one-use even if a subsequent storage error occurs. The
+		// operator can generate another code; a replay cannot change roles.
+		writeReconnectState({ token_id: state.token_id, used: true, expires_at: state.expires_at });
+		const previous = { value: row.value, meta: { ...meta } };
+		await settingModel.query().findById(SETTING_ID).patch({
+			value: "enabled",
+			meta: {
+				...meta, node_id: data.node_id, role: "secondary",
+				primary_url: origin.origin, last_error: null, primary_status: null,
+				recovery_pending: false, write_session_floor: Math.ceil(Date.now() / 1000),
+			},
+		});
+		try { writeSecret(secret); }
+		catch (err) {
+			await settingModel.query().findById(SETTING_ID).patch(previous);
+			throw err;
+		}
+		internalInstanceSync.reschedule(1000);
+		internalInstanceSync.startAcmePolling();
+		return { ok: true, node_id: data.node_id, version: currentVersion() };
+	},
+
 	// Edit an existing enrolled secondary in place. Never mint a new ID or
 	// alter its pairing credentials, history, role, or replicated proxy data.
 	updateEnrolledPeer: async (nodeId, data) => {
