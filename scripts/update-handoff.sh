@@ -118,6 +118,27 @@ compose() {
   fi
 }
 
+# An image change must never silently attach an empty or different data volume.
+# A switched Compose project path can otherwise reset NPMX to a new Primary.
+PERSISTENCE_ERROR=""
+assert_preserved_mounts() {
+  app_cid="$1"
+  [ -n "$app_cid" ] || { PERSISTENCE_ERROR="Existing NPMi application container was not found."; return 1; }
+  mounted_data="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Source}}{{end}}{{end}}' "$app_cid" 2>/dev/null || true)"
+  mounted_certs="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/etc/letsencrypt"}}{{.Source}}{{end}}{{end}}' "$app_cid" 2>/dev/null || true)"
+  expected_data="$(readlink -f "$ROOT/data" 2>/dev/null || true)"
+  expected_certs="$(readlink -f "$ROOT/letsencrypt" 2>/dev/null || true)"
+  if [ -z "$mounted_data" ] || [ -z "$expected_data" ] || [ "$mounted_data" != "$expected_data" ]; then
+    PERSISTENCE_ERROR="Refusing update: current /data mount differs from the deployment data directory. Existing: ${mounted_data:-missing}; proposed: ${expected_data:-missing}. Preserve the original Compose project and volume before updating."
+    return 1
+  fi
+  if [ -z "$mounted_certs" ] || [ -z "$expected_certs" ] || [ "$mounted_certs" != "$expected_certs" ]; then
+    PERSISTENCE_ERROR="Refusing update: current /etc/letsencrypt mount differs from the deployment certificate directory. Existing: ${mounted_certs:-missing}; proposed: ${expected_certs:-missing}."
+    return 1
+  fi
+  return 0
+}
+
 detect_release_arch() {
 	case "$(uname -m 2>/dev/null || true)" in
 		x86_64|amd64) printf '%s' "amd64" ;;
@@ -305,6 +326,10 @@ case "$ACTION" in
 			write_status "failed" "Update preflight failed." "Persistent data or certificate directories are missing." "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 			exit 1
 		fi
+		if ! assert_preserved_mounts "$(compose ps -q app 2>/dev/null || true)"; then
+			write_status "failed" "Update stopped to protect persistent NPMX identity." "$PERSISTENCE_ERROR" "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+			exit 1
+		fi
 
 		FREE_KB="$(df -Pk "$ROOT" | awk 'NR == 2 {print $4}')"
 		if [ -z "$FREE_KB" ] || [ "$FREE_KB" -lt 524288 ]; then
@@ -439,6 +464,11 @@ case "$ACTION" in
 			else
 				write_status "failed" "The target did not become healthy and rollback failed." "Health verification timed out." "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "$TARGET_DIGEST" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 			fi
+			exit 1
+		fi
+
+		if ! assert_preserved_mounts "$NEW_CID"; then
+			write_status "failed" "Update failed persistent volume verification." "$PERSISTENCE_ERROR" "$PREVIOUS_IMAGE" "$PREVIOUS_VERSION" "$TARGET_IMAGE" "$TARGET_VERSION" "$TARGET_DIGEST" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 			exit 1
 		fi
 
