@@ -106,6 +106,36 @@ router.post("/npmx/pair", async (req, res, next) => {
 	}
 });
 
+// One-time secondary-issued reconnect, authenticated by the token carried
+// through the primary admin UI. No user JWT or old cluster secret is required.
+router.post("/npmx/reconnect", async (req, res, next) => {
+	try {
+		const data = await validator({
+			required: ["token_id", "node_id", "primary_url", "server_public_key", "iv",
+				"tag", "ciphertext", "timestamp", "nonce", "version", "proof"],
+			additionalProperties: false,
+			properties: {
+				token_id: { type: "string", minLength: 10, maxLength: 128 },
+				node_id: { type: "string", minLength: 1, maxLength: 100 },
+				primary_url: { type: "string", minLength: 8, maxLength: 2048 },
+				server_public_key: { type: "string", minLength: 32, maxLength: 512 },
+				iv: { type: "string", minLength: 16, maxLength: 128 },
+				tag: { type: "string", minLength: 16, maxLength: 128 },
+				ciphertext: { type: "string", minLength: 32, maxLength: 2048 },
+				timestamp: { type: "string", minLength: 20, maxLength: 64 },
+				nonce: { type: "string", minLength: 12, maxLength: 128 },
+				version: { type: "string", minLength: 1, maxLength: 64 },
+				proof: { type: "string", minLength: 32, maxLength: 256 },
+			},
+		}, req.body);
+		res.set("Cache-Control", "no-store");
+		res.status(200).send(await internalInstanceSync.acceptSecondaryReconnect(data));
+	} catch (err) {
+		debug(logger, "POST /cluster/npmx/reconnect failed: " + err);
+		next(err);
+	}
+});
+
 // Normal NPMX node-to-node traffic is HMAC-signed with timestamp + nonce
 // replay protection. The cluster secret itself is never sent as a header.
 router.get("/npmx/status", internalInstanceSync.requireNpmxAuth, async (_req, res, next) => {
@@ -252,6 +282,40 @@ router.put("/npmx/peers/:nodeId", async (req, res, next) => {
 		}));
 	} catch (err) {
 		debug(logger, `PUT /cluster/npmx/peers/:nodeId: ${err}`);
+		next(err);
+	}
+});
+
+router.post("/npmx/reconnect-code", async (req, res, next) => {
+	try {
+		await requireAdmin(res);
+		const data = await validator({
+			additionalProperties: false,
+			properties: { secondary_url: { type: "string", maxLength: 2048 } },
+		}, req.body || {});
+		res.set("Cache-Control", "no-store");
+		res.status(200).send(await internalInstanceSync.createSecondaryReconnectCode(data.secondary_url));
+	} catch (err) {
+		next(err);
+	}
+});
+
+router.post("/npmx/peers/:nodeId/reconnect", async (req, res, next) => {
+	try {
+		await requireAdmin(res);
+		const data = await validator({
+			required: ["pairing_code", "primary_url"],
+			additionalProperties: false,
+			properties: {
+				pairing_code: { type: "string", minLength: 32, maxLength: 8192 },
+				primary_url: { type: "string", minLength: 8, maxLength: 2048 },
+			},
+		}, req.body);
+		res.set("Cache-Control", "no-store");
+		res.status(200).send(await internalInstanceSync.reconnectEnrolledPeer(
+			req.params.nodeId, data.pairing_code, data.primary_url,
+		));
+	} catch (err) {
 		next(err);
 	}
 });
