@@ -295,6 +295,11 @@ export default function InstanceSync() {
 												<IconKey size={16} />
 												Create pairing code
 											</Button>
+											{data.role === "primary" && peers.length === 0 ? (
+												<Button type="button" onClick={() => setFieldValue("role", "secondary")}>
+													Repair this node as an existing secondary
+												</Button>
+											) : null}
 											<span className="text-secondary small">
 												The code expires after 10 minutes and can be used only once.
 											</span>
