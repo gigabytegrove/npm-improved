@@ -28,6 +28,12 @@ export const createLegacyPrepareResponseProof = (tokenHash, message) =>
 export const verifyLegacyPrepareResponseProof = (tokenHash, message) =>
 	verify(createLegacyPrepareResponseProof(tokenHash, message), message?.proof);
 
+const ACK_FIELDS = Object.freeze(["token_id", "node_id", "version", "upgraded", "timestamp", "nonce"]);
+export const createLegacyReconnectAckProof = (tokenHash, message) =>
+	sign(tokenHash, "NPMX-LEGACY-RECONNECT-ACK-1", message, ACK_FIELDS);
+export const verifyLegacyReconnectAckProof = (tokenHash, message) =>
+	verify(createLegacyReconnectAckProof(tokenHash, message), message?.proof);
+
 export const isLegacyPairingCode = (code) => String(code || "").trim().startsWith("npmx1.");
 export const connectionCodeType = (code) =>
 	isLegacyPairingCode(code) ? "legacy" : String(code || "").trim().startsWith("npmxr1.") ? "current" : "unknown";
