@@ -13,7 +13,7 @@ COPY frontend/ ./
 RUN yarn locale-compile
 # Run the critical unified-firewall UI and navigation regressions before
 # publishing an image. TypeScript and production bundling follow.
-RUN yarn vitest run src/pages/Settings/Firewall.test.ts src/modules/instanceFirewallVisibility.test.ts
+RUN yarn vitest run src/pages/Settings/Firewall.test.ts src/modules/instanceFirewallVisibility.test.ts src/hooks/useReleaseChannel.test.tsx src/modules/copyText.test.ts
 RUN yarn build
 
 FROM npmi_target_base AS npmi_runtime
