@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
 	createNpmxPairingCode,
+	previewNpmxCode,
+	updateNpmxPeer,
+	activateNpmxPair,
 	getInstanceSyncStatus,
 	joinNpmxPairing,
 	promoteInstanceSync,
@@ -45,7 +48,7 @@ const useRunInstanceSync = () => {
 const useCreateNpmxPairingCode = () => {
 	const queryClient = useQueryClient();
 	return useMutation({
-		mutationFn: (primaryUrl?: string) => createNpmxPairingCode(primaryUrl),
+		mutationFn: (input: { primaryUrl?: string; peerNodeId?: string }) => createNpmxPairingCode(input),
 		onSuccess: async () => {
 			await queryClient.invalidateQueries({ queryKey: ["instance-sync"] });
 		},
@@ -55,10 +58,29 @@ const useCreateNpmxPairingCode = () => {
 const useJoinNpmxPairing = () => {
 	const queryClient = useQueryClient();
 	return useMutation({
-		mutationFn: (pairingCode: string) => joinNpmxPairing(pairingCode),
+		mutationFn: (request: { pairingCode: string; restoreIdentity?: boolean }) => joinNpmxPairing(request.pairingCode, request.restoreIdentity),
 		onSuccess: async () => {
 			await queryClient.invalidateQueries({ queryKey: ["instance-sync"] });
 		},
+	});
+};
+
+const usePreviewNpmxCode = () => useMutation({ mutationFn: previewNpmxCode });
+
+const useEditNpmxPeer = () => {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: (request: { nodeId: string; nodeName?: string; publicUrl?: string }) =>
+			updateNpmxPeer(request.nodeId, { nodeName: request.nodeName, publicUrl: request.publicUrl }),
+		onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["instance-sync"] }); },
+	});
+};
+
+const useActivateNpmxPair = () => {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: activateNpmxPair,
+		onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["instance-sync"] }); },
 	});
 };
 
@@ -79,4 +101,7 @@ export {
 	useCreateNpmxPairingCode,
 	useJoinNpmxPairing,
 	usePromoteInstanceSync,
+	usePreviewNpmxCode,
+	useEditNpmxPeer,
+	useActivateNpmxPair,
 };
