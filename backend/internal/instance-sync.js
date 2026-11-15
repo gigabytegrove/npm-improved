@@ -180,6 +180,15 @@ const safeEqual = (left, right) => {
 const getRow = async () => {
 	let row = await settingModel.query().findById(SETTING_ID);
 	if (!row) {
+		// An existing cluster secret proves that this volume previously held
+		// paired NPMX state. Do not silently reinitialize a lost secondary as
+		// an independent primary; preserve evidence for identity recovery.
+		if (readSecret()) {
+			throw new errs.ValidationError(
+				"NPMX identity record is missing although a cluster secret exists. " +
+				"Refusing to reset this node to Primary. Restore the prior instance-sync record from the retained backup or updater checkpoint.",
+			);
+		}
 		row = await settingModel.query().insertAndFetch({
 			id: SETTING_ID,
 			name: "Instance Synchronization",

@@ -27,6 +27,9 @@ async function appStart() {
 			}
 		})
 		.then(setup)
+		// Restore NPMX node identity from its pre-update checkpoint before
+		// exposing APIs, health checks, or starting synchronization timers.
+		.then(() => internalUpdateManager.reconcileClusterIdentityCheckpoint())
 		.then(() =>
 			internalUpdateManager.reconcileAudit().catch((err) => {
 				logger.warn(`Update audit reconciliation failed: ${err instanceof Error ? err.message : String(err)}`);
