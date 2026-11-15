@@ -40,6 +40,6 @@ const subscribe = (listener: () => void): (() => void) => {
 };
 
 export const useReleaseChannel = (): readonly [ReleaseChannel, (channel: ReleaseChannel) => void] => {
-	const channel = useSyncExternalStore(subscribe, readReleaseChannel, () => "stable");
+	const channel = useSyncExternalStore<ReleaseChannel>(subscribe, readReleaseChannel, () => "stable");
 	return [channel, setReleaseChannelPreference] as const;
 };
