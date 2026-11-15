@@ -20,6 +20,7 @@ import {
 	usePromoteInstanceSync,
 	useRunInstanceSync,
 	useSetInstanceSync,
+	useUpdateNpmxPeer,
 } from "src/hooks";
 import { T } from "src/locale";
 
@@ -36,12 +37,15 @@ export default function InstanceSync() {
 	const promote = usePromoteInstanceSync();
 	const createPairing = useCreateNpmxPairingCode();
 	const joinPairing = useJoinNpmxPairing();
+	const updatePeer = useUpdateNpmxPeer();
 	const [message, setMessage] = useState("");
 	const [actionError, setActionError] = useState("");
 	const [pairingCode, setPairingCode] = useState("");
 	const [joinCode, setJoinCode] = useState("");
 	const [pairingExpires, setPairingExpires] = useState("");
 	const [pairingTarget, setPairingTarget] = useState("");
+	const [editingPeerId, setEditingPeerId] = useState("");
+	const [peerDraft, setPeerDraft] = useState({ nodeName: "", publicUrl: "" });
 
 	if (isLoading) {
 		return (
@@ -562,9 +566,37 @@ export default function InstanceSync() {
 											return (
 												<tr key={nodeId || `${nodeName}-${index}`}>
 													<td>
-														<div className="fw-bold">{nodeName}</div>
+														{editingPeerId === nodeId ? (
+															<input
+																className="form-control form-control-sm mb-1"
+																aria-label={`Edit name of ${nodeName}`}
+																maxLength={100}
+																value={peerDraft.nodeName}
+																onChange={(event) => setPeerDraft((current) => ({ ...current, nodeName: event.target.value }))}
+															/>
+														) : <div className="fw-bold">{nodeName}</div>}
 														<div className="small text-secondary">{nodeId}</div>
 																			{data.role === "primary" && nodeId && peer.role === "secondary" ? (
+																			<div className="d-flex flex-wrap gap-2 mt-2">
+																				{editingPeerId === nodeId ? (
+																					<>
+																						<Button type="button" disabled={updatePeer.isPending || !peerDraft.nodeName.trim()} onClick={async () => {
+																							setActionError("");
+																							try {
+																								await updatePeer.mutateAsync({ nodeId, nodeName: peerDraft.nodeName.trim(), publicUrl: peerDraft.publicUrl.trim() });
+																								setEditingPeerId("");
+																								setMessage(`Saved ${peerDraft.nodeName.trim()} without changing its enrollment or synchronized configuration.`);
+																							} catch (err) { setActionError(err instanceof Error ? err.message : String(err)); }
+																						}}>Save edit</Button>
+																						<Button type="button" disabled={updatePeer.isPending} onClick={() => setEditingPeerId("")}>Cancel</Button>
+																					</>
+																				) : <Button type="button" onClick={() => {
+																					setEditingPeerId(nodeId);
+																					setPeerDraft({ nodeName, publicUrl });
+																				}}>Edit node</Button>}
+																				</div>
+																		) : null}
+																	{data.role === "primary" && nodeId && peer.role === "secondary" ? (
 																				<Button type="button" disabled={createPairing.isPending} onClick={async () => {
 																					setActionError("");
 																					try {
@@ -575,7 +607,7 @@ export default function InstanceSync() {
 																						setPairingTarget(nodeId);
 																						setMessage(`Renewed pairing for ${nodeName} using its existing record. Copy the code from the pairing section above.`);
 																					} catch (err) { setActionError(err instanceof Error ? err.message : String(err)); }
-																				}}><IconKey size={15} /> Renew pairing code</Button>
+																				}}><IconKey size={15} /> Reconnect / renew code</Button>
 																			) : null}
 													</td>
 													<td>
@@ -585,7 +617,15 @@ export default function InstanceSync() {
 															<T id="sync.node-role-secondary" />
 														)}
 													</td>
-													<td>{publicUrl || "Not advertised"}</td>
+													<td>{editingPeerId === nodeId ? (
+																<input
+																type="url"
+																className="form-control form-control-sm"
+																aria-label={`Edit address of ${nodeName}`}
+																value={peerDraft.publicUrl}
+																onChange={(event) => setPeerDraft((current) => ({ ...current, publicUrl: event.target.value }))}
+															/>
+														) : publicUrl || "Not advertised"}</td>
 													<td>{peer.version || "Unknown"}</td>
 													<td>{formatDate(lastSeen)}</td>
 													<td>{formatDate(peer.lastSync || peer.last_sync)}</td>
