@@ -129,7 +129,14 @@ router.post("/npmx/reconnect", async (req, res, next) => {
 			},
 		}, req.body);
 		res.set("Cache-Control", "no-store");
-		res.status(200).send(await internalInstanceSync.acceptSecondaryReconnect(data));
+		const result = await internalInstanceSync.acceptSecondaryReconnect(data);
+		res.once("finish", () => {
+			if (result.versionMismatch) {
+				void internalInstanceSync.alignPeerVersionAfterPairing(data.version)
+					.catch((err) => debug(logger, "NPMX native upgrade check failed: " + err));
+			}
+		});
+		res.status(200).send(result);
 	} catch (err) {
 		debug(logger, "POST /cluster/npmx/reconnect failed: " + err);
 		next(err);
@@ -184,7 +191,14 @@ router.post("/npmx/legacy-reconnect/complete", async (req, res, next) => {
 			},
 		}, req.body);
 		res.set("Cache-Control", "no-store");
-		res.status(200).send(await internalInstanceSync.completeLegacyReconnect(data));
+		const result = await internalInstanceSync.completeLegacyReconnect(data);
+		res.once("finish", () => {
+			if (result.versionMismatch) {
+				void internalInstanceSync.alignPeerVersionAfterPairing(data.version)
+					.catch((err) => debug(logger, "NPMX native upgrade check failed: " + err));
+			}
+		});
+		res.status(200).send(result);
 	} catch (err) {
 		debug(logger, "POST /cluster/npmx/legacy-reconnect/complete failed: " + err);
 		next(err);
@@ -367,9 +381,16 @@ router.post("/npmx/peers/:nodeId/reconnect", async (req, res, next) => {
 			},
 		}, req.body);
 		res.set("Cache-Control", "no-store");
-		res.status(200).send(await internalInstanceSync.reconnectEnrolledPeer(
+		const result = await internalInstanceSync.reconnectEnrolledPeer(
 			req.params.nodeId, data.pairing_code, data.primary_url,
-		));
+		);
+		res.once("finish", () => {
+			if (result.versionMismatch) {
+				void internalInstanceSync.alignPeerVersionAfterPairing(result.peerVersion)
+					.catch((err) => debug(logger, "NPMX native upgrade check failed: " + err));
+			}
+		});
+		res.status(200).send(result);
 	} catch (err) {
 		next(err);
 	}
