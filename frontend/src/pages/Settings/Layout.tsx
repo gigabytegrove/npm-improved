@@ -10,6 +10,7 @@ import {
 import type { ElementType } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useCheckVersion } from "src/hooks";
+import { useReleaseChannel } from "src/hooks/useReleaseChannel";
 import CertificateLifecycle from "./CertificateLifecycle";
 import ManagementCertificateSettings from "./ManagementCertificateSettings";
 import Database from "./Database";
@@ -101,7 +102,8 @@ const isSettingsPage = (value: string | null): value is SettingsPage =>
 
 export default function Layout() {
 	const [searchParams, setSearchParams] = useSearchParams();
-	const { data: versionData } = useCheckVersion();
+	const [releaseChannel] = useReleaseChannel();
+	const { data: versionData } = useCheckVersion({}, releaseChannel);
 	const requestedPage = searchParams.get("section");
 	const page: SettingsPage = isSettingsPage(requestedPage) ? requestedPage : "default-site";
 	const activeSection = sections.find((section) => section.id === page) || sections[0];
