@@ -95,3 +95,39 @@ jobs:
       - name: Go unit tests
         working-directory: docker/firewall
         run: go test -v main.go main_test.go
+
+  publish:
+    name: Publish immutable beta.5 release after all gates pass
+    needs: [backend, frontend, firewall]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/release/1.8.0-beta.5-npmx-identity'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Verify release source before creating artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(cat .version)" = "1.8.0-beta.5"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -s .github/release-notes/v1.8.0-beta.5.md
+          if gh release view v1.8.0-beta.5 -R gigabytegrove/npm-improved >/dev/null 2>&1; then
+            echo "Beta.5 already exists. Published release assets are immutable." >&2
+            exit 1
+          fi
+      - name: Build, checksum and publish AMD64 and ARM64 release bundles
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NPMI_BUILD_ROOT: ${{ runner.temp }}/npm-improved-build
+        run: |
+          set -euo pipefail
+          bash scripts/release/publish-firewall-beta5.sh "$GITHUB_SHA"
