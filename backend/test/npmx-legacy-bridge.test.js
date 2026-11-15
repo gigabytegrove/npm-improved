@@ -5,7 +5,7 @@ import {
   verifyLegacyPrepareProof,
   createLegacyPrepareResponseProof,
   verifyLegacyPrepareResponseProof,
-  connectionCodeType,
+  connectionCodeType, createLegacyReconnectAckProof, verifyLegacyReconnectAckProof,
 } from "../lib/npmx-legacy-bridge.js";
 import {
   createNpmxPairingCode, generateNpmxSecret, generateNpmxTokenId,
@@ -86,4 +86,19 @@ test("legacy code upgrades to encrypted primary secret bound to original peer ID
       deriveNpmxPairingKey({ privateKey: secondary.privateKey, peerPublicKey: primary.publicKey,
         tokenSecretHash: hashNpmxSecret(generateNpmxSecret()) }),
       tokenId + ":" + peerId));
+});
+
+
+test("legacy upgrade acknowledges ONLY the enrolled peer and original token", () => {
+  const tokenHash = hashNpmxSecret(generateNpmxSecret());
+  const reply = {
+    ok: true, token_id: generateNpmxTokenId(), node_id: "original-secondary-id",
+    version: "1.8.0-beta.9", upgraded: true,
+    timestamp: new Date().toISOString(), nonce: "secondary-ack-123456",
+  };
+  reply.proof = createLegacyReconnectAckProof(tokenHash, reply);
+  assert.equal(verifyLegacyReconnectAckProof(tokenHash, reply), true);
+  assert.equal(verifyLegacyReconnectAckProof(tokenHash, { ...reply, node_id: "different-peer" }), false);
+  assert.equal(verifyLegacyReconnectAckProof(tokenHash, { ...reply, version: "1.7.0" }), false);
+  assert.equal(verifyLegacyReconnectAckProof(hashNpmxSecret(generateNpmxSecret()), reply), false);
 });
