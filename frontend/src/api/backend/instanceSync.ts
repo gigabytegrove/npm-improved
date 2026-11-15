@@ -34,6 +34,7 @@ export interface InstanceSyncStatus {
 	lastHeartbeatError: string | null;
 	lastAttempt: string | null;
 	lastError: string | null;
+	recoveryPending?: boolean;
 	primaryStatus: InstanceSyncPeer | null;
 	peers: InstanceSyncPeer[];
 	version: string;
@@ -58,6 +59,7 @@ export interface InstanceSyncSettings {
 	primaryUrl?: string;
 	intervalSeconds?: number;
 	sharedSecret?: string;
+	approveRecoverySync?: boolean;
 }
 
 export interface InstanceSyncResult {
@@ -74,6 +76,8 @@ export interface NpmxPairingCode {
 	primaryUrl: string;
 	expiresAt: string;
 	pairingCode: string;
+	targetPeerId?: string | null;
+	mode?: "repair" | "enroll";
 }
 
 export interface NpmxJoinResult {
@@ -82,6 +86,8 @@ export interface NpmxJoinResult {
 	protocolVersion: number;
 	primary: Record<string, any>;
 	status: InstanceSyncStatus;
+	recoveredPeerId?: string | null;
+	requiresSyncApproval?: boolean;
 }
 
 export async function getInstanceSyncStatus(): Promise<InstanceSyncStatus> {
@@ -102,16 +108,16 @@ export async function promoteInstanceSync(): Promise<InstanceSyncStatus> {
 	return await api.post({ url: "/cluster/promote" });
 }
 
-export async function createNpmxPairingCode(primaryUrl?: string): Promise<NpmxPairingCode> {
+export async function createNpmxPairingCode(options: { primaryUrl?: string; targetPeerId?: string } = {}): Promise<NpmxPairingCode> {
 	return await api.post({
 		url: "/cluster/npmx/pairing-code",
-		data: primaryUrl ? { primaryUrl } : {},
+		data: options,
 	});
 }
 
-export async function joinNpmxPairing(pairingCode: string): Promise<NpmxJoinResult> {
+export async function joinNpmxPairing(options: { pairingCode: string; confirmExistingPeer?: boolean }): Promise<NpmxJoinResult> {
 	return await api.post({
 		url: "/cluster/npmx/join",
-		data: { pairingCode },
+		data: options,
 	});
 }
