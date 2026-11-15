@@ -961,6 +961,9 @@ const internalInstanceSync = {
 		// A repair token is scoped to exactly one enrolled secondary identity.
 		// Do not accept it as a new peer or allow a new enrollment to collide.
 		const mode = state.mode || "enroll";
+		if (data.version !== currentVersion()) {
+			throw new errs.ValidationError("NPMX pairing requires the same application version on primary and secondary");
+		}
 		if (mode === "repair") {
 			const current = await getRow();
 			findRepairPeer(current.meta?.peers, state.target_node_id);
