@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
 	createNpmxPairingCode,
+	createSecondaryNpmxReconnectCode,
+	reconnectExistingNpmxPeer,
 	getInstanceSyncStatus,
 	joinNpmxPairing,
 	promoteInstanceSync,
@@ -63,6 +65,21 @@ const useJoinNpmxPairing = () => {
 	});
 };
 
+const useCreateSecondaryNpmxReconnectCode = () =>
+	useMutation({ mutationFn: (secondaryUrl: string) => createSecondaryNpmxReconnectCode(secondaryUrl) });
+
+const useReconnectExistingNpmxPeer = () => {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: ({ nodeId, pairingCode, primaryUrl }: {
+			nodeId: string; pairingCode: string; primaryUrl: string;
+		}) => reconnectExistingNpmxPeer(nodeId, pairingCode, primaryUrl),
+		onSuccess: async () => {
+			await queryClient.invalidateQueries({ queryKey: ["instance-sync"] });
+		},
+	});
+};
+
 const useUpdateNpmxPeer = () => {
 	const queryClient = useQueryClient();
 	return useMutation({
@@ -91,5 +108,7 @@ export {
 	useCreateNpmxPairingCode,
 	useJoinNpmxPairing,
 	useUpdateNpmxPeer,
+	useCreateSecondaryNpmxReconnectCode,
+	useReconnectExistingNpmxPeer,
 	usePromoteInstanceSync,
 };
