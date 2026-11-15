@@ -15,6 +15,9 @@ export interface InstanceSyncPeer {
 	last_sync?: string | null;
 	lastSeen?: string | null;
 	last_seen?: string | null;
+	configuredName?: string;
+	configuredUrl?: string;
+	repairPending?: boolean;
 	remoteAddress?: string | null;
 	remote_address?: string | null;
 }
@@ -29,6 +32,8 @@ export interface InstanceSyncStatus {
 	primaryUrl: string;
 	intervalSeconds: number;
 	secretConfigured: boolean;
+	recoveryPending?: boolean;
+	recoveryBackup?: string | null;
 	lastSync: string | null;
 	lastPeerCheckin: string | null;
 	lastHeartbeatError: string | null;
@@ -74,6 +79,8 @@ export interface NpmxPairingCode {
 	primaryUrl: string;
 	expiresAt: string;
 	pairingCode: string;
+	mode: "enroll" | "repair";
+	targetNodeId: string | null;
 }
 
 export interface NpmxJoinResult {
@@ -82,6 +89,9 @@ export interface NpmxJoinResult {
 	protocolVersion: number;
 	primary: Record<string, any>;
 	status: InstanceSyncStatus;
+	mode: "enroll" | "repair";
+	configurationPreserved: boolean;
+	activationRequired: boolean;
 }
 
 export async function getInstanceSyncStatus(): Promise<InstanceSyncStatus> {
@@ -102,16 +112,36 @@ export async function promoteInstanceSync(): Promise<InstanceSyncStatus> {
 	return await api.post({ url: "/cluster/promote" });
 }
 
-export async function createNpmxPairingCode(primaryUrl?: string): Promise<NpmxPairingCode> {
-	return await api.post({
-		url: "/cluster/npmx/pairing-code",
-		data: primaryUrl ? { primaryUrl } : {},
-	});
+export async function createNpmxPairingCode(input: { primaryUrl?: string; peerNodeId?: string }): Promise<NpmxPairingCode> {
+	return await api.post({ url: "/cluster/npmx/pairing-code", data: input });
 }
 
-export async function joinNpmxPairing(pairingCode: string): Promise<NpmxJoinResult> {
-	return await api.post({
-		url: "/cluster/npmx/join",
-		data: { pairingCode },
-	});
+export interface NpmxCodePreview {
+	mode: "enroll" | "repair";
+	primaryUrl: string;
+	currentNodeId: string;
+	targetNodeId: string | null;
+	identityRestoreRequired: boolean;
+	willPauseSynchronization: boolean;
+	configurationWillBeReplaced: boolean;
+}
+
+export async function previewNpmxCode(pairingCode: string): Promise<NpmxCodePreview> {
+	return await api.post({ url: "/cluster/npmx/inspect-code", data: { pairingCode } });
+}
+
+export async function updateNpmxPeer(nodeId: string, data: { nodeName?: string; publicUrl?: string }): Promise<InstanceSyncStatus> {
+	return await api.put({ url: `/cluster/npmx/peers/${encodeURIComponent(nodeId)}`, data });
+}
+
+export async function joinNpmxPairing(pairingCode: string, restoreIdentity = false): Promise<NpmxJoinResult> {
+	return await api.post({ url: "/cluster/npmx/join", data: { pairingCode, restoreIdentity } });
+}
+
+export async function activateNpmxPair(): Promise<{ ok: boolean; backup: string; status: InstanceSyncStatus }> {
+	return await api.post({ url: "/cluster/npmx/activate", data: { confirmed: true } });
+}
+
+export async function downloadNpmxRecoveryBackup(): Promise<void> {
+	return await api.download({ url: "/cluster/npmx/recovery-backup" }, "npmx-pre-activation.npmibak");
 }
