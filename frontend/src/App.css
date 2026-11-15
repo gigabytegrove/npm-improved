@@ -12,12 +12,21 @@
 	--npi-primary-hover: #0d5fc5;
 	--npi-accent: #00a8d6;
 	--npi-cyan: #22d3ee;
-	--npi-green: #16a34a;
-	--npi-amber: #d97706;
+	--npi-green: #166534;
+	--npi-amber: #7b4900;
+	--npi-warning-fg: #7b4900;
+	--npi-warning-bg: #fff5df;
+	--npi-warning-border: #e5bf76;
+	--npi-success-fg: #166534;
+	--npi-success-bg: #ecfdf3;
+	--npi-success-border: #a7d5b5;
+	--npi-info-fg: #174a87;
+	--npi-info-bg: #eaf3ff;
+	--npi-info-border: #a9c9f2;
 	--npi-red: #dc2626;
 	--npi-heading: #0b1324;
 	--npi-label: #334155;
-	--npi-muted: #718096;
+	--npi-muted: #52647a;
 	--npi-border: #dce5ef;
 	--npi-border-strong: #cbd7e5;
 	--npi-app-bg: #f4f7fb;
@@ -54,7 +63,18 @@
 [data-bs-theme="dark"] {
 	--npi-heading: #f4f8fc;
 	--npi-label: #c9d6e5;
-	--npi-muted: #8799af;
+	--npi-muted: #adbacb;
+	--npi-green: #bfe8cb;
+	--npi-amber: #ffdda1;
+	--npi-warning-fg: #ffdda1;
+	--npi-warning-bg: #3b2914;
+	--npi-warning-border: #916a32;
+	--npi-success-fg: #bfe8cb;
+	--npi-success-bg: #122a1c;
+	--npi-success-border: #376249;
+	--npi-info-fg: #bfdcff;
+	--npi-info-bg: #132944;
+	--npi-info-border: #315b88;
 	--npi-border: #1e2b3c;
 	--npi-border-strong: #2a3a4e;
 	--npi-app-bg: #08111d;
@@ -484,6 +504,56 @@ h3 {
 	font-weight: 650;
 	letter-spacing: 0;
 }
+
+/* WCAG AA contrast for status text shown in Update, NPMX, and firewall notices.
+   Default Tabler pale warning/green tones were not readable in the recording. */
+.alert-warning,
+.bg-warning-lt {
+	--tblr-alert-color: var(--npi-warning-fg);
+	--tblr-alert-bg: var(--npi-warning-bg);
+	--tblr-alert-border-color: var(--npi-warning-border);
+	color: var(--npi-warning-fg) !important;
+	background-color: var(--npi-warning-bg) !important;
+	border-color: var(--npi-warning-border) !important;
+}
+
+.alert-success,
+.bg-success-lt {
+	--tblr-alert-color: var(--npi-success-fg);
+	--tblr-alert-bg: var(--npi-success-bg);
+	--tblr-alert-border-color: var(--npi-success-border);
+	color: var(--npi-success-fg) !important;
+	background-color: var(--npi-success-bg) !important;
+	border-color: var(--npi-success-border) !important;
+}
+
+.alert-info,
+.bg-info-lt {
+	--tblr-alert-color: var(--npi-info-fg);
+	--tblr-alert-bg: var(--npi-info-bg);
+	--tblr-alert-border-color: var(--npi-info-border);
+	color: var(--npi-info-fg) !important;
+	background-color: var(--npi-info-bg) !important;
+	border-color: var(--npi-info-border) !important;
+}
+
+.text-warning,
+.text-warning-emphasis { color: var(--npi-warning-fg) !important; }
+.text-success,
+.text-success-emphasis { color: var(--npi-success-fg) !important; }
+.text-info,
+.text-info-emphasis { color: var(--npi-info-fg) !important; }
+
+.alert-warning a:not(.btn),
+.alert-success a:not(.btn),
+.alert-info a:not(.btn) {
+	color: inherit !important;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+
+.badge.bg-warning { background-color: #7b4900 !important; color: #ffffff !important; }
+.badge.bg-success { background-color: #166534 !important; color: #ffffff !important; }
 
 /* React Select */
 .react-select-container .react-select__control {
