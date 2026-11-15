@@ -73,13 +73,19 @@ export const createNpmxHeaders = ({ secret, nodeId, method, path, body }) => {
 	};
 };
 
-export const createNpmxPairingCode = ({ primaryUrl, tokenId, tokenSecret, expiresAt }) => {
+export const createNpmxPairingCode = ({ primaryUrl, tokenId, tokenSecret, expiresAt, targetNodeId = null }) => {
+	const target = targetNodeId === null ? null : String(targetNodeId).trim();
+	if (targetNodeId !== null && (!target || target.length > 100)) {
+		throw new Error("Repair pairing requires a valid existing node ID");
+	}
 	const payload = {
 		v: NPMX_VERSION,
 		url: String(primaryUrl || "").replace(/\/$/, ""),
 		id: String(tokenId || ""),
 		token: String(tokenSecret || ""),
 		exp: String(expiresAt || ""),
+		mode: target ? "repair" : "enroll",
+		...(target ? { target_node_id: target } : {}),
 	};
 	if (!payload.url || !payload.id || !payload.token || !payload.exp) {
 		throw new Error("NPMX pairing code payload is incomplete");
@@ -117,8 +123,17 @@ export const parseNpmxPairingCode = (code) => {
 	if (!Number.isFinite(Date.parse(payload.exp)) || Date.parse(payload.exp) <= Date.now()) {
 		throw new Error("NPMX pairing code has expired");
 	}
+	// Older v1 codes have no mode and remain enrollment-only. Repair codes
+	// are explicitly bound to one existing, primary-enrolled node identity.
+	const mode = payload.mode || "enroll";
+	if (!["enroll", "repair"].includes(mode) ||
+		(mode === "repair" && (typeof payload.target_node_id !== "string" ||
+			!payload.target_node_id.trim() || payload.target_node_id.length > 100)) ||
+		(mode === "enroll" && payload.target_node_id !== undefined)) {
+		throw new Error("Invalid or unsafe NPMX pairing mode");
+	}
 
-	return payload;
+	return { ...payload, mode, target_node_id: mode === "repair" ? payload.target_node_id : null };
 };
 
 export const generateNpmxEphemeralKeyPair = () => {
