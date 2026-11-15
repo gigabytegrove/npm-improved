@@ -682,7 +682,7 @@ export default function InstanceSync() {
 										await reconnectPeer.mutateAsync({
 											nodeId: reconnectingPeerId,
 											pairingCode: reconnectCode.trim(),
-											primaryUrl: window.location.origin,
+											primaryUrl: data.publicUrl || window.location.origin,
 										});
 										setReconnectingPeerId("");
 										setReconnectCode("");
