@@ -828,6 +828,15 @@ const internalInstanceSync = {
 			"Primary node URL",
 			true,
 		);
+		const targetPeerId = String(data.targetPeerId || "").trim();
+		if (targetPeerId) {
+			const peer = (Array.isArray(meta.peers) ? meta.peers : []).find(
+				(item) => item.node_id === targetPeerId && item.role === "secondary",
+			);
+			if (!peer) {
+				throw new errs.ValidationError("NPMX repair requires an existing enrolled secondary. No peer record will be created.");
+			}
+		}
 		const tokenId = generateNpmxTokenId();
 		const tokenSecret = generateNpmxSecret();
 		const expiresAt = new Date(Date.now() + NPMX_PAIRING_TTL_SECONDS * 1000).toISOString();
@@ -836,6 +845,7 @@ const internalInstanceSync = {
 		writePairingState({
 			token_id: tokenId,
 			token_secret_hash: hashNpmxSecret(tokenSecret),
+			target_peer_id: targetPeerId || null,
 			expires_at: expiresAt,
 			used: false,
 			created_at: new Date().toISOString(),
@@ -850,11 +860,14 @@ const internalInstanceSync = {
 			protocolVersion: NPMX_VERSION,
 			primaryUrl,
 			expiresAt,
+			targetPeerId: targetPeerId || null,
+			mode: targetPeerId ? "repair" : "enroll",
 			pairingCode: createNpmxPairingCode({
 				primaryUrl,
 				tokenId,
 				tokenSecret,
 				expiresAt,
+				targetPeerId,
 			}),
 		};
 	},
@@ -872,6 +885,12 @@ const internalInstanceSync = {
 			Date.parse(state.expires_at) <= Date.now()
 		) {
 			throw new errs.TokenRevokedError("NPMX pairing code is invalid, expired, or already used");
+		}
+		if (state.target_peer_id) {
+			const existing = (await getRow()).meta?.peers || [];
+			if (state.target_peer_id !== data.node_id || !existing.some((peer) => peer.node_id === data.node_id && peer.role === "secondary")) {
+				throw new errs.TokenRevokedError("NPMX repair code is bound to an enrolled secondary identity; refusing to create a replacement peer");
+			}
 		}
 		if (!timestampIsCurrent(data.timestamp)) {
 			throw new errs.TokenRevokedError("NPMX pairing request timestamp is outside the allowed window");
@@ -925,7 +944,10 @@ const internalInstanceSync = {
 			paired_remote_address: remoteAddress,
 		});
 
-		await internalInstanceSync.recordHeartbeat(
+		// A repair code renews credentials for the existing peer; it must not
+		// invent a new peer or replace its successful-sync history before the
+		// repaired secondary actually reconnects.
+		if (!state.target_peer_id) await internalInstanceSync.recordHeartbeat(
 			{
 				node_id: data.node_id,
 				node_name: data.node_name,
@@ -954,7 +976,7 @@ const internalInstanceSync = {
 		};
 	},
 
-	joinNpmxPairing: async (pairingCode) => {
+	joinNpmxPairing: async (pairingCode, { confirmExistingPeer = false } = {}) => {
 		if (sharedDatabaseMode()) {
 			throw new errs.ValidationError("Shared MySQL nodes do not use NPMX Primary/Secondary pairing");
 		}
@@ -968,19 +990,30 @@ const internalInstanceSync = {
 		const row = await getRow();
 		const meta = row.meta || {};
 		const primaryUrl = normalizeUrl(parsed.url, "Primary node URL", true);
+		const targetPeerId = String(parsed.peer || "").trim();
+		if (targetPeerId && !confirmExistingPeer) {
+			throw new errs.ValidationError("Recovering an existing peer identity requires explicit confirmation; no local data was changed");
+		}
+		if (!targetPeerId && meta.role === "secondary" && row.value === "enabled") {
+			throw new errs.ValidationError("This node is already an active secondary. Use the enrolled peer's renewal code instead of creating a new peer.");
+		}
+		if (row.value === "enabled" && meta.role === "primary" && !targetPeerId) {
+			throw new errs.ValidationError("Disable this primary before joining a different cluster.");
+		}
+		const pairingNodeId = targetPeerId || meta.node_id;
 		const ephemeral = generateNpmxEphemeralKeyPair();
 		const timestamp = new Date().toISOString();
 		const nonce = generateNpmxNonce();
 		const proofDetails = {
 			tokenId: parsed.id,
-			nodeId: meta.node_id,
+			nodeId: pairingNodeId,
 			nodePublicKey: ephemeral.publicKey,
 			timestamp,
 			nonce,
 		};
 		const requestBody = {
 			token_id: parsed.id,
-			node_id: meta.node_id,
+			node_id: pairingNodeId,
 			node_name: meta.node_name || os.hostname(),
 			public_url: meta.public_url || "",
 			version: currentVersion(),
@@ -1033,14 +1066,18 @@ const internalInstanceSync = {
 		const secret = decryptNpmxPairingSecret(
 			payload,
 			key,
-			`${parsed.id}:${meta.node_id}`,
+			`${parsed.id}:${pairingNodeId}`,
 		);
-		writeSecret(secret);
-
+		// Pairing is a credential/identity repair, NOT a configuration restore.
+		// Preserve every local host, certificate and file, and require the operator
+		// to separately enable synchronization after inspecting both nodes.
+		const previousMeta = { ...meta };
+		const previousValue = row.value;
 		await settingModel.query().findById(SETTING_ID).patch({
-			value: "enabled",
+			value: "disabled",
 			meta: {
 				...meta,
+				node_id: pairingNodeId,
 				role: "secondary",
 				primary_url: primaryUrl,
 				write_session_floor: Math.ceil(Date.now() / 1000),
@@ -1048,7 +1085,13 @@ const internalInstanceSync = {
 				primary_status: payload.primary || null,
 			},
 		});
-		internalInstanceSync.reschedule(1000);
+		try {
+			writeSecret(secret);
+		} catch (err) {
+			await settingModel.query().findById(SETTING_ID).patch({ value: previousValue, meta: previousMeta });
+			throw err;
+		}
+		internalInstanceSync.reschedule();
 		internalInstanceSync.startAcmePolling();
 
 		return {
@@ -1056,6 +1099,8 @@ const internalInstanceSync = {
 			protocol: NPMX_PROTOCOL,
 			protocolVersion: NPMX_VERSION,
 			primary: payload.primary,
+			recoveredPeerId: targetPeerId || null,
+			requiresSyncApproval: true,
 			status: await sanitizedStatus(),
 		};
 	},
@@ -1177,7 +1222,7 @@ const internalInstanceSync = {
 			remote_address: remoteAddress || null,
 		};
 		const index = peers.findIndex((item) => item.node_id === nodeId);
-		if (index >= 0) peers[index] = peer;
+		if (index >= 0) peers[index] = { ...peers[index], ...peer, last_sync: peer.last_sync || peers[index].last_sync || null };
 		else peers.push(peer);
 
 		const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
