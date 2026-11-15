@@ -881,7 +881,13 @@ const internalInstanceSync = {
 			patch.configured_url = normalizeUrl(data.publicUrl, "Secondary address", false);
 		}
 		if (Object.keys(patch).length === 0) throw new errs.ValidationError("No editable secondary settings were supplied");
-		const peers = row.meta.peers.map((item) => item.node_id === peer.node_id ? { ...item, ...patch } : item);
+		const peers = row.meta.peers.map((item) => item.node_id === peer.node_id ? {
+			...item,
+			...patch,
+			...(Object.hasOwn(patch, "configured_url") ? {
+				public_url: patch.configured_url || item.reported_public_url || item.public_url || "",
+			} : {}),
+		} : item);
 		await settingModel.query().findById(SETTING_ID).patch({ meta: { ...row.meta, peers } });
 		return sanitizedStatus();
 	},
