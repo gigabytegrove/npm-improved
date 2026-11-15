@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import { latestPeerCheckin, latestSuccessfulPeerSync } from "../lib/npmx-sync-status.js";
+import { editEnrolledNpmxPeer, mergeNpmxPeerHeartbeat } from "../lib/npmx-peer-state.js";
 import path from "node:path";
 import { getDatabaseRuntime, isMysql } from "../lib/config.js";
 import {
@@ -830,23 +831,15 @@ const internalInstanceSync = {
 		if (meta.role !== "primary") {
 			throw new errs.ValidationError("Only the primary can edit enrolled secondary records");
 		}
-		const peers = Array.isArray(meta.peers) ? [...meta.peers] : [];
-		const index = peers.findIndex((peer) => peer.node_id === nodeId && peer.role === "secondary");
-		if (index < 0) {
-			throw new errs.ValidationError("This secondary is not enrolled. No peer record was created.");
-		}
 		const nodeName = String(data.nodeName || "").trim();
 		if (!nodeName || nodeName.length > 100) {
 			throw new errs.ValidationError("Secondary node name must be between 1 and 100 characters");
 		}
 		const publicUrl = normalizeUrl(data.publicUrl, "Secondary address", false);
-		peers[index] = {
-			...peers[index],
-			node_name: nodeName,
-			public_url: publicUrl,
-			name_overridden: true,
-			url_overridden: true,
-		};
+		const peers = editEnrolledNpmxPeer(Array.isArray(meta.peers) ? meta.peers : [], nodeId, { nodeName, publicUrl });
+		if (!peers) {
+			throw new errs.ValidationError("This secondary is not enrolled. No peer record was created.");
+		}
 		await settingModel.query().findById(SETTING_ID).patch({ meta: { ...meta, peers } });
 		return sanitizedStatus();
 	},
@@ -1270,22 +1263,10 @@ const internalInstanceSync = {
 			last_seen: new Date().toISOString(),
 			remote_address: remoteAddress || null,
 		};
-		const index = peers.findIndex((item) => item.node_id === nodeId);
-		if (index >= 0) {
-			const previous = peers[index];
-			peers[index] = {
-				...previous,
-				...peer,
-				node_name: previous.name_overridden ? previous.node_name : peer.node_name,
-				public_url: previous.url_overridden ? previous.public_url : peer.public_url,
-				last_sync: peer.last_sync || previous.last_sync || null,
-			};
-		} else peers.push(peer);
-
-		// A disconnected secondary remains enrolled until explicitly removed.
-		// Expiring peers after 30 days made reconnect impossible without
-		// creating another node record and discarding its sync history.
-		meta.peers = peers.sort((a, b) => String(a.node_name).localeCompare(String(b.node_name)));
+		// Do not remove offline enrollments or replace operator-edited metadata.
+		// The same peer ID gets updated when its old secondary reconnects.
+		meta.peers = mergeNpmxPeerHeartbeat(peers, peer)
+			.sort((a, b) => String(a.node_name).localeCompare(String(b.node_name)));
 		await settingModel.query().findById(SETTING_ID).patch({ meta });
 		return { ok: true };
 	},
