@@ -232,6 +232,30 @@ const requireAdmin = async (res) => {
 	await res.locals.access.can("settings:update", "instance-sync");
 };
 
+router.put("/npmx/peers/:nodeId", async (req, res, next) => {
+	try {
+		await requireAdmin(res);
+		const data = await validator(
+			{
+				required: ["node_name", "public_url"],
+				additionalProperties: false,
+				properties: {
+					node_name: { type: "string", minLength: 1, maxLength: 100 },
+					public_url: { type: "string", maxLength: 2048 },
+				},
+			},
+			req.body,
+		);
+		res.status(200).send(await internalInstanceSync.updateEnrolledPeer(req.params.nodeId, {
+			nodeName: data.node_name,
+			publicUrl: data.public_url,
+		}));
+	} catch (err) {
+		debug(logger, `PUT /cluster/npmx/peers/:nodeId: ${err}`);
+		next(err);
+	}
+});
+
 router.post("/npmx/pairing-code", async (req, res, next) => {
 	try {
 		await requireAdmin(res);
