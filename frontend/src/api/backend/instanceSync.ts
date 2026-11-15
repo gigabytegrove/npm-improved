@@ -115,6 +115,13 @@ export async function createNpmxPairingCode(options: { primaryUrl?: string; targ
 	});
 }
 
+export async function updateNpmxPeer(nodeId: string, data: { nodeName: string; publicUrl: string }): Promise<InstanceSyncStatus> {
+	return await api.put({
+		url: `/cluster/npmx/peers/${encodeURIComponent(nodeId)}`,
+		data,
+	});
+}
+
 export async function joinNpmxPairing(options: { pairingCode: string; confirmExistingPeer?: boolean }): Promise<NpmxJoinResult> {
 	return await api.post({
 		url: "/cluster/npmx/join",
