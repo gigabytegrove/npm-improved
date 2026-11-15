@@ -342,37 +342,55 @@ export default function InstanceSync() {
 											onChange={(event) => { setJoinCode(event.target.value); setJoinPreview(null); }}
 											placeholder="npmx1.…"
 										/>
+										<div className="d-flex flex-wrap align-items-center gap-2 mt-2">
+											<Button type="button" disabled={!joinCode.trim() || previewPairing.isPending}
+												isLoading={previewPairing.isPending}
+												onClick={async () => {
+													setActionError("");
+													try { setJoinPreview(await previewPairing.mutateAsync(joinCode.trim())); }
+													catch (err) { setJoinPreview(null); setActionError(err instanceof Error ? err.message : String(err)); }
+												}}>
+												Review pairing code
+											</Button>
+										</div>
+										{joinPreview ? (
+											<Alert variant="warning" className="mt-3">
+												<strong>{joinPreview.mode === "repair" ? "Repair existing secondary" : "New node enrollment"}</strong>
+												<div>Primary: {joinPreview.primaryUrl}</div>
+												<div>Current node ID: <code>{joinPreview.currentNodeId}</code></div>
+												{joinPreview.targetNodeId ? <div>Original secondary ID: <code>{joinPreview.targetNodeId}</code></div> : null}
+												<p className="mt-2 mb-0">Pairing will not replace local proxy configuration. A separate, confirmed activation with encrypted backup is required before synchronization.</p>
+											</Alert>
+										) : null}
 										<div className="d-flex flex-wrap gap-2 align-items-center mt-2">
 											<Button
 												type="button"
 												actionType="primary"
-												disabled={!joinCode.trim() || joinPairing.isPending}
+												disabled={!joinPreview || joinPairing.isPending}
 												isLoading={joinPairing.isPending}
 												onClick={async () => {
 													setActionError("");
 													setMessage("");
 													try {
-														await setSync.mutateAsync({
-															enabled: false,
-															nodeName: values.nodeName.trim(),
-															role: "secondary",
-															publicUrl: values.publicUrl.trim(),
-															intervalSeconds: Number(values.intervalSeconds),
-														});
-														const result = await joinPairing.mutateAsync(joinCode.trim());
-														setFieldValue("enabled", true);
+														if (!joinPreview) throw new Error("Review the code and its existing node identity before pairing.");
+														const restoreIdentity = joinPreview.identityRestoreRequired || data.role === "primary";
+														if (!window.confirm(restoreIdentity
+															? `Restore the existing secondary ID ${joinPreview.targetNodeId}? Local proxy configuration will not be replaced, and synchronization will remain off.`
+															: "Pair this node without replacing its configuration? Synchronization stays off until activation.")) return;
+														const result = await joinPairing.mutateAsync({ pairingCode: joinCode.trim(), restoreIdentity });
+														setFieldValue("role", "secondary");
+														setFieldValue("enabled", false);
 														setFieldValue("primaryUrl", result.status.primaryUrl);
 														setJoinCode("");
-														setMessage(
-															"Secure NPMX pairing completed. This secondary is ready to synchronize.",
-														);
-													} catch (err) {
+														setJoinPreview(null);
+														setMessage("NPMX pairing repaired in place. Current secondary configuration is untouched; synchronize only after the recovery backup is created.");
+														} catch (err) {
 														setActionError(err instanceof Error ? err.message : String(err));
 													}
 												}}
 											>
 												<IconShieldLock size={16} />
-												Pair &amp; join
+												{joinPreview?.mode === "repair" ? "Repair existing pairing" : "Pair new secondary"}
 											</Button>
 											<span className="text-secondary small">
 												The cluster secret is exchanged through an authenticated ephemeral key
