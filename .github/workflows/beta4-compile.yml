@@ -1,0 +1,68 @@
+name: Beta 4 compilation gate
+
+on:
+  push:
+    branches:
+      - release/1.8.0-beta.4-firewall-ui
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Frontend production compile and firewall regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+      - name: Install pinned Yarn classic
+        run: npm install --global yarn@1.22.22
+      - name: Install dependencies from lockfile
+        working-directory: frontend
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: Generate required language JSON before test runner
+        working-directory: frontend
+        run: yarn locale-compile
+      - name: Run firewall and setup frontend tests
+        working-directory: frontend
+        run: yarn vitest run src/pages/Settings/Firewall.test.ts src/modules/instanceFirewallVisibility.test.ts
+      - name: Strict TypeScript and production Vite compile
+        working-directory: frontend
+        run: yarn build
+
+  backend:
+    name: Backend firewall and address contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
+      - name: Validate modified backend syntax
+        run: |
+          node --check backend/internal/instance-security.js
+          node --check backend/lib/instance-network-observation.js
+          node --check backend/lib/dynamic-dns.js
+      - name: Run targeted backend tests
+        working-directory: backend
+        run: node --test test/instance-network-observation.test.js test/instance-security-policy.test.js test/instance-exposure.test.js
+
+  firewall-agent:
+    name: Firewall companion Go tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.27.3
+      - name: Go compile and nft reporting tests
+        working-directory: docker/firewall
+        run: go test -v main.go main_test.go
