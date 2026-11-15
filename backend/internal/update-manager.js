@@ -1,5 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
+import db from "../db.js";
+import settingModel from "../models/setting.js";
+import { assertValidIdentityRecord, hasIdentityDrift } from "../lib/npmx-update-identity.js";
+import { global as logger } from "../logger.js";
 import authModel from "../models/auth.js";
 import errs from "../lib/error.js";
 import { parseReleaseVersion } from "../lib/release-versions.js";
@@ -14,6 +19,8 @@ const AUDIT_MARKER_FILE = "/data/update-audit-marker.json";
 const HOST_READY_FILE = "/data/host-updater-ready.json";
 const HOST_MAINTENANCE_FILE = "/data/host-updater-maintenance.json";
 const HOST_REQUEST_FILE = "/data/host-update-request.json";
+const NPMX_IDENTITY_CHECKPOINT_FILE = "/data/npmx-update-identity-checkpoint.json";
+const NPMX_SECRET_FILE = "/data/cluster-secret";
 const OFFICIAL_IMAGE_PREFIX = "ghcr.io/gigabytegrove/npm-improved:";
 const ACTIVE_STATES = new Set(["preflight", "pulling", "staging", "restarting", "verifying", "rolling_back"]);
 const VALID_MODES = new Set(["sqlite", "mysql", "postgres"]);
@@ -33,6 +40,59 @@ const writeJsonFile = (filename, value) => {
 	const temporary = `${filename}.tmp`;
 	fs.writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
 	fs.renameSync(temporary, filename);
+};
+
+// Persist the exact node-local pairing record BEFORE requesting an image update.
+// This file is outside every NPMX replicated filesystem root.
+const clusterSecretDigest = () => {
+	try {
+		return crypto.createHash("sha256").update(fs.readFileSync(NPMX_SECRET_FILE)).digest("hex");
+	} catch (err) {
+		if (err?.code === "ENOENT") return null;
+		throw err;
+	}
+};
+
+const recordClusterIdentityCheckpoint = async () => {
+	const row = await settingModel.query().findById("instance-sync");
+	const identity = assertValidIdentityRecord(row);
+	writeJsonFile(NPMX_IDENTITY_CHECKPOINT_FILE, {
+		format: 1,
+		created_at: now(),
+		secret_digest: clusterSecretDigest(),
+		identity,
+	});
+};
+
+const reconcileClusterIdentityCheckpoint = async () => {
+	if (!fs.existsSync(NPMX_IDENTITY_CHECKPOINT_FILE)) return false;
+	const saved = readJsonFile(NPMX_IDENTITY_CHECKPOINT_FILE, null);
+	if (!saved || saved.format !== 1) {
+		throw new Error("NPMX update identity checkpoint is corrupt; refusing to start without verifying the paired node identity");
+	}
+	const expected = assertValidIdentityRecord(saved.identity);
+	if (saved.secret_digest !== clusterSecretDigest()) {
+		throw new Error("NPMX cluster credential changed during the update; refusing to restore an identity with unverified pairing credentials");
+	}
+	const current = await settingModel.query().findById("instance-sync");
+	const drifted = hasIdentityDrift(expected, current);
+	if (drifted) {
+		const instance = settingModel.fromJson(expected);
+		const dbRow = typeof instance.$toDatabaseJson === "function"
+			? instance.$toDatabaseJson()
+			: instance.$formatDatabaseJson(expected);
+		await db().transaction(async (trx) => {
+			await trx("setting").where({ id: "instance-sync" }).del();
+			await trx("setting").insert(dbRow);
+		});
+		const verified = await settingModel.query().findById("instance-sync");
+		if (hasIdentityDrift(expected, verified)) {
+			throw new Error("NPMX identity recovery did not pass post-write verification");
+		}
+		logger.warn("NPMX identity changed during the update; restored the prior node identity and cluster membership from the verified local checkpoint");
+	}
+	fs.rmSync(NPMX_IDENTITY_CHECKPOINT_FILE, { force: true });
+	return drifted;
 };
 
 const configuredMode = () => {
@@ -218,6 +278,8 @@ const launchHandoff = async ({ action, targetImage, sourceVersion, targetVersion
 		initiated_by: String(initiatedBy || ""),
 		reinstall: Boolean(reinstall),
 	};
+	// The host updater must never start without a durable local identity checkpoint.
+	await recordClusterIdentityCheckpoint();
 	writeJsonFile(HOST_REQUEST_FILE, request);
 	return { handoff_source: "native-host-service", queued: true };
 };
@@ -465,4 +527,5 @@ export default {
 	rollback,
 	restart,
 	reconcileAudit,
+	reconcileClusterIdentityCheckpoint,
 };
