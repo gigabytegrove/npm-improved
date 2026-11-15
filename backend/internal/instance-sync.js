@@ -877,6 +877,9 @@ const internalInstanceSync = {
 			}
 			targetPeerName = String(peer.node_name || "").slice(0, 100);
 		}
+		if (targetPeerId && !readSecret()) {
+			throw new errs.ValidationError("Cannot renew an enrolled secondary: the primary cluster credential is missing. Restore the original credential before reconnecting.");
+		}
 		const tokenId = generateNpmxTokenId();
 		const tokenSecret = generateNpmxSecret();
 		const expiresAt = new Date(Date.now() + NPMX_PAIRING_TTL_SECONDS * 1000).toISOString();
