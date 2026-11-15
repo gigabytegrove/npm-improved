@@ -86,6 +86,7 @@ export default function InstanceSync() {
 	const peers =
 		data.role === "primary" ? data.peers || [] : data.primaryStatus ? [data.primaryStatus] : [];
 	const protocolVersion = data.npmx?.protocolVersion || data.npmx?.protocol_version || 1;
+	const selectedReconnectPeer = peers.find((peer) => (peer.nodeId || peer.node_id) === reconnectingPeerId);
 
 	return (
 		<Formik
@@ -659,6 +660,8 @@ export default function InstanceSync() {
 							<Modal.Title>Reconnect NPMX secondary</Modal.Title>
 						</Modal.Header>
 						<Modal.Body>
+							<div className="fw-semibold">{selectedReconnectPeer?.nodeName || selectedReconnectPeer?.node_name || reconnectingPeerId}</div>
+							<div className="small text-secondary mb-3">{reconnectingPeerId}</div>
 							<p className="text-secondary">
 								Paste the pairing code generated on the disconnected secondary.
 								This reconnects the existing node, without creating another record.
