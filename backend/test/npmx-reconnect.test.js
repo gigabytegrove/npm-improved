@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  canInitiateSecondaryReconnect,
   createNpmxReconnectCode, parseNpmxReconnectCode,
   reconnectPayloadSignature, verifyReconnectPayload,
 } from "../lib/npmx-reconnect.js";
@@ -89,4 +90,28 @@ test("expired and forged reconnect invitations are rejected", () => {
     publicKey: value.secondary.publicKey, nodeName: "proxy2",
     expiresAt: value.expiresAt,
   }), /origin/);
+});
+
+
+test("former secondary stuck as enabled Primary can issue and accept reconnect without an existing peer", () => {
+  // enabled is deliberately true: upgrading proxy2 left it enabled as Primary.
+  const orphanedPrimary = { role: "primary", peers: [], enabled: true, node_id: "new-incorrect-id" };
+  assert.equal(canInitiateSecondaryReconnect(orphanedPrimary), true);
+  assert.deepEqual(orphanedPrimary, { role: "primary", peers: [], enabled: true, node_id: "new-incorrect-id" });
+  assert.equal(canInitiateSecondaryReconnect({ role: "secondary", peers: [], enabled: true }), true);
+});
+
+test("established primary with enrolled secondary cannot generate or accept replacement identity", () => {
+  assert.equal(canInitiateSecondaryReconnect({
+    role: "primary", enabled: true,
+    peers: [{ node_id: "bb1a3d98-e2a7-4d52-bf1e-aaed210bbb37", role: "secondary" }],
+  }), false);
+});
+
+test("legacy primary-generated code is rejected with clear instructions", () => {
+  assert.throws(
+    () => parseNpmxReconnectCode("npmx1." + "eyJ2IjoxfQ"),
+    (error) => /old primary-generated NPMX code/.test(error.message) &&
+      /generate a new reconnect code on the secondary/i.test(error.message),
+  );
 });
