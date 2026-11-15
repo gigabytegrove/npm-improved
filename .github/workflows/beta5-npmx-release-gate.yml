@@ -1,0 +1,97 @@
+name: Beta 5 NPMX release gate
+
+on:
+  push:
+    branches:
+      - release/1.8.0-beta.5-npmx-identity
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-improved-beta5-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: NPMX regressions and backend validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: backend/yarn.lock
+      - name: Install pinned Yarn
+        run: npm install --global yarn@1.22.22
+      - name: Check release identity
+        run: |
+          test "$(cat .version)" = "1.8.0-beta.5"
+          test "$(node -p "require('./backend/package.json').version")" = "1.8.0-beta.5"
+          test "$(node -p "require('./frontend/package.json').version")" = "1.8.0-beta.5"
+          test -s .github/release-notes/v1.8.0-beta.5.md
+      - name: Check updater and publisher syntax
+        run: |
+          sh -n scripts/update-handoff.sh
+          bash -n scripts/release/publish-firewall-beta5.sh
+          python3 -m py_compile scripts/host-update-dispatch.py scripts/host-update-maintenance.py
+      - name: Test snapshot identity and upgrade regressions
+        run: |
+          node --check backend/internal/disaster-recovery.js
+          node --check backend/internal/instance-sync.js
+          node --check backend/internal/update-manager.js
+          node --check backend/index.js
+          node --test backend/test/npmx-cluster-database.test.js backend/test/npmx-update-identity.test.js
+      - name: Install backend dependencies
+        working-directory: backend
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: Full backend tests
+        working-directory: backend
+        run: yarn test
+      - name: Backend lint and schema
+        working-directory: backend
+        run: |
+          yarn lint
+          yarn validate-schema
+
+  frontend:
+    name: Frontend test and production compile
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+      - name: Install pinned Yarn
+        run: npm install --global yarn@1.22.22
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: Generate locale catalog
+        working-directory: frontend
+        run: yarn locale-compile
+      - name: Router and firewall regression tests
+        working-directory: frontend
+        run: yarn vitest run src/Router.test.tsx src/pages/Settings/Firewall.test.ts src/modules/instanceFirewallVisibility.test.ts
+      - name: Production frontend compile
+        working-directory: frontend
+        run: yarn build
+
+  firewall:
+    name: Firewall companion tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.27.3
+      - name: Go unit tests
+        working-directory: docker/firewall
+        run: go test -v main.go main_test.go
