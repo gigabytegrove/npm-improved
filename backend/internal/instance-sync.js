@@ -204,6 +204,7 @@ const getRow = async () => {
 				last_sync: null,
 				last_attempt: null,
 				last_error: null,
+				recovery_pending: false,
 				primary_status: null,
 				peers: [],
 			},
@@ -278,6 +279,7 @@ const sanitizedStatus = async () => {
 		lastAttempt: primary ? null : (meta.last_attempt || null),
 		lastPeerCheckin: primary ? latestPeerCheckin(peers) : null,
 		lastError: meta.last_error || null,
+		recoveryPending: Boolean(meta.recovery_pending),
 		lastHeartbeatError: meta.last_heartbeat_error || null,
 		primaryStatus: meta.primary_status || null,
 		peers,
@@ -718,8 +720,12 @@ const internalInstanceSync = {
 			);
 		}
 
+		if (enabled && role === "secondary" && current.recovery_pending && data.approveRecoverySync !== true) {
+			throw new errs.ValidationError("NPMX pairing recovery is pending. Explicitly approve the initial snapshot before enabling synchronization; existing secondary configuration would be replaced.");
+		}
 		const meta = {
 			...current,
+			recovery_pending: enabled && role === "secondary" ? false : Boolean(current.recovery_pending),
 			node_id: current.node_id || crypto.randomUUID(),
 			node_name: nodeName,
 			role,
@@ -1083,6 +1089,7 @@ const internalInstanceSync = {
 				write_session_floor: Math.ceil(Date.now() / 1000),
 				last_error: null,
 				primary_status: payload.primary || null,
+				recovery_pending: true,
 			},
 		});
 		try {
@@ -1240,6 +1247,7 @@ const internalInstanceSync = {
 		syncRunning = true;
 		try {
 			const status = await sanitizedStatus();
+			if (status.recoveryPending) throw new errs.ValidationError("NPMX repair requires explicit approval before the first configuration snapshot");
 			if (!status.enabled) throw new errs.ValidationError("Instance synchronization is disabled");
 			if (status.role !== "secondary") {
 				throw new errs.ValidationError("Only a secondary node pulls configuration from a primary");
