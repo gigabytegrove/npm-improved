@@ -953,6 +953,104 @@ const internalInstanceSync = {
 		return { ok: true, node_id: data.node_id, version: currentVersion(), upgraded: true };
 	},
 
+	// Accept either code generation direction. A valid npmx1 code from an
+	// orphaned secondary is turned into the current encrypted protocol
+	// without installing a new primary peer record.
+	reconnectLegacyEnrolledPeer: async (nodeId, pairingCode, primaryUrl) => {
+		if (sharedDatabaseMode()) throw new errs.ValidationError("NPMX is unavailable in shared database mode");
+		const row = await getRow();
+		const meta = row.meta || {};
+		if (row.value !== "enabled" || meta.role !== "primary") {
+			throw new errs.ValidationError("Only an enabled primary can reconnect an enrolled secondary");
+		}
+		const peer = (Array.isArray(meta.peers) ? meta.peers : []).find(
+			(item) => item.node_id === nodeId && item.role === "secondary",
+		);
+		if (!peer) throw new errs.ValidationError("Secondary is not enrolled; no additional node was created");
+		const shared = readSecret();
+		if (!shared) throw new errs.ValidationError("Existing primary cluster credential is unavailable");
+		let legacy;
+		try { legacy = parseNpmxPairingCode(pairingCode); }
+		catch (err) { throw new errs.ValidationError(err.message); }
+		if (legacy.peer && legacy.peer !== nodeId) {
+			throw new errs.ValidationError("Legacy code targets a different enrolled secondary");
+		}
+		const origin = new URL(normalizeUrl(primaryUrl || meta.public_url, "Primary URL", true));
+		if (origin.username || origin.password || origin.pathname !== "/" || origin.search || origin.hash) {
+			throw new errs.ValidationError("Primary URL must be an http(s) origin");
+		}
+		const remote = new URL(normalizeUrl(legacy.url, "Legacy issuing node URL", true));
+		if (remote.username || remote.password || remote.pathname !== "/" || remote.search || remote.hash) {
+			throw new errs.ValidationError("Legacy pairing code must contain the issuing node's direct origin");
+		}
+		if (remote.origin === origin.origin) {
+			throw new errs.ValidationError("This code points back to the primary. A valid secondary code must identify the secondary's reachable address.");
+		}
+		const tokenHash = hashNpmxSecret(legacy.token);
+		const keys = generateNpmxEphemeralKeyPair();
+		const request = {
+			token_id: legacy.id, node_id: nodeId, primary_url: origin.origin,
+			server_public_key: keys.publicKey,
+			timestamp: new Date().toISOString(), nonce: generateNpmxNonce(),
+		};
+		request.proof = createLegacyPrepareProof(tokenHash, request);
+		const response = await fetchWithTimeout(remote.origin + "/api/cluster/npmx/legacy-reconnect/prepare", {
+			method: "POST", redirect: "error",
+			headers: { "Content-Type": "application/json", "User-Agent": "NPMX/legacy-upgrade" },
+			body: JSON.stringify(request),
+		}, REQUEST_TIMEOUT_MS);
+		if (response.status === 404 || response.status === 405) {
+			// Old binaries cannot execute new code merely because they emitted
+			// a token. Preserve the existing peer; never claim a reconnect.
+			throw new errs.ValidationError(
+				"The secondary cannot negotiate the upgraded NPMX protocol yet. It must receive a compatible NPM Improved release through its native updater; its existing peer and configuration are unchanged.",
+			);
+		}
+		if (!response.ok) throw new errs.ValidationError("Legacy NPMX prepare failed (HTTP " + response.status + ")");
+		const prepared = await response.json();
+		if (prepared.token_id !== legacy.id || prepared.node_id !== nodeId ||
+			prepared.primary_url !== origin.origin ||
+			prepared.server_public_key !== keys.publicKey ||
+			!timestampIsCurrent(prepared.timestamp) ||
+			!verifyLegacyPrepareResponseProof(tokenHash, prepared)) {
+			throw new errs.TokenRevokedError("Legacy code was not authenticated by the issuing secondary");
+		}
+		const secretKey = deriveNpmxPairingKey({
+			privateKey: keys.privateKey,
+			peerPublicKey: prepared.client_public_key,
+			tokenSecretHash: tokenHash,
+		});
+		const body = {
+			token_id: legacy.id, node_id: nodeId, primary_url: origin.origin,
+			server_public_key: keys.publicKey,
+			...encryptNpmxPairingSecret(shared, secretKey, legacy.id + ":" + nodeId),
+			timestamp: new Date().toISOString(), nonce: generateNpmxNonce(),
+			version: currentVersion(),
+		};
+		body.proof = reconnectPayloadSignature(tokenHash, body);
+		const completed = await fetchWithTimeout(remote.origin + "/api/cluster/npmx/legacy-reconnect/complete", {
+			method: "POST", redirect: "error",
+			headers: { "Content-Type": "application/json", "User-Agent": "NPMX/legacy-upgrade" },
+			body: JSON.stringify(body),
+		}, REQUEST_TIMEOUT_MS);
+		if (!completed.ok) throw new errs.ValidationError("Legacy NPMX upgrade failed (HTTP " + completed.status + ")");
+		const result = await completed.json();
+		if (!result?.ok || result?.node_id !== nodeId || !result?.upgraded) {
+			throw new errs.ValidationError("Secondary did not confirm original peer identity after legacy upgrade");
+		}
+		const peers = meta.peers.map((item) => item.node_id === nodeId ? {
+			...item,
+			public_url: item.url_overridden ? item.public_url : remote.origin,
+			url_overridden: true, name_overridden: true,
+			version: result.version, last_seen: new Date().toISOString(),
+			protocol: NPMX_PROTOCOL, protocol_version: NPMX_VERSION,
+		} : item);
+		await settingModel.query().findById(SETTING_ID).patch({ meta: { ...meta, peers } });
+		return { ok: true, nodeId, protocolUpgraded: true,
+			peerVersion: result.version, versionMismatch: currentVersion() !== result.version,
+			status: await sanitizedStatus() };
+	},
+
 	// The secondary creates the code. No cluster credential or proxy state
 	// changes until the primary applies it to an existing enrolled node.
 	createSecondaryReconnectCode: async (secondaryUrl) => {
@@ -996,6 +1094,9 @@ const internalInstanceSync = {
 		if (!enrolled) throw new errs.ValidationError("Existing secondary not found; no peer was created");
 		const clusterSecret = readSecret();
 		if (!clusterSecret) throw new errs.ValidationError("The original primary cluster credential is missing");
+		if (connectionCodeType(pairingCode) === "legacy") {
+			return internalInstanceSync.reconnectLegacyEnrolledPeer(nodeId, pairingCode, primaryUrl);
+		}
 		let invite;
 		try { invite = parseNpmxReconnectCode(pairingCode); }
 		catch (err) { throw new errs.ValidationError(err.message); }
