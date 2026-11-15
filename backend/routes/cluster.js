@@ -136,6 +136,61 @@ router.post("/npmx/reconnect", async (req, res, next) => {
 	}
 });
 
+// Protocol adapter: older npmx1 invitations issued by the secondary
+// establish a modern one-time authenticated X25519 exchange. This is
+// reachable before admin JWT only because both requests MUST prove the
+// active short-lived token currently stored on the issuing secondary.
+router.post("/npmx/legacy-reconnect/prepare", async (req, res, next) => {
+	try {
+		const data = await validator({
+			required: ["token_id", "node_id", "primary_url", "server_public_key", "timestamp", "nonce", "proof"],
+			additionalProperties: false,
+			properties: {
+				token_id: { type: "string", minLength: 8, maxLength: 128 },
+				node_id: { type: "string", minLength: 1, maxLength: 100 },
+				primary_url: { type: "string", minLength: 8, maxLength: 2048 },
+				server_public_key: { type: "string", minLength: 32, maxLength: 512 },
+				timestamp: { type: "string", minLength: 20, maxLength: 64 },
+				nonce: { type: "string", minLength: 12, maxLength: 128 },
+				proof: { type: "string", minLength: 32, maxLength: 256 },
+			},
+		}, req.body);
+		res.set("Cache-Control", "no-store");
+		res.status(200).send(await internalInstanceSync.prepareLegacyReconnect(data));
+	} catch (err) {
+		debug(logger, "POST /cluster/npmx/legacy-reconnect/prepare failed: " + err);
+		next(err);
+	}
+});
+
+router.post("/npmx/legacy-reconnect/complete", async (req, res, next) => {
+	try {
+		const data = await validator({
+			required: ["token_id", "node_id", "primary_url", "server_public_key",
+				"iv", "tag", "ciphertext", "timestamp", "nonce", "version", "proof"],
+			additionalProperties: false,
+			properties: {
+				token_id: { type: "string", minLength: 8, maxLength: 128 },
+				node_id: { type: "string", minLength: 1, maxLength: 100 },
+				primary_url: { type: "string", minLength: 8, maxLength: 2048 },
+				server_public_key: { type: "string", minLength: 32, maxLength: 512 },
+				iv: { type: "string", minLength: 16, maxLength: 128 },
+				tag: { type: "string", minLength: 16, maxLength: 128 },
+				ciphertext: { type: "string", minLength: 32, maxLength: 2048 },
+				timestamp: { type: "string", minLength: 20, maxLength: 64 },
+				nonce: { type: "string", minLength: 12, maxLength: 128 },
+				version: { type: "string", minLength: 1, maxLength: 64 },
+				proof: { type: "string", minLength: 32, maxLength: 256 },
+			},
+		}, req.body);
+		res.set("Cache-Control", "no-store");
+		res.status(200).send(await internalInstanceSync.completeLegacyReconnect(data));
+	} catch (err) {
+		debug(logger, "POST /cluster/npmx/legacy-reconnect/complete failed: " + err);
+		next(err);
+	}
+});
+
 // Normal NPMX node-to-node traffic is HMAC-signed with timestamp + nonce
 // replay protection. The cluster secret itself is never sent as a header.
 router.get("/npmx/status", internalInstanceSync.requireNpmxAuth, async (_req, res, next) => {
