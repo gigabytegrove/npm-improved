@@ -30,6 +30,9 @@ COPY docker/rootfs/etc/s6-overlay/s6-rc.d/prepare/20-paths.sh /etc/s6-overlay/s6
 COPY docker/rootfs/etc/s6-overlay/s6-rc.d/prepare/30-ownership.sh /etc/s6-overlay/s6-rc.d/prepare/30-ownership.sh
 
 RUN set -eux; \
+    node --check /app/internal/instance-sync.js; \
+    node --check /app/routes/cluster.js; \
+    node --check /app/lib/npmx.js; \
     test "$(node -p 'process.versions.node')" = '24.22.1'; \
     /usr/sbin/nginx -v 2>&1 | grep -F 'nginx/1.31.8'; \
     grep -a -q 'go1.27.3' /usr/local/bin/npm-improved-control-plane; \
