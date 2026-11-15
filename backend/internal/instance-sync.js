@@ -911,7 +911,8 @@ const internalInstanceSync = {
 		}
 		// Edit the existing peer record, keeping its ID, alias and sync history.
 		const peers = meta.peers.map((peer) => peer.node_id === nodeId ? {
-			...peer, public_url: peer.url_overridden ? peer.public_url : invite.url, url_overridden: true,
+			...peer, public_url: peer.url_overridden ? peer.public_url : invite.url,
+			name_overridden: true, url_overridden: true,
 			last_seen: new Date().toISOString(), version: reply.version,
 		} : peer);
 		await settingModel.query().findById(SETTING_ID).patch({ meta: { ...meta, peers } });
