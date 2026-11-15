@@ -605,9 +605,22 @@ export default function InstanceSync() {
 																						setPairingCode(code.pairingCode);
 																						setPairingExpires(code.expiresAt);
 																						setPairingTarget(nodeId);
-																						setMessage(`Renewed pairing for ${nodeName} using its existing record. Copy the code from the pairing section above.`);
+																						setMessage(`Reconnect code renewed for ${nodeName}; its existing peer record is preserved.`);
 																					} catch (err) { setActionError(err instanceof Error ? err.message : String(err)); }
 																				}}><IconKey size={15} /> Reconnect / renew code</Button>
+																			) : null}
+																			{pairingTarget === nodeId && pairingCode ? (
+																				<div className="mt-2">
+																					<label className="form-label small" htmlFor={`npmx-peer-code-${nodeId}`}>Reconnect code for {nodeName}</label>
+																					<textarea id={`npmx-peer-code-${nodeId}`} className="form-control font-monospace" rows={3} readOnly value={pairingCode} />
+																					<div className="d-flex flex-wrap align-items-center gap-2 mt-1">
+																						<Button type="button" onClick={async () => {
+																							try { await navigator.clipboard.writeText(pairingCode); setMessage("Reconnect code copied."); }
+																							catch (err) { setActionError(err instanceof Error ? err.message : "Could not copy code."); }
+																						}}>Copy code</Button>
+																						<span className="small text-secondary">Expires {formatDate(pairingExpires)}. Use on this secondary only.</span>
+																					</div>
+																				</div>
 																			) : null}
 													</td>
 													<td>
