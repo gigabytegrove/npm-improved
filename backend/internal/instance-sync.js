@@ -184,6 +184,11 @@ const npmxCapabilities = () => ({
 	],
 });
 
+const existingRepairPeer = (peers, nodeId) => {
+	try { return findRepairPeer(peers, nodeId); }
+	catch (err) { throw new errs.ValidationError(err instanceof Error ? err.message : String(err)); }
+};
+
 const safeEqual = (left, right) => {
 	if (!left || !right) return false;
 	const leftHash = crypto.createHash("sha256").update(left).digest();
@@ -882,7 +887,7 @@ const internalInstanceSync = {
 	updatePeer: (nodeId, data) => withPeerMutationLock(async () => {
 		const row = await getRow();
 		if (row.meta?.role !== "primary") throw new errs.ValidationError("Only the primary can edit secondary peers");
-		const peer = findRepairPeer(row.meta.peers, nodeId);
+		const peer = existingRepairPeer(row.meta.peers, nodeId);
 		const patch = {};
 		if (typeof data.nodeName === "string") {
 			const name = data.nodeName.trim();
@@ -914,7 +919,7 @@ const internalInstanceSync = {
 			throw new errs.ValidationError("Only a primary node can create an NPMX pairing code");
 		}
 
-		const targetNodeId = data.peerNodeId ? findRepairPeer(meta.peers, data.peerNodeId).node_id : null;
+		const targetNodeId = data.peerNodeId ? existingRepairPeer(meta.peers, data.peerNodeId).node_id : null;
 		if (targetNodeId && row.value !== "enabled") {
 			throw new errs.ValidationError("Enable the existing primary before issuing an NPMX repair code");
 		}
@@ -981,7 +986,7 @@ const internalInstanceSync = {
 		}
 		if (mode === "repair") {
 			const current = await getRow();
-			findRepairPeer(current.meta?.peers, state.target_node_id);
+			existingRepairPeer(current.meta?.peers, state.target_node_id);
 			if (data.node_id !== state.target_node_id) {
 				throw new errs.TokenRevokedError("Repair code is bound to another secondary node identity");
 			}
@@ -1077,7 +1082,9 @@ const internalInstanceSync = {
 	},
 
 	previewPairingCode: async (pairingCode) => {
-		const parsed = parseNpmxPairingCode(pairingCode);
+		let parsed;
+		try { parsed = parseNpmxPairingCode(pairingCode); }
+		catch (err) { throw new errs.ValidationError(err instanceof Error ? err.message : String(err)); }
 		const row = await getRow();
 		let policy;
 		try {
