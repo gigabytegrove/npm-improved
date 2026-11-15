@@ -950,7 +950,8 @@ const internalInstanceSync = {
 		}
 		internalInstanceSync.reschedule(1000);
 		internalInstanceSync.startAcmePolling();
-		return { ok: true, node_id: data.node_id, version: currentVersion(), upgraded: true };
+		return { ok: true, node_id: data.node_id, version: currentVersion(), upgraded: true,
+			versionMismatch: data.version !== currentVersion() };
 	},
 
 	// Accept either code generation direction. A valid npmx1 code from an
@@ -1051,6 +1052,17 @@ const internalInstanceSync = {
 			status: await sanitizedStatus() };
 	},
 
+	// Runs only after a one-time authenticated pairing response is complete.
+	// The native updater verifies the exact official release and preserves
+	// the local NPMX identity checkpoint; incompatible versions never sync.
+	alignPeerVersionAfterPairing: async (peerVersion) => {
+		if (!peerVersion || peerVersion === currentVersion()) {
+			return { queued: false, alreadyCurrent: true };
+		}
+		const { default: updater } = await import("./update-manager.js");
+		return updater.alignPairedNodeVersion(peerVersion);
+	},
+
 	// The secondary creates the code. No cluster credential or proxy state
 	// changes until the primary applies it to an existing enrolled node.
 	createSecondaryReconnectCode: async (secondaryUrl) => {
@@ -1123,7 +1135,7 @@ const internalInstanceSync = {
 		}, REQUEST_TIMEOUT_MS);
 		if (!response.ok) throw new errs.ValidationError("Secondary reconnect was rejected (HTTP " + response.status + ")");
 		const reply = await response.json();
-		if (!reply || !reply.ok || reply.node_id !== nodeId || reply.version !== currentVersion()) {
+		if (!reply || !reply.ok || reply.node_id !== nodeId) {
 			throw new errs.ValidationError("Secondary did not acknowledge the enrolled peer identity and version");
 		}
 		// Edit the existing peer record, keeping its ID, alias and sync history.
@@ -1133,7 +1145,9 @@ const internalInstanceSync = {
 			last_seen: new Date().toISOString(), version: reply.version,
 		} : peer);
 		await settingModel.query().findById(SETTING_ID).patch({ meta: { ...meta, peers } });
-		return { ok: true, nodeId, status: await sanitizedStatus() };
+		return { ok: true, nodeId, peerVersion: reply.version,
+			versionMismatch: reply.version !== currentVersion(),
+			status: await sanitizedStatus() };
 	},
 
 	// This public endpoint accepts ONLY the code generated on this secondary.
@@ -1149,9 +1163,9 @@ const internalInstanceSync = {
 			!verifyReconnectPayload(state.token_secret_hash, data)) {
 			throw new errs.TokenRevokedError("Reconnect request could not be authenticated");
 		}
-		if (data.version !== currentVersion()) {
-			throw new errs.ValidationError("Both NPMX nodes must have the same version to reconnect");
-		}
+		// A valid authenticated pairing is accepted across application versions.
+		// Configuration snapshots remain version-gated; the older node upgrades
+		// through the verified native updater after the response is delivered.
 		// Consume synchronously before the first await, preventing concurrent
 		// requests from replaying the same one-time reconnect invitation.
 		writeReconnectState({ token_id: state.token_id, used: true, expires_at: state.expires_at });
@@ -1196,7 +1210,8 @@ const internalInstanceSync = {
 		}
 		internalInstanceSync.reschedule(1000);
 		internalInstanceSync.startAcmePolling();
-		return { ok: true, node_id: data.node_id, version: currentVersion() };
+		return { ok: true, node_id: data.node_id, version: currentVersion(),
+			versionMismatch: data.version !== currentVersion() };
 	},
 
 	// Edit an existing enrolled secondary in place. Never mint a new ID or
