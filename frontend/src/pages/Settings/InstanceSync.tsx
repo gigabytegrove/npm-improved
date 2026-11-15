@@ -41,6 +41,7 @@ export default function InstanceSync() {
 	const [pairingCode, setPairingCode] = useState("");
 	const [joinCode, setJoinCode] = useState("");
 	const [pairingExpires, setPairingExpires] = useState("");
+	const [pairingTarget, setPairingTarget] = useState("");
 
 	if (isLoading) {
 		return (
@@ -95,7 +96,9 @@ export default function InstanceSync() {
 				setMessage("");
 				setActionError("");
 				try {
+					if (data.recoveryPending && values.enabled && !window.confirm("Enable the first NPMX snapshot? The primary will replace the secondary\u0027s synchronized configuration. Pairing has not changed local hosts or certificates.")) return;
 					await setSync.mutateAsync({
+						approveRecoverySync: Boolean(data.recoveryPending && values.enabled),
 						enabled: values.enabled,
 						nodeName: values.nodeName.trim(),
 						role: values.role,
@@ -156,6 +159,7 @@ export default function InstanceSync() {
 								{data.lastHeartbeatError} The secondary will retry on its next scheduled synchronization.
 							</Alert>
 						) : null}
+						{data.recoveryPending ? <Alert variant="warning" role="alert"><strong>Secondary connection repaired — synchronization is paused.</strong> Local hosts, certificates and files remain unchanged. Review the primary before explicitly enabling a snapshot below.</Alert> : null}
 						{data.lastError ? (
 							<Alert variant="danger">
 								<strong>
@@ -240,7 +244,7 @@ export default function InstanceSync() {
 								<div>
 									<h3 className="card-title mb-0">NPMX secure pairing</h3>
 									<div className="text-secondary small">
-										No manually-created shared secret is required. Pairing codes are one-time,
+										Renew codes for previously enrolled secondary nodes below to preserve their original identity. Codes are one-time,
 										short-lived credentials used to establish the persistent encrypted cluster identity.
 									</div>
 								</div>
@@ -258,18 +262,10 @@ export default function InstanceSync() {
 													try {
 														const primaryUrl =
 															values.publicUrl.trim() || window.location.origin;
-														await setSync.mutateAsync({
-															enabled: true,
-															nodeName: values.nodeName.trim(),
-															role: "primary",
-															publicUrl: primaryUrl,
-															intervalSeconds: Number(values.intervalSeconds),
-														});
-														const result = await createPairing.mutateAsync(primaryUrl);
+														const result = await createPairing.mutateAsync({ primaryUrl });
+																setPairingTarget("");
 														setPairingCode(result.pairingCode);
 														setPairingExpires(result.expiresAt);
-														setFieldValue("enabled", true);
-														setFieldValue("publicUrl", primaryUrl);
 														setMessage("One-time NPMX pairing code created.");
 													} catch (err) {
 														setActionError(err instanceof Error ? err.message : String(err));
@@ -278,7 +274,7 @@ export default function InstanceSync() {
 												isLoading={createPairing.isPending}
 											>
 												<IconKey size={16} />
-												Create pairing code
+												Create code for new secondary
 											</Button>
 											<span className="text-secondary small">
 												The code expires after 10 minutes and can be used only once.
@@ -287,7 +283,7 @@ export default function InstanceSync() {
 										{pairingCode ? (
 											<>
 												<label className="form-label" htmlFor="npmx-pairing-code">
-													One-time pairing code
+													{pairingTarget ? "Renewed code for existing secondary" : "One-time pairing code"}
 												</label>
 												<textarea
 													id="npmx-pairing-code"
@@ -308,7 +304,7 @@ export default function InstanceSync() {
 														Copy pairing code
 													</Button>
 													<span className="text-secondary small">
-														Expires {formatDate(pairingExpires)}
+														Expires {formatDate(pairingExpires)}{pairingTarget ? ` · Peer ID ${pairingTarget}` : ""}
 													</span>
 												</div>
 											</>
@@ -337,19 +333,13 @@ export default function InstanceSync() {
 													setActionError("");
 													setMessage("");
 													try {
-														await setSync.mutateAsync({
-															enabled: false,
-															nodeName: values.nodeName.trim(),
-															role: "secondary",
-															publicUrl: values.publicUrl.trim(),
-															intervalSeconds: Number(values.intervalSeconds),
-														});
-														const result = await joinPairing.mutateAsync(joinCode.trim());
-														setFieldValue("enabled", true);
+														if (!window.confirm("Repair or pair this node? Its stored proxy configuration will remain unchanged. Synchronization is paused until you approve the first snapshot.")) return;
+														const result = await joinPairing.mutateAsync({ pairingCode: joinCode.trim(), confirmExistingPeer: true });
+														setFieldValue("enabled", false);
 														setFieldValue("primaryUrl", result.status.primaryUrl);
 														setJoinCode("");
 														setMessage(
-															"Secure NPMX pairing completed. This secondary is ready to synchronize.",
+															result.recoveredPeerId ? "Existing secondary identity recovered without replacing configuration. Review and approve the first snapshot separately." : "Pairing completed without replacing local configuration. Review and approve synchronization separately.",
 														);
 													} catch (err) {
 														setActionError(err instanceof Error ? err.message : String(err));
@@ -357,7 +347,7 @@ export default function InstanceSync() {
 												}}
 											>
 												<IconShieldLock size={16} />
-												Pair &amp; join
+												Repair / pair safely
 											</Button>
 											<span className="text-secondary small">
 												The cluster secret is exchanged through an authenticated ephemeral key
@@ -574,6 +564,19 @@ export default function InstanceSync() {
 													<td>
 														<div className="fw-bold">{nodeName}</div>
 														<div className="small text-secondary">{nodeId}</div>
+																			{data.role === "primary" && nodeId && peer.role === "secondary" ? (
+																				<Button type="button" disabled={createPairing.isPending} onClick={async () => {
+																					setActionError("");
+																					try {
+																						const primaryUrl = values.publicUrl.trim() || data.publicUrl || window.location.origin;
+																						const code = await createPairing.mutateAsync({ primaryUrl, targetPeerId: nodeId });
+																						setPairingCode(code.pairingCode);
+																						setPairingExpires(code.expiresAt);
+																						setPairingTarget(nodeId);
+																						setMessage(`Renewed pairing for ${nodeName} using its existing record. Copy the code from the pairing section above.`);
+																					} catch (err) { setActionError(err instanceof Error ? err.message : String(err)); }
+																				}}><IconKey size={15} /> Renew pairing code</Button>
+																			) : null}
 													</td>
 													<td>
 														{peer.role === "primary" ? (
