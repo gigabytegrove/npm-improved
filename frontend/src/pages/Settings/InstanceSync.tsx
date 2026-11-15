@@ -401,8 +401,8 @@ export default function InstanceSync() {
 								<Alert variant={values.role === "primary" ? "info" : "warning"} className="mt-3 mb-0">
 									{values.role === "primary" ? (
 										<>
-											The primary is the configuration authority. Create a one-time NPMX pairing code
-											for each secondary you add.
+											The primary is the configuration authority. To reconnect an existing secondary,
+											paste its generated pairing code into the Reconnect dialog for that node.
 										</>
 									) : (
 										<>
