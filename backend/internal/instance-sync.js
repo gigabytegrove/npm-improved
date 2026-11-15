@@ -60,6 +60,18 @@ const SNAPSHOT_TIMEOUT_MS = 180_000;
 let schedulerTimer = null;
 let syncRunning = false;
 let pairingRunning = false;
+let peerMutationTail = Promise.resolve();
+
+// Primary heartbeat and administrative peer edits both replace the metadata
+// JSON column. Serialize them to prevent stale reads from erasing edits.
+const withPeerMutationLock = async (job) => {
+	const previous = peerMutationTail;
+	let release;
+	peerMutationTail = new Promise((resolve) => { release = resolve; });
+	await previous;
+	try { return await job(); }
+	finally { release(); }
+};
 let acmePollTimer = null;
 let acmePollRunning = false;
 let acmePollEpoch = 0;
@@ -251,12 +263,12 @@ const getRow = async () => {
 	return row;
 };
 
-const updateMeta = async (patch) => {
+const updateMeta = (patch) => withPeerMutationLock(async () => {
 	const row = await getRow();
 	const meta = { ...(row.meta || {}), ...patch };
 	await settingModel.query().findById(SETTING_ID).patch({ meta });
 	return { ...row, meta };
-};
+});
 
 const sanitizedStatus = async () => {
 	const row = await getRow();
@@ -716,7 +728,7 @@ const internalInstanceSync = {
 		return { filename, contents: fs.readFileSync(fullPath) };
 	},
 
-	updateSettings: async (data) => {
+	updateSettings: (data) => withPeerMutationLock(async () => {
 		if (sharedDatabaseMode() && data.enabled !== false) {
 			throw new errs.ValidationError(
 				"Instance Synchronization is not used when multiple NPM Improved nodes share the same MySQL database. Shared Database mode already keeps database state common between nodes.",
@@ -793,7 +805,7 @@ const internalInstanceSync = {
 		internalInstanceSync.reschedule(1000);
 		internalInstanceSync.startAcmePolling();
 		return sanitizedStatus();
-	},
+	}),
 
 	promote: async () => {
 		if (sharedDatabaseMode()) {
@@ -867,7 +879,7 @@ const internalInstanceSync = {
 		};
 	},
 
-	updatePeer: async (nodeId, data) => {
+	updatePeer: (nodeId, data) => withPeerMutationLock(async () => {
 		const row = await getRow();
 		if (row.meta?.role !== "primary") throw new errs.ValidationError("Only the primary can edit secondary peers");
 		const peer = findRepairPeer(row.meta.peers, nodeId);
@@ -890,7 +902,7 @@ const internalInstanceSync = {
 		} : item);
 		await settingModel.query().findById(SETTING_ID).patch({ meta: { ...row.meta, peers } });
 		return sanitizedStatus();
-	},
+	}),
 
 	createPairingCode: async (data = {}) => {
 		if (sharedDatabaseMode()) {
@@ -1306,7 +1318,7 @@ const internalInstanceSync = {
 		return internalInstanceSync.recordHeartbeat(data, remoteAddress);
 	},
 
-	recordHeartbeat: async (data, remoteAddress = null) => {
+	recordHeartbeat: (data, remoteAddress = null) => withPeerMutationLock(async () => {
 		const row = await getRow();
 		const meta = row.meta || {};
 		if (row.value !== "enabled" || meta.role !== "primary") {
@@ -1341,7 +1353,7 @@ const internalInstanceSync = {
 			.sort((a, b) => String(a.node_name).localeCompare(String(b.node_name)));
 		await settingModel.query().findById(SETTING_ID).patch({ meta });
 		return { ok: true };
-	},
+	}),
 
 	syncNow: async () => {
 		if (pairingRunning) throw new errs.ValidationError("NPMX pairing or repair is in progress; snapshots are paused");
