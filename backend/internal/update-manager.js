@@ -7,7 +7,8 @@ import { assertValidIdentityRecord, hasIdentityDrift } from "../lib/npmx-update-
 import { global as logger } from "../logger.js";
 import authModel from "../models/auth.js";
 import errs from "../lib/error.js";
-import { compareReleaseVersions, parseReleaseVersion } from "../lib/release-versions.js";
+import { parseReleaseVersion } from "../lib/release-versions.js";
+import { npmxVersionAlignment } from "../lib/npmx-version-alignment.js";
 import { evaluateNpmxRollingUpdate } from "../lib/rolling-update-policy.js";
 import internalAuditLog from "./audit-log.js";
 import internalDatabaseManager from "./database-manager.js";
@@ -401,8 +402,8 @@ const alignPairedNodeVersion = async (peerVersion) => {
 	if (!current || !target) {
 		return { queued: false, reason: "The NPMX peer version is not a supported official release" };
 	}
-	const ordering = compareReleaseVersions(current.tag, target.tag);
-	if (ordering >= 0) return { queued: false, alreadyCurrent: true, version: current.tag };
+	const alignment = npmxVersionAlignment(current.tag, target.tag);
+	if (!alignment.valid || alignment.older !== "local") return { queued: false, alreadyCurrent: true, version: current.tag };
 	const caps = capabilities();
 	if (!caps.enabled) return { queued: false, reason: caps.reason || "Native updater is unavailable" };
 	const channel = target.stage === "beta" ? "beta" : target.stage ? "alpha" : "stable";
