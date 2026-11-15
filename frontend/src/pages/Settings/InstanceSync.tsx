@@ -247,123 +247,37 @@ export default function InstanceSync() {
 
 						<div className="card mb-4">
 							<div className="card-header">
-								<div>
-									<h3 className="card-title mb-0">NPMX secure pairing</h3>
-									<div className="text-secondary small">
-										Renew codes for previously enrolled secondary nodes below to preserve their original identity. Codes are one-time,
-										short-lived credentials used to establish the persistent encrypted cluster identity.
-									</div>
-								</div>
+								<h3 className="card-title mb-0">NPMX pairing</h3>
 							</div>
 							<div className="card-body">
-								{values.role === "primary" ? (
+								{data.role === "secondary" || !(data.peers?.length) ? (
 									<>
-										<div className="d-flex flex-wrap gap-2 align-items-center mb-3">
-											<Button
-												type="button"
-												actionType="primary"
-												onClick={async () => {
-													setActionError("");
-													setMessage("");
-													try {
-														const primaryUrl =
-															values.publicUrl.trim() || window.location.origin;
-														const result = await createPairing.mutateAsync({ primaryUrl });
-																setPairingTarget("");
-														setPairingCode(result.pairingCode);
-														setPairingExpires(result.expiresAt);
-														setMessage("One-time NPMX pairing code created.");
-													} catch (err) {
-														setActionError(err instanceof Error ? err.message : String(err));
-													}
-												}}
-												isLoading={createPairing.isPending}
-											>
-												<IconKey size={16} />
-												Create code for new secondary
-											</Button>
-											<span className="text-secondary small">
-												The code expires after 10 minutes and can be used only once.
-											</span>
-										</div>
-										{pairingCode ? (
-											<>
-												<label className="form-label" htmlFor="npmx-pairing-code">
-													{pairingTarget ? "Renewed code for existing secondary" : "One-time pairing code"}
-												</label>
-												<textarea
-													id="npmx-pairing-code"
-													className="form-control font-monospace"
-													rows={4}
-													readOnly
-													value={pairingCode}
-												/>
-												<div className="d-flex flex-wrap align-items-center gap-2 mt-2">
-													<Button
-														type="button"
-														onClick={async () => {
-															await navigator.clipboard.writeText(pairingCode);
-															setMessage("NPMX pairing code copied.");
-														}}
-													>
-														<IconClipboard size={16} />
-														Copy pairing code
-													</Button>
-													<span className="text-secondary small">
-														Expires {formatDate(pairingExpires)}{pairingTarget ? ` · Peer ID ${pairingTarget}` : ""}
-													</span>
-												</div>
-											</>
-										) : null}
+										<p className="text-secondary mb-3">
+											Generate a one-time code on this secondary, then paste it into the existing node's
+											Reconnect dialog on the primary.
+										</p>
+										<Button type="button" actionType="primary" isLoading={createReconnectCode.isPending}
+											disabled={createReconnectCode.isPending}
+											onClick={async () => {
+												setActionError("");
+												try {
+													const result = await createReconnectCode.mutateAsync(window.location.origin);
+													setPairingCode(result.pairingCode);
+													setPairingExpires(result.expiresAt);
+													setShowCodeModal(true);
+												} catch (err) {
+													setActionError(err instanceof Error ? err.message : String(err));
+												}
+											}}>
+											<IconKey size={16} /> Generate pairing code
+										</Button>
 									</>
-								) : null}
-								{(data.role === "secondary" || !(data.peers?.length)) ? (
-									<div className={values.role === "primary" ? "border-top pt-3 mt-3" : ""}>
-										<label className="form-label" htmlFor="npmx-join-code">
-											Pairing code from the primary
-										</label>
-										<textarea
-											id="npmx-join-code"
-											className="form-control font-monospace"
-											rows={4}
-											value={joinCode}
-											onChange={(event) => setJoinCode(event.target.value)}
-											placeholder="npmx1.…"
-										/>
-										<div className="d-flex flex-wrap gap-2 align-items-center mt-2">
-											<Button
-												type="button"
-												actionType="primary"
-												disabled={!joinCode.trim() || joinPairing.isPending}
-												isLoading={joinPairing.isPending}
-												onClick={async () => {
-													setActionError("");
-													setMessage("");
-													try {
-														if (!window.confirm("Repair or pair this node? Its stored proxy configuration will remain unchanged. Synchronization is paused until you approve the first snapshot.")) return;
-														const result = await joinPairing.mutateAsync({ pairingCode: joinCode.trim(), confirmExistingPeer: true });
-														setFieldValue("enabled", false);
-														setFieldValue("role", "secondary");
-														setFieldValue("primaryUrl", result.status.primaryUrl);
-														setJoinCode("");
-														setMessage(
-															result.recoveredPeerId ? "Existing secondary identity recovered without replacing configuration. Review and approve the first snapshot separately." : "Pairing completed without replacing local configuration. Review and approve synchronization separately.",
-														);
-													} catch (err) {
-														setActionError(err instanceof Error ? err.message : String(err));
-													}
-												}}
-											>
-												<IconShieldLock size={16} />
-												Repair / pair safely
-											</Button>
-											<span className="text-secondary small">
-												The cluster secret is exchanged through an authenticated ephemeral key
-												exchange; it is not displayed or copied manually.
-											</span>
-										</div>
-									</div>
-								) : null}
+								) : (
+									<p className="text-secondary mb-0">
+										To reconnect a secondary, open its Reconnect dialog in the Cluster nodes table
+										and paste the code generated on that secondary.
+									</p>
+								)}
 							</div>
 						</div>
 
