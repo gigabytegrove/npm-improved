@@ -1100,134 +1100,134 @@ const internalInstanceSync = {
 		if (syncRunning || pairingRunning) throw new errs.ValidationError("An NPMX sync or pairing operation is already active");
 		pairingRunning = true;
 		try {
-		if (sharedDatabaseMode()) {
-			throw new errs.ValidationError("Shared MySQL nodes do not use NPMX Primary/Secondary pairing");
-		}
-		let parsed;
-		try {
-			parsed = parseNpmxPairingCode(pairingCode);
-		} catch (err) {
-			throw new errs.ValidationError(err instanceof Error ? err.message : String(err));
-		}
+			if (sharedDatabaseMode()) {
+				throw new errs.ValidationError("Shared MySQL nodes do not use NPMX Primary/Secondary pairing");
+			}
+			let parsed;
+			try {
+				parsed = parseNpmxPairingCode(pairingCode);
+			} catch (err) {
+				throw new errs.ValidationError(err instanceof Error ? err.message : String(err));
+			}
 
-		const row = await getRow();
-		const meta = row.meta || {};
-		let decision;
-		try {
-			decision = assertSafeRepairJoin({
-				code: parsed,
-				current: row,
-				configuredSecret: readSecret(),
-				restoreIdentity,
-			});
-		} catch (err) {
-			throw new errs.ValidationError(err instanceof Error ? err.message : String(err));
-		}
-		const primaryUrl = normalizeUrl(parsed.url, "Primary node URL", true);
-		const ephemeral = generateNpmxEphemeralKeyPair();
-		const timestamp = new Date().toISOString();
-		const nonce = generateNpmxNonce();
-		const proofDetails = {
-			tokenId: parsed.id,
-			nodeId: decision.nodeId,
-			nodePublicKey: ephemeral.publicKey,
-			timestamp,
-			nonce,
-		};
-		const requestBody = {
-			token_id: parsed.id,
-			node_id: decision.nodeId,
-			node_name: meta.node_name || os.hostname(),
-			public_url: meta.public_url || "",
-			version: currentVersion(),
-			build_commit: process.env.NPM_BUILD_COMMIT || null,
-			client_public_key: ephemeral.publicKey,
-			timestamp,
-			nonce,
-			proof: createNpmxPairingProof(parsed.token, proofDetails),
-		};
-
-		const response = await fetchWithTimeout(
-			`${primaryUrl}/api/cluster/npmx/pair`,
-			{
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					"User-Agent": `NPMX/${NPMX_VERSION} NPM-Improved/${currentVersion()}`,
-				},
-				body: JSON.stringify(requestBody),
-			},
-			REQUEST_TIMEOUT_MS,
-		);
-		if (!response.ok) {
-			throw new errs.ValidationError(`Primary rejected NPMX pairing with HTTP ${response.status}`);
-		}
-		const payload = await response.json();
-		if (payload.protocol !== NPMX_PROTOCOL || payload.protocol_version !== NPMX_VERSION) {
-			throw new errs.ValidationError("Primary uses an incompatible NPMX protocol version");
-		}
-
-		const responseDetails = {
-			tokenId: payload.token_id,
-			nodeId: payload.node_id,
-			serverPublicKey: payload.server_public_key,
-			iv: payload.iv,
-			tag: payload.tag,
-			ciphertext: payload.ciphertext,
-			timestamp: payload.timestamp,
-			nonce: payload.nonce,
-		};
-		if (!verifyNpmxPairingResponseProof(parsed.token, responseDetails, payload.proof)) {
-			throw new errs.ValidationError("Primary NPMX pairing response could not be authenticated");
-		}
-
-		const key = deriveNpmxPairingKey({
-			privateKey: ephemeral.privateKey,
-			peerPublicKey: payload.server_public_key,
-			tokenSecret: parsed.token,
-		});
-		const secret = decryptNpmxPairingSecret(
-			payload,
-			key,
-			`${parsed.id}:${decision.nodeId}`,
-		);
-		if (payload.node_id !== decision.nodeId ||
-			payload.primary?.role !== "primary") {
-			throw new errs.ValidationError("Repair response does not match the requested primary or target secondary identity");
-		}
-		// Pause all snapshot pulls before changing credentials or node identity.
-		// No synchronized host/certificate records are modified by pairing.
-		await settingModel.query().findById(SETTING_ID).patch({
-			value: "disabled",
-			meta: {
-				...meta,
+			const row = await getRow();
+			const meta = row.meta || {};
+			let decision;
+			try {
+				decision = assertSafeRepairJoin({
+					code: parsed,
+					current: row,
+					configuredSecret: readSecret(),
+					restoreIdentity,
+				});
+			} catch (err) {
+				throw new errs.ValidationError(err instanceof Error ? err.message : String(err));
+			}
+			const primaryUrl = normalizeUrl(parsed.url, "Primary node URL", true);
+			const ephemeral = generateNpmxEphemeralKeyPair();
+			const timestamp = new Date().toISOString();
+			const nonce = generateNpmxNonce();
+			const proofDetails = {
+				tokenId: parsed.id,
+				nodeId: decision.nodeId,
+				nodePublicKey: ephemeral.publicKey,
+				timestamp,
+				nonce,
+			};
+			const requestBody = {
+				token_id: parsed.id,
 				node_id: decision.nodeId,
-				role: "secondary",
-				primary_url: primaryUrl,
-				recovery_pending: true,
-				recovery_backup: null,
-				last_sync: null,
-				last_attempt: null,
-				last_heartbeat_error: null,
-				write_session_floor: Math.ceil(Date.now() / 1000),
-				last_error: null,
-				primary_status: payload.primary || null,
-			},
-		});
-		writeSecret(secret);
-		internalInstanceSync.reschedule();
-		internalInstanceSync.startAcmePolling();
+				node_name: meta.node_name || os.hostname(),
+				public_url: meta.public_url || "",
+				version: currentVersion(),
+				build_commit: process.env.NPM_BUILD_COMMIT || null,
+				client_public_key: ephemeral.publicKey,
+				timestamp,
+				nonce,
+				proof: createNpmxPairingProof(parsed.token, proofDetails),
+			};
 
-		return {
-			ok: true,
-			mode: parsed.mode,
-			configurationPreserved: true,
-			activationRequired: true,
-			protocol: NPMX_PROTOCOL,
-			protocolVersion: NPMX_VERSION,
-			primary: payload.primary,
-			status: await sanitizedStatus(),
-		};
+			const response = await fetchWithTimeout(
+				`${primaryUrl}/api/cluster/npmx/pair`,
+				{
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						"User-Agent": `NPMX/${NPMX_VERSION} NPM-Improved/${currentVersion()}`,
+					},
+					body: JSON.stringify(requestBody),
+				},
+				REQUEST_TIMEOUT_MS,
+			);
+			if (!response.ok) {
+				throw new errs.ValidationError(`Primary rejected NPMX pairing with HTTP ${response.status}`);
+			}
+			const payload = await response.json();
+			if (payload.protocol !== NPMX_PROTOCOL || payload.protocol_version !== NPMX_VERSION) {
+				throw new errs.ValidationError("Primary uses an incompatible NPMX protocol version");
+			}
+
+			const responseDetails = {
+				tokenId: payload.token_id,
+				nodeId: payload.node_id,
+				serverPublicKey: payload.server_public_key,
+				iv: payload.iv,
+				tag: payload.tag,
+				ciphertext: payload.ciphertext,
+				timestamp: payload.timestamp,
+				nonce: payload.nonce,
+			};
+			if (!verifyNpmxPairingResponseProof(parsed.token, responseDetails, payload.proof)) {
+				throw new errs.ValidationError("Primary NPMX pairing response could not be authenticated");
+			}
+
+			const key = deriveNpmxPairingKey({
+				privateKey: ephemeral.privateKey,
+				peerPublicKey: payload.server_public_key,
+				tokenSecret: parsed.token,
+			});
+			const secret = decryptNpmxPairingSecret(
+				payload,
+				key,
+				`${parsed.id}:${decision.nodeId}`,
+			);
+			if (payload.node_id !== decision.nodeId ||
+				payload.primary?.role !== "primary") {
+				throw new errs.ValidationError("Repair response does not match the requested primary or target secondary identity");
+			}
+			// Pause all snapshot pulls before changing credentials or node identity.
+			// No synchronized host/certificate records are modified by pairing.
+			await settingModel.query().findById(SETTING_ID).patch({
+				value: "disabled",
+				meta: {
+					...meta,
+					node_id: decision.nodeId,
+					role: "secondary",
+					primary_url: primaryUrl,
+					recovery_pending: true,
+					recovery_backup: null,
+					last_sync: null,
+					last_attempt: null,
+					last_heartbeat_error: null,
+					write_session_floor: Math.ceil(Date.now() / 1000),
+					last_error: null,
+					primary_status: payload.primary || null,
+				},
+			});
+			writeSecret(secret);
+			internalInstanceSync.reschedule();
+			internalInstanceSync.startAcmePolling();
+
+			return {
+				ok: true,
+				mode: parsed.mode,
+				configurationPreserved: true,
+				activationRequired: true,
+				protocol: NPMX_PROTOCOL,
+				protocolVersion: NPMX_VERSION,
+				primary: payload.primary,
+				status: await sanitizedStatus(),
+			};
 		} finally {
 			pairingRunning = false;
 		}
