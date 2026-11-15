@@ -4,6 +4,7 @@ import os from "node:os";
 import { latestPeerCheckin, latestSuccessfulPeerSync } from "../lib/npmx-sync-status.js";
 import { editEnrolledNpmxPeer, mergeNpmxPeerHeartbeat } from "../lib/npmx-peer-state.js";
 import { canInitiateSecondaryReconnect, createNpmxReconnectCode, parseNpmxReconnectCode, reconnectPayloadSignature, verifyReconnectPayload } from "../lib/npmx-reconnect.js";
+import { connectionCodeType, createLegacyPrepareProof, verifyLegacyPrepareProof, createLegacyPrepareResponseProof, verifyLegacyPrepareResponseProof } from "../lib/npmx-legacy-bridge.js";
 import path from "node:path";
 import { getDatabaseRuntime, isMysql } from "../lib/config.js";
 import {
@@ -835,6 +836,121 @@ const internalInstanceSync = {
 				conflict_handling: "stale-writes-rejected",
 			},
 		};
+	},
+
+	// Compatibility bridge for an active npmx1 code issued by a formerly
+	// secondary node. The code's token authorizes preparing a modern
+	// ephemeral X25519 exchange; no legacy unauthenticated writes are allowed.
+	prepareLegacyReconnect: async (data) => {
+		if (sharedDatabaseMode()) throw new errs.ValidationError("NPMX is unavailable in shared database mode");
+		const state = readPairingState();
+		if (!state.token_id || state.token_id !== data.token_id || state.used ||
+			!state.token_secret_hash || !state.expires_at || Date.parse(state.expires_at) <= Date.now()) {
+			throw new errs.TokenRevokedError("Legacy NPMX pairing code is expired, used, or no longer the active code");
+		}
+		if (!timestampIsCurrent(data.timestamp) || !verifyLegacyPrepareProof(state.token_secret_hash, data)) {
+			throw new errs.TokenRevokedError("Legacy NPMX pairing proof was not authenticated");
+		}
+		const row = await getRow();
+		const meta = row.meta || {};
+		if (!canInitiateSecondaryReconnect(meta)) {
+			throw new errs.ValidationError("An enrolled primary cannot be replaced through a legacy pairing code");
+		}
+		const primary = new URL(normalizeUrl(data.primary_url, "Primary URL", true));
+		if (primary.username || primary.password || primary.pathname !== "/" || primary.search || primary.hash) {
+			throw new errs.ValidationError("Primary URL must be a direct http(s) origin");
+		}
+		// Do not turn the issuing node into an additional primary or modify
+		// the existing cluster secret during the negotiation.
+		const keys = generateNpmxEphemeralKeyPair();
+		writePairingState({
+			...state,
+			legacy_reconnect: {
+				node_id: data.node_id,
+				primary_url: primary.origin,
+				server_public_key: data.server_public_key,
+				private_key: keys.privateKey.export({ type: "pkcs8", format: "pem" }),
+				prepared_at: new Date().toISOString(),
+			},
+		});
+		const reply = {
+			token_id: data.token_id,
+			node_id: data.node_id,
+			primary_url: primary.origin,
+			server_public_key: data.server_public_key,
+			client_public_key: keys.publicKey,
+			version: currentVersion(),
+			timestamp: new Date().toISOString(),
+			nonce: generateNpmxNonce(),
+		};
+		reply.proof = createLegacyPrepareResponseProof(state.token_secret_hash, reply);
+		return reply;
+	},
+
+	// The primary presents its own original cluster credential using the
+	// legacy token's authenticated, ephemeral X25519/AES-GCM channel.
+	completeLegacyReconnect: async (data) => {
+		if (sharedDatabaseMode()) throw new errs.ValidationError("NPMX is unavailable in shared database mode");
+		const state = readPairingState();
+		const pending = state.legacy_reconnect || {};
+		if (!state.token_id || state.token_id !== data.token_id || state.used ||
+			!state.token_secret_hash || !state.expires_at || Date.parse(state.expires_at) <= Date.now() ||
+			!pending.private_key || pending.node_id !== data.node_id ||
+			pending.server_public_key !== data.server_public_key ||
+			pending.primary_url !== data.primary_url ||
+			!timestampIsCurrent(pending.prepared_at, NPMX_PAIRING_TTL_SECONDS) ||
+			!timestampIsCurrent(data.timestamp) ||
+			!verifyReconnectPayload(state.token_secret_hash, data)) {
+			throw new errs.TokenRevokedError("Legacy pairing upgrade was not authenticated or has expired");
+		}
+		const row = await getRow();
+		const meta = row.meta || {};
+		if (!canInitiateSecondaryReconnect(meta)) {
+			throw new errs.ValidationError("An enrolled primary cannot be converted through a legacy pairing code");
+		}
+		let shared;
+		try {
+			const key = deriveNpmxPairingKey({
+				privateKey: crypto.createPrivateKey(pending.private_key),
+				peerPublicKey: data.server_public_key,
+				tokenSecretHash: state.token_secret_hash,
+			});
+			shared = decryptNpmxPairingSecret(data, key, data.token_id + ":" + data.node_id);
+		} catch {
+			throw new errs.TokenRevokedError("Legacy NPMX credential exchange failed authenticated decryption");
+		}
+		if (shared.length < MIN_SECRET_LENGTH) {
+			throw new errs.TokenRevokedError("Legacy NPMX credential is invalid");
+		}
+		// Consume the one-time credential before any asynchronous mutation.
+		writePairingState({
+			token_id: state.token_id, token_secret_hash: state.token_secret_hash,
+			expires_at: state.expires_at, used: true, upgraded_at: new Date().toISOString(),
+		});
+		const previous = { value: row.value, meta: { ...meta } };
+		const now = new Date().toISOString();
+		await settingModel.query().findById(SETTING_ID).patch({
+			value: "enabled",
+			meta: {
+				...meta,
+				node_id: data.node_id,
+				role: "secondary",
+				primary_url: data.primary_url,
+				last_error: null,
+				primary_status: null,
+				recovery_pending: false,
+				write_session_floor: Math.ceil(Date.now() / 1000),
+				legacy_protocol_upgraded_at: now,
+			},
+		});
+		try { writeSecret(shared); }
+		catch (err) {
+			await settingModel.query().findById(SETTING_ID).patch(previous);
+			throw err;
+		}
+		internalInstanceSync.reschedule(1000);
+		internalInstanceSync.startAcmePolling();
+		return { ok: true, node_id: data.node_id, version: currentVersion(), upgraded: true };
 	},
 
 	// The secondary creates the code. No cluster credential or proxy state
