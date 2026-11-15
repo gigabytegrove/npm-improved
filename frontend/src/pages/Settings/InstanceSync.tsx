@@ -627,9 +627,9 @@ export default function InstanceSync() {
 											<td>{data.role === "secondary" ? formatDate(data.lastSync) : "Receives from secondaries"}</td>
 										</tr>
 										{peers.map((peer, index) => {
-											const nodeName = peer.nodeName || peer.node_name || `Node ${index + 1}`;
+											const nodeName = peer.configuredName || peer.nodeName || peer.node_name || `Node ${index + 1}`;
 											const nodeId = peer.nodeId || peer.node_id || "";
-											const publicUrl = peer.publicUrl || peer.public_url || "";
+											const publicUrl = peer.configuredUrl || peer.publicUrl || peer.public_url || "";
 											const lastSeen = peer.lastSeen || peer.last_seen;
 											return (
 												<tr key={nodeId || `${nodeName}-${index}`}>
@@ -662,6 +662,68 @@ export default function InstanceSync() {
 								</table>
 							</div>
 						</div>
+
+						{data.role === "primary" && peers.some((peer) => peer.role === "secondary") ? (
+							<div className="card mb-4">
+								<div className="card-header"><h3 className="card-title mb-0">Manage enrolled secondaries</h3></div>
+								<div className="card-body">
+									<p className="text-secondary">Edit an existing peer without changing its ID, or issue a repair code tied to its original identity. This does not add a secondary record or replace its proxy configuration.</p>
+									<label className="form-label" htmlFor="npmx-managed-peer">Existing secondary</label>
+									<select id="npmx-managed-peer" className="form-select mb-3" value={editingPeerId || ""}
+										onChange={(event) => {
+											const next = peers.find((peer) => (peer.nodeId || peer.node_id) === event.target.value);
+											setEditingPeerId(next?.nodeId || next?.node_id || null);
+											setEditPeerName(next?.configuredName || next?.nodeName || next?.node_name || "");
+											setEditPeerUrl(next?.configuredUrl || next?.publicUrl || next?.public_url || "");
+										}}>
+										<option value="">Select an existing secondary</option>
+										{peers.filter((peer) => peer.role === "secondary").map((peer) => (
+											<option key={peer.nodeId || peer.node_id} value={peer.nodeId || peer.node_id}>
+												{peer.configuredName || peer.nodeName || peer.node_name || "Secondary"} — {peer.nodeId || peer.node_id}
+											</option>
+										))}
+									</select>
+									{editingPeerId ? (
+										<>
+											<div className="row g-3 mb-3">
+												<div className="col-md-6">
+													<label className="form-label" htmlFor="npmx-managed-name">Display name</label>
+													<input id="npmx-managed-name" className="form-control" value={editPeerName}
+														onChange={(event) => setEditPeerName(event.target.value)} maxLength={100} />
+												</div>
+												<div className="col-md-6">
+													<label className="form-label" htmlFor="npmx-managed-url">Secondary management URL</label>
+													<input id="npmx-managed-url" className="form-control" type="url" value={editPeerUrl}
+														onChange={(event) => setEditPeerUrl(event.target.value)} />
+												</div>
+											</div>
+											<div className="d-flex flex-wrap gap-2">
+												<Button type="button" disabled={editPeer.isPending} isLoading={editPeer.isPending}
+													onClick={async () => {
+													setActionError("");
+													try {
+														await editPeer.mutateAsync({ nodeId: editingPeerId, nodeName: editPeerName.trim(), publicUrl: editPeerUrl.trim() });
+														setMessage("Existing secondary's management details updated; original node ID and pairing preserved.");
+													} catch (err) { setActionError(err instanceof Error ? err.message : String(err)); }
+												}}>Save existing peer</Button>
+												<Button type="button" actionType="primary" disabled={createPairing.isPending} isLoading={createPairing.isPending}
+													onClick={async () => {
+													setActionError("");
+													try {
+														const result = await createPairing.mutateAsync({ primaryUrl: values.publicUrl.trim() || data.publicUrl || window.location.origin, peerNodeId: editingPeerId });
+														setPairingCode(result.pairingCode);
+														setPairingExpires(result.expiresAt);
+														setPairingMode(result.mode);
+														setPairingTarget(result.targetNodeId);
+														setMessage("In-place repair code generated for existing secondary " + editingPeerId + ". Copy it from NPMX secure pairing above.");
+													} catch (err) { setActionError(err instanceof Error ? err.message : String(err)); }
+												}}><IconKey size={16} /> Generate repair code for this peer</Button>
+											</div>
+										</>
+									) : null}
+								</div>
+							</div>
+						) : null}
 
 						{data.role === "secondary" ? (
 							<div className="card border-warning">
