@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import { latestPeerCheckin, latestSuccessfulPeerSync } from "../lib/npmx-sync-status.js";
 import { editEnrolledNpmxPeer, mergeNpmxPeerHeartbeat } from "../lib/npmx-peer-state.js";
-import { createNpmxReconnectCode, parseNpmxReconnectCode, reconnectPayloadSignature, verifyReconnectPayload } from "../lib/npmx-reconnect.js";
+import { canInitiateSecondaryReconnect, createNpmxReconnectCode, parseNpmxReconnectCode, reconnectPayloadSignature, verifyReconnectPayload } from "../lib/npmx-reconnect.js";
 import path from "node:path";
 import { getDatabaseRuntime, isMysql } from "../lib/config.js";
 import {
@@ -843,7 +843,7 @@ const internalInstanceSync = {
 		if (sharedDatabaseMode()) throw new errs.ValidationError("NPMX is unavailable in shared database mode");
 		const row = await getRow();
 		const meta = row.meta || {};
-		if (meta.role === "primary" && (row.value === "enabled" || (Array.isArray(meta.peers) && meta.peers.length))) {
+		if (!canInitiateSecondaryReconnect(meta)) {
 			throw new errs.ValidationError("An established primary cannot issue a secondary reconnect code");
 		}
 		const address = normalizeUrl(secondaryUrl || meta.public_url, "Secondary reachable URL", true);
@@ -940,7 +940,7 @@ const internalInstanceSync = {
 		writeReconnectState({ token_id: state.token_id, used: true, expires_at: state.expires_at });
 		const row = await getRow();
 		const meta = row.meta || {};
-		if (meta.role === "primary" && (row.value === "enabled" || (Array.isArray(meta.peers) && meta.peers.length))) {
+		if (!canInitiateSecondaryReconnect(meta)) {
 			throw new errs.ValidationError("An established primary cannot become a secondary");
 		}
 		const origin = new URL(normalizeUrl(data.primary_url, "Primary URL", true));
