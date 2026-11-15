@@ -36,7 +36,7 @@ RUN set -eux; \
     test "$(node -p 'process.versions.node')" = '24.22.1'; \
     /usr/sbin/nginx -v 2>&1 | grep -F 'nginx/1.31.8'; \
     grep -a -q 'go1.27.3' /usr/local/bin/npm-improved-control-plane; \
-    node --test /app/test/release-versions.test.js /app/test/update-channels.test.js /app/test/instance-security-policy.test.js /app/test/instance-network-observation.test.js /app/test/npmx-cluster-database.test.js /app/test/npmx-update-identity.test.js /app/test/npmx.test.js
+    node --test /app/test/release-versions.test.js /app/test/update-channels.test.js /app/test/instance-security-policy.test.js /app/test/instance-network-observation.test.js /app/test/npmx-cluster-database.test.js /app/test/npmx-update-identity.test.js /app/test/npmx.test.js /app/test/npmx-peer-state.test.js
 LABEL org.opencontainers.image.title="NPM Improved" \
       org.opencontainers.image.version="${BUILD_VERSION}" \
       org.opencontainers.image.revision="${BUILD_COMMIT}" \
