@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import { latestPeerCheckin, latestSuccessfulPeerSync } from "../lib/npmx-sync-status.js";
 import { editEnrolledNpmxPeer, mergeNpmxPeerHeartbeat } from "../lib/npmx-peer-state.js";
+import { createNpmxReconnectCode, parseNpmxReconnectCode, reconnectPayloadSignature, verifyReconnectPayload } from "../lib/npmx-reconnect.js";
 import path from "node:path";
 import { getDatabaseRuntime, isMysql } from "../lib/config.js";
 import {
@@ -50,6 +51,7 @@ import {
 
 const SECRET_FILE = "/data/cluster-secret";
 const PAIRING_FILE = "/data/npmx-pairing.json";
+const RECONNECT_FILE = "/data/npmx-secondary-reconnect.json";
 const SETTING_ID = "instance-sync";
 const MIN_SECRET_LENGTH = 24;
 const MIN_INTERVAL_SECONDS = 15;
@@ -138,6 +140,21 @@ const writePairingState = (value) => {
 	fs.writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
 	fs.chmodSync(temp, 0o600);
 	fs.renameSync(temp, PAIRING_FILE);
+};
+
+const readReconnectState = () => {
+	try {
+		const parsed = JSON.parse(fs.readFileSync(RECONNECT_FILE, "utf8"));
+		return parsed && typeof parsed === "object" ? parsed : {};
+	} catch { return {}; }
+};
+
+const writeReconnectState = (value) => {
+	const temp = RECONNECT_FILE + "." + process.pid + ".tmp";
+	fs.mkdirSync(path.dirname(RECONNECT_FILE), { recursive: true, mode: 0o750 });
+	fs.writeFileSync(temp, JSON.stringify(value) + "\n", { encoding: "utf8", mode: 0o600 });
+	fs.chmodSync(temp, 0o600);
+	fs.renameSync(temp, RECONNECT_FILE);
 };
 
 const timestampIsCurrent = (value, windowSeconds = NPMX_AUTH_WINDOW_SECONDS) => {
@@ -818,6 +835,86 @@ const internalInstanceSync = {
 				conflict_handling: "stale-writes-rejected",
 			},
 		};
+	},
+
+	// The secondary creates the code. No cluster credential or proxy state
+	// changes until the primary applies it to an existing enrolled node.
+	createSecondaryReconnectCode: async (secondaryUrl) => {
+		if (sharedDatabaseMode()) throw new errs.ValidationError("NPMX is unavailable in shared database mode");
+		const row = await getRow();
+		const meta = row.meta || {};
+		if (meta.role === "primary" && Array.isArray(meta.peers) && meta.peers.length) {
+			throw new errs.ValidationError("An established primary cannot issue a secondary reconnect code");
+		}
+		const address = normalizeUrl(secondaryUrl || meta.public_url, "Secondary reachable URL", true);
+		const tokenId = generateNpmxTokenId();
+		const tokenSecret = generateNpmxSecret();
+		const keys = generateNpmxEphemeralKeyPair();
+		const expiresAt = new Date(Date.now() + NPMX_PAIRING_TTL_SECONDS * 1000).toISOString();
+		const pairingCode = createNpmxReconnectCode({
+			secondaryUrl: address, tokenId, tokenSecret, publicKey: keys.publicKey,
+			expiresAt, nodeName: String(meta.node_name || os.hostname()).slice(0, 100),
+		});
+		writeReconnectState({
+			token_id: tokenId,
+			token_secret_hash: hashNpmxSecret(tokenSecret),
+			private_key: keys.privateKey.export({ type: "pkcs8", format: "pem" }),
+			expires_at: expiresAt, used: false,
+		});
+		return { pairingCode, expiresAt };
+	},
+
+	// The primary sends an encrypted copy of its EXISTING credential to the
+	// secondary that issued the one-time code. No peer is created or replaced.
+	reconnectEnrolledPeer: async (nodeId, pairingCode, primaryUrl) => {
+		if (sharedDatabaseMode()) throw new errs.ValidationError("NPMX is unavailable in shared database mode");
+		const row = await getRow();
+		const meta = row.meta || {};
+		if (meta.role !== "primary" || row.value !== "enabled") {
+			throw new errs.ValidationError("An enabled primary is required to reconnect a secondary");
+		}
+		const enrolled = (Array.isArray(meta.peers) ? meta.peers : []).find(
+			(peer) => peer.node_id === nodeId && peer.role === "secondary",
+		);
+		if (!enrolled) throw new errs.ValidationError("Existing secondary not found; no peer was created");
+		const clusterSecret = readSecret();
+		if (!clusterSecret) throw new errs.ValidationError("The original primary cluster credential is missing");
+		let invite;
+		try { invite = parseNpmxReconnectCode(pairingCode); }
+		catch (err) { throw new errs.ValidationError(err.message); }
+		const origin = new URL(normalizeUrl(primaryUrl || meta.public_url, "Primary reachable URL", true));
+		if (origin.username || origin.password || origin.pathname !== "/" || origin.search || origin.hash) {
+			throw new errs.ValidationError("Primary address must be a direct http(s) origin");
+		}
+		const keys = generateNpmxEphemeralKeyPair();
+		const tokenHash = hashNpmxSecret(invite.token);
+		const key = deriveNpmxPairingKey({
+			privateKey: keys.privateKey, peerPublicKey: invite.key, tokenSecretHash: tokenHash,
+		});
+		const encrypted = encryptNpmxPairingSecret(clusterSecret, key, invite.id + ":" + nodeId);
+		const body = {
+			token_id: invite.id, node_id: nodeId, primary_url: origin.origin,
+			server_public_key: keys.publicKey, ...encrypted,
+			timestamp: new Date().toISOString(), nonce: generateNpmxNonce(), version: currentVersion(),
+		};
+		body.proof = reconnectPayloadSignature(tokenHash, body);
+		const response = await fetchWithTimeout(invite.url + "/api/cluster/npmx/reconnect", {
+			method: "POST", redirect: "error",
+			headers: { "Content-Type": "application/json", "User-Agent": "NPMX/" + NPMX_VERSION },
+			body: JSON.stringify(body),
+		}, REQUEST_TIMEOUT_MS);
+		if (!response.ok) throw new errs.ValidationError("Secondary reconnect was rejected (HTTP " + response.status + ")");
+		const reply = await response.json();
+		if (!reply || !reply.ok || reply.node_id !== nodeId || reply.version !== currentVersion()) {
+			throw new errs.ValidationError("Secondary did not acknowledge the enrolled peer identity and version");
+		}
+		// Edit the existing peer record, keeping its ID, alias and sync history.
+		const peers = meta.peers.map((peer) => peer.node_id === nodeId ? {
+			...peer, public_url: invite.url, url_overridden: true,
+			last_seen: new Date().toISOString(), version: reply.version,
+		} : peer);
+		await settingModel.query().findById(SETTING_ID).patch({ meta: { ...meta, peers } });
+		return { ok: true, nodeId, status: await sanitizedStatus() };
 	},
 
 	// Edit an existing enrolled secondary in place. Never mint a new ID or
