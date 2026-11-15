@@ -10,6 +10,9 @@ const { authState, sessionState, healthState } = vi.hoisted(() => ({
 	healthState: { data: { status: "OK", setup: true }, isLoading: false, isError: false },
 }));
 
+// The security notice is tested separately; route tests must not mount its
+// React Query firewall API hook without an application QueryClient provider.
+vi.mock("src/components/InstanceSecurityNotice", () => ({ default: () => null }));
 vi.mock("src/context", () => ({ useAuthState: () => authState }));
 vi.mock("src/hooks", () => ({
 	useHealth: () => healthState,
