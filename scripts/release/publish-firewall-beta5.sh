@@ -27,7 +27,7 @@ gh auth status -h github.com >/dev/null
 # Keep reusable release inputs and disposable build work under /root.
 # The source checkout is managed separately by the operator; published
 # releases remain on GitHub, and the isolated BuildKit cache is persistent.
-BUILD_ROOT='/root/npm-improved-build'
+BUILD_ROOT="${NPMI_BUILD_ROOT:-/root/npm-improved-build}"
 CACHE="$BUILD_ROOT/cache"
 WORK_PARENT="${NPMI_WORK_PARENT:-$BUILD_ROOT/tmp}"
 mkdir -p -- "$BUILD_ROOT" "$CACHE"
