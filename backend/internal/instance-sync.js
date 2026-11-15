@@ -933,6 +933,9 @@ const internalInstanceSync = {
 		if (data.version !== currentVersion()) {
 			throw new errs.ValidationError("Both NPMX nodes must have the same version to reconnect");
 		}
+		// Consume synchronously before the first await, preventing concurrent
+		// requests from replaying the same one-time reconnect invitation.
+		writeReconnectState({ token_id: state.token_id, used: true, expires_at: state.expires_at });
 		const row = await getRow();
 		const meta = row.meta || {};
 		if (meta.role === "primary" && Array.isArray(meta.peers) && meta.peers.length) {
@@ -956,9 +959,7 @@ const internalInstanceSync = {
 		if (!secret || secret.length < MIN_SECRET_LENGTH) {
 			throw new errs.TokenRevokedError("NPMX reconnect credential is invalid");
 		}
-		// A token is one-use even if a subsequent storage error occurs. The
-		// operator can generate another code; a replay cannot change roles.
-		writeReconnectState({ token_id: state.token_id, used: true, expires_at: state.expires_at });
+
 		const previous = { value: row.value, meta: { ...meta } };
 		await settingModel.query().findById(SETTING_ID).patch({
 			value: "enabled",
