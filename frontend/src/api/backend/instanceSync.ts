@@ -128,3 +128,30 @@ export async function joinNpmxPairing(options: { pairingCode: string; confirmExi
 		data: options,
 	});
 }
+
+
+export interface NpmxSecondaryReconnectCode {
+	pairingCode: string;
+	expiresAt: string;
+}
+
+export interface NpmxPeerReconnectResult {
+	ok: boolean;
+	nodeId: string;
+	status: InstanceSyncStatus;
+}
+
+export async function createSecondaryNpmxReconnectCode(secondaryUrl: string): Promise<NpmxSecondaryReconnectCode> {
+	return await api.post({ url: "/cluster/npmx/reconnect-code", data: { secondaryUrl } });
+}
+
+export async function reconnectExistingNpmxPeer(
+	nodeId: string,
+	pairingCode: string,
+	primaryUrl: string,
+): Promise<NpmxPeerReconnectResult> {
+	return await api.post({
+		url: "/cluster/npmx/peers/" + encodeURIComponent(nodeId) + "/reconnect",
+		data: { pairingCode, primaryUrl },
+	});
+}
