@@ -59,6 +59,7 @@ const SNAPSHOT_TIMEOUT_MS = 180_000;
 
 let schedulerTimer = null;
 let syncRunning = false;
+let pairingRunning = false;
 let acmePollTimer = null;
 let acmePollRunning = false;
 let acmePollEpoch = 0;
@@ -710,8 +711,8 @@ const internalInstanceSync = {
 			throw new errs.ValidationError("No retained NPMX pre-activation backup is available");
 		}
 		const fullPath = path.join("/data/backups", filename);
-		const stat = fs.statSync(fullPath);
-		if (!stat.isFile() || stat.size > 512 * 1024 * 1024) throw new errs.ValidationError("Recovery backup is not a valid bounded file");
+		const stat = fs.lstatSync(fullPath);
+		if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 512 * 1024 * 1024) throw new errs.ValidationError("Recovery backup is not a valid bounded file");
 		return { filename, contents: fs.readFileSync(fullPath) };
 	},
 
@@ -1069,6 +1070,9 @@ const internalInstanceSync = {
 	},
 
 	joinNpmxPairing: async (pairingCode, { restoreIdentity = false } = {}) => {
+		if (syncRunning || pairingRunning) throw new errs.ValidationError("An NPMX sync or pairing operation is already active");
+		pairingRunning = true;
+		try {
 		if (sharedDatabaseMode()) {
 			throw new errs.ValidationError("Shared MySQL nodes do not use NPMX Primary/Secondary pairing");
 		}
@@ -1194,6 +1198,9 @@ const internalInstanceSync = {
 			primary: payload.primary,
 			status: await sanitizedStatus(),
 		};
+		} finally {
+			pairingRunning = false;
+		}
 	},
 
 	requireNpmxAuth: async (req, _res, next) => {
@@ -1325,6 +1332,7 @@ const internalInstanceSync = {
 	},
 
 	syncNow: async () => {
+		if (pairingRunning) throw new errs.ValidationError("NPMX pairing or repair is in progress; snapshots are paused");
 		if (syncRunning) {
 			throw new errs.ValidationError("An instance synchronization is already running");
 		}
