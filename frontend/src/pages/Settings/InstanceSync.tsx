@@ -87,7 +87,7 @@ export default function InstanceSync() {
 		data.role === "primary" ? data.peers || [] : data.primaryStatus ? [data.primaryStatus] : [];
 	const protocolVersion = data.npmx?.protocolVersion || data.npmx?.protocol_version || 1;
 	const selectedReconnectPeer = peers.find((peer) => (peer.nodeId || peer.node_id) === reconnectingPeerId);
-	const legacyReconnectCode = reconnectCode.trim().startsWith("npmx1.");
+
 
 	return (
 		<Formik
@@ -665,39 +665,38 @@ export default function InstanceSync() {
 							<div className="fw-semibold">{selectedReconnectPeer?.nodeName || selectedReconnectPeer?.node_name || reconnectingPeerId}</div>
 							<div className="small text-secondary mb-3">{reconnectingPeerId}</div>
 							<p className="text-secondary">
-								Paste the pairing code generated on the disconnected secondary.
-								This reconnects the existing node, without creating another record.
+								Paste the code from the disconnected secondary. Both current <code>npmxr1.</code> and
+								older <code>npmx1.</code> codes are supported. A valid older code is securely upgraded
+								to the current NPMX connection without creating another record.
 							</p>
 							<label className="form-label" htmlFor="npmx-reconnect-code">Secondary pairing code</label>
 							<textarea id="npmx-reconnect-code" className="form-control font-monospace"
 								rows={5} value={reconnectCode}
 								onChange={(event) => setReconnectCode(event.target.value)}
 								placeholder="npmxr1."/>
-							{legacyReconnectCode ? (
-								<Alert variant="warning" className="mt-3">
-									This is an old <code>npmx1.</code> pairing code from the primary-generated flow.
-									Generate a new code on the secondary and paste its <code>npmxr1.</code> code here.
-								</Alert>
-							) : null}
 							{modalError ? <Alert variant="danger" className="mt-3">{modalError}</Alert> : null}
 						</Modal.Body>
 						<Modal.Footer>
 							<Button type="button" disabled={reconnectPeer.isPending}
 								onClick={() => setReconnectingPeerId("")}>Cancel</Button>
 							<Button type="button" actionType="primary"
-								disabled={reconnectPeer.isPending || !reconnectCode.trim() || legacyReconnectCode}
+								disabled={reconnectPeer.isPending || !reconnectCode.trim()}
 								isLoading={reconnectPeer.isPending}
 								onClick={async () => {
 									setModalError("");
 									try {
-										await reconnectPeer.mutateAsync({
+										const result = await reconnectPeer.mutateAsync({
 											nodeId: reconnectingPeerId,
 											pairingCode: reconnectCode.trim(),
 											primaryUrl: data.publicUrl || window.location.origin,
 										});
 										setReconnectingPeerId("");
 										setReconnectCode("");
-										setMessage("Existing NPMX secondary reconnected successfully.");
+										setMessage(result.versionMismatch
+											? "Existing NPMX connection authenticated. The older node will check for the matching official release using its native updater; configuration synchronization resumes when both versions match."
+											: result.protocolUpgraded
+												? "Legacy NPMX code accepted, connection upgraded, and original secondary reconnected."
+												: "Existing NPMX secondary reconnected successfully.");
 									} catch (err) { setModalError(err instanceof Error ? err.message : String(err)); }
 								}}>Reconnect</Button>
 						</Modal.Footer>
