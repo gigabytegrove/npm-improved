@@ -87,6 +87,7 @@ export default function InstanceSync() {
 		data.role === "primary" ? data.peers || [] : data.primaryStatus ? [data.primaryStatus] : [];
 	const protocolVersion = data.npmx?.protocolVersion || data.npmx?.protocol_version || 1;
 	const selectedReconnectPeer = peers.find((peer) => (peer.nodeId || peer.node_id) === reconnectingPeerId);
+	const legacyReconnectCode = reconnectCode.trim().startsWith("npmx1.");
 
 	return (
 		<Formik
@@ -251,11 +252,12 @@ export default function InstanceSync() {
 								<h3 className="card-title mb-0">NPMX pairing</h3>
 							</div>
 							<div className="card-body">
-								{data.role === "secondary" || (data.role === "primary" && !data.enabled && !(data.peers?.length)) ? (
+								{data.role === "secondary" || !(data.peers?.length) ? (
 									<>
 										<p className="text-secondary mb-3">
 											Generate a one-time code on this secondary, then paste it into the existing node's
-											Reconnect dialog on the primary.
+											Reconnect dialog on the primary. It also works when an update left this previously
+											secondary incorrectly reporting Primary with no enrolled peers.
 										</p>
 										<Button type="button" actionType="primary" isLoading={createReconnectCode.isPending}
 											disabled={createReconnectCode.isPending}
@@ -671,13 +673,19 @@ export default function InstanceSync() {
 								rows={5} value={reconnectCode}
 								onChange={(event) => setReconnectCode(event.target.value)}
 								placeholder="npmxr1."/>
+							{legacyReconnectCode ? (
+								<Alert variant="warning" className="mt-3">
+									This is an old <code>npmx1.</code> pairing code from the primary-generated flow.
+									Generate a new code on the secondary and paste its <code>npmxr1.</code> code here.
+								</Alert>
+							) : null}
 							{modalError ? <Alert variant="danger" className="mt-3">{modalError}</Alert> : null}
 						</Modal.Body>
 						<Modal.Footer>
 							<Button type="button" disabled={reconnectPeer.isPending}
 								onClick={() => setReconnectingPeerId("")}>Cancel</Button>
 							<Button type="button" actionType="primary"
-								disabled={reconnectPeer.isPending || !reconnectCode.trim()}
+								disabled={reconnectPeer.isPending || !reconnectCode.trim() || legacyReconnectCode}
 								isLoading={reconnectPeer.isPending}
 								onClick={async () => {
 									setModalError("");
