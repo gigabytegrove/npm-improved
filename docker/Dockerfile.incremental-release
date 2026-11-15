@@ -8,6 +8,9 @@ WORKDIR /build/frontend
 COPY frontend/package.json frontend/yarn.lock ./
 RUN yarn install --frozen-lockfile
 COPY frontend/ ./
+# IntlProvider imports generated language JSON; generate it before Vitest
+# starts Vite's TypeScript checker. The production build also recompiles it.
+RUN yarn locale-compile
 # Run the critical unified-firewall UI and navigation regressions before
 # publishing an image. TypeScript and production bundling follow.
 RUN yarn vitest run src/pages/Settings/Firewall.test.ts src/modules/instanceFirewallVisibility.test.ts
