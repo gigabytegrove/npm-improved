@@ -240,6 +240,7 @@ router.post("/npmx/pairing-code", async (req, res, next) => {
 				additionalProperties: false,
 				properties: {
 					primary_url: { type: "string", maxLength: 2048 },
+					peer_node_id: { type: "string", minLength: 1, maxLength: 100 },
 				},
 			},
 			req.body || {},
@@ -247,12 +248,64 @@ router.post("/npmx/pairing-code", async (req, res, next) => {
 		res.status(200).send(
 			await internalInstanceSync.createPairingCode({
 				primaryUrl: data.primary_url,
+				peerNodeId: data.peer_node_id,
 			}),
 		);
 	} catch (err) {
 		debug(logger, `POST /cluster/npmx/pairing-code: ${err}`);
 		next(err);
 	}
+});
+
+router.put("/npmx/peers/:node_id", async (req, res, next) => {
+	try {
+		await requireAdmin(res);
+		const data = await validator({
+			additionalProperties: false,
+			properties: {
+				node_name: { type: "string", minLength: 1, maxLength: 100 },
+				public_url: { type: "string", maxLength: 2048 },
+			},
+		}, req.body || {});
+		res.status(200).send(await internalInstanceSync.updatePeer(req.params.node_id, {
+			nodeName: data.node_name, publicUrl: data.public_url,
+		}));
+	} catch (err) { next(err); }
+});
+
+router.post("/npmx/inspect-code", async (req, res, next) => {
+	try {
+		await requireAdmin(res);
+		const data = await validator({
+			required: ["pairing_code"], additionalProperties: false,
+			properties: { pairing_code: { type: "string", minLength: 32, maxLength: 8192 } },
+		}, req.body);
+		res.status(200).send(await internalInstanceSync.previewPairingCode(data.pairing_code));
+	} catch (err) { next(err); }
+});
+
+router.post("/npmx/activate", async (req, res, next) => {
+	try {
+		await requireAdmin(res);
+		const data = await validator({
+			required: ["confirmed"], additionalProperties: false,
+			properties: { confirmed: { type: "boolean", const: true } },
+		}, req.body);
+		res.status(200).send(await internalInstanceSync.activateRecoveredPair(data));
+	} catch (err) { next(err); }
+});
+
+router.get("/npmx/recovery-backup", async (_req, res, next) => {
+	try {
+		await requireAdmin(res);
+		const backup = await internalInstanceSync.getRecoveryBackup();
+		res.set({
+			"Content-Type": "application/octet-stream",
+			"Content-Disposition": `attachment; filename="${backup.filename}"`,
+			"Cache-Control": "no-store",
+		});
+		res.status(200).send(backup.contents);
+	} catch (err) { next(err); }
 });
 
 router.post("/npmx/join", async (req, res, next) => {
@@ -264,11 +317,12 @@ router.post("/npmx/join", async (req, res, next) => {
 				additionalProperties: false,
 				properties: {
 					pairing_code: { type: "string", minLength: 32, maxLength: 8192 },
+					restore_identity: { type: "boolean" },
 				},
 			},
 			req.body,
 		);
-		res.status(200).send(await internalInstanceSync.joinNpmxPairing(data.pairing_code));
+		res.status(200).send(await internalInstanceSync.joinNpmxPairing(data.pairing_code, { restoreIdentity: data.restore_identity === true }));
 	} catch (err) {
 		debug(logger, `POST /cluster/npmx/join: ${err}`);
 		next(err);
