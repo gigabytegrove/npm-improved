@@ -31,6 +31,7 @@ import {
 	assertAppliedClusterFiles,
 	NPMX_ACCESS_ROOT,
 } from "../lib/npmx-snapshot-audit.js";
+import { replaceSnapshotRowsAtomically } from "../lib/npmx-cluster-database.js";
 
 const MAX_BUNDLE_BYTES = 512 * 1024 * 1024;
 const MAX_CAPTURE_BYTES = 384 * 1024 * 1024;
@@ -292,15 +293,7 @@ const writeRows = async (trx, table, model, rows, ownerUserId = null) => {
 };
 
 const replaceDatabase = async (snapshot, scope, ownerUserId = null) => {
-	const tables = TABLES[scope];
-	await db().transaction(async (trx) => {
-		for (const [table] of [...tables].reverse()) {
-			await trx(table).del();
-		}
-		for (const [table, model] of tables) {
-			await writeRows(trx, table, model, snapshot[table] || [], ownerUserId);
-		}
-	});
+	await replaceSnapshotRowsAtomically(db(), TABLES[scope], snapshot, writeRows, { scope, ownerUserId });
 };
 
 const removePath = (target) => fs.rmSync(target, { recursive: true, force: true });
@@ -588,19 +581,6 @@ const ensureClusterAccessAssets = async (database) => {
 	}
 };
 
-const replaceClusterDatabase = async (snapshot) => {
-	const localSyncSetting = await settingModel.query().findById("instance-sync");
-	await replaceDatabase(snapshot, "cluster");
-	if (localSyncSetting) {
-		const plain = toPlain(localSyncSetting);
-		const instance = settingModel.fromJson(plain);
-		const dbRow = typeof instance.$toDatabaseJson === "function"
-			? instance.$toDatabaseJson()
-			: instance.$formatDatabaseJson(plain);
-		await db()("setting").insert(dbRow);
-	}
-};
-
 const applyClusterPayload = async (bundle) => {
 	if (bundle.scope !== "cluster") {
 		throw new Error("Cluster synchronization payload has the wrong scope");
@@ -612,7 +592,7 @@ const applyClusterPayload = async (bundle) => {
 
 	restoreInProgress = true;
 	try {
-		await replaceClusterDatabase(bundle.database);
+		await replaceDatabase(bundle.database, "cluster");
 		restoreFilesystem(bundle);
 		await regenerateNginx();
 		// A Nginx reload or successful database import alone is insufficient:
