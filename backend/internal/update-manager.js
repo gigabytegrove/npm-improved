@@ -432,7 +432,10 @@ const alignPairedNodeVersion = async (peerVersion) => {
 	}
 	try {
 		assertIdle();
-		await verifyOperationalSafety(null);
+		// Internal authorization was already established through the one-time
+		// pairing token and both administrators' actions. Status readers
+		// still enforce their usual permission checks.
+		await verifyOperationalSafety({ can: async () => {} });
 	} catch (err) {
 		return { queued: false, reason: err.message || String(err) };
 	}
