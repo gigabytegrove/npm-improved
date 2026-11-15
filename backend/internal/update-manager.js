@@ -7,7 +7,7 @@ import { assertValidIdentityRecord, hasIdentityDrift } from "../lib/npmx-update-
 import { global as logger } from "../logger.js";
 import authModel from "../models/auth.js";
 import errs from "../lib/error.js";
-import { parseReleaseVersion } from "../lib/release-versions.js";
+import { compareReleaseVersions, parseReleaseVersion } from "../lib/release-versions.js";
 import { evaluateNpmxRollingUpdate } from "../lib/rolling-update-policy.js";
 import internalAuditLog from "./audit-log.js";
 import internalDatabaseManager from "./database-manager.js";
@@ -391,6 +391,81 @@ const startReleaseOperation = async (access, release, password, { reinstall = fa
 	}
 };
 
+// A one-time, mutually authenticated NPMX reconnect is initiated by an
+// administrator on each node. Once both parties have paired, align an older
+// local node through the SAME verified native host updater used by the UI.
+// Untrusted peer input cannot select arbitrary images, registries or scripts.
+const alignPairedNodeVersion = async (peerVersion) => {
+	const current = parseReleaseVersion(process.env.NPM_BUILD_VERSION);
+	const target = parseReleaseVersion(peerVersion);
+	if (!current || !target) {
+		return { queued: false, reason: "The NPMX peer version is not a supported official release" };
+	}
+	const ordering = compareReleaseVersions(current.tag, target.tag);
+	if (ordering >= 0) return { queued: false, alreadyCurrent: true, version: current.tag };
+	const caps = capabilities();
+	if (!caps.enabled) return { queued: false, reason: caps.reason || "Native updater is unavailable" };
+	const channel = target.stage === "beta" ? "beta" : target.stage ? "alpha" : "stable";
+	if (channel !== "stable" && !caps.host_updater_prerelease_support) {
+		return { queued: false, reason: "The node's native host updater does not support prerelease channels" };
+	}
+	// Fetch the EXACT public release requested by the newer paired node.
+	// Never use a user-supplied image reference or a floating GitHub tag.
+	const { default: remoteVersion } = await import("./remote-version.js");
+	let release;
+	try {
+		const response = await remoteVersion.fetchUrl(
+			"https://api.github.com/repos/gigabytegrove/npm-improved/releases/tags/" + encodeURIComponent(target.tag),
+		);
+		if (response.statusCode !== 200) throw new Error("Official release is unavailable");
+		release = JSON.parse(response.rawData);
+	} catch (err) {
+		return { queued: false, reason: "Could not verify the target release on GitHub: " + (err.message || String(err)) };
+	}
+	const arch = process.arch === "x64" ? "amd64" : process.arch === "arm64" ? "arm64" : null;
+	const asset = arch && "npm-improved-" + target.tag + "-linux-" + arch + ".tar.gz";
+	if (release.tag_name !== target.tag || release.draft ||
+		Boolean(release.prerelease) !== (channel !== "stable") ||
+		!asset || !Array.isArray(release.assets) ||
+		!release.assets.some((item) => item?.name === asset)) {
+		return { queued: false, reason: "The requested exact release has no verified image for this architecture" };
+	}
+	try {
+		assertIdle();
+		await verifyOperationalSafety(null);
+	} catch (err) {
+		return { queued: false, reason: err.message || String(err) };
+	}
+	const prior = getStatus();
+	const startedAt = now();
+	// Only the immutable official release is authorized. launchHandoff
+	// records the pre-update node identity and cluster-secret checksum.
+	writeJsonFile(STATUS_FILE, {
+		state: "preflight",
+		action: "update",
+		message: "NPMX pairing authenticated; aligning this older node to " + target.tag,
+		started_at: startedAt, completed_at: null,
+		source_version: current.tag, target_version: target.tag,
+		previous_version: current.tag, previous_image: null,
+		target_image: OFFICIAL_IMAGE_PREFIX + target.tag,
+		target_digest: null, error: null, initiated_by: 0,
+	});
+	try {
+		await launchHandoff({
+			action: "update",
+			targetImage: OFFICIAL_IMAGE_PREFIX + target.tag,
+			sourceVersion: current.tag,
+			targetVersion: target.tag,
+			initiatedBy: "npmx-authenticated-pairing",
+			channel,
+		});
+		return { queued: true, targetVersion: target.tag };
+	} catch (err) {
+		writeJsonFile(STATUS_FILE, prior);
+		return { queued: false, reason: "Native updater refused the paired upgrade: " + (err.message || String(err)) };
+	}
+};
+
 const startUpdate = (access, release, password) => startReleaseOperation(access, release, password);
 
 const reinstallRelease = (access, release, password) =>
@@ -528,4 +603,5 @@ export default {
 	restart,
 	reconcileAudit,
 	reconcileClusterIdentityCheckpoint,
+	alignPairedNodeVersion,
 };
