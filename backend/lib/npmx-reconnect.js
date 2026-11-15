@@ -71,3 +71,17 @@ export const parseNpmxReconnectCode = (code) => {
   }
   return payload;
 };
+
+
+export const reconnectPayloadSignature = (tokenHash, payload) => {
+  const fields = ["token_id", "node_id", "primary_url", "server_public_key",
+    "iv", "tag", "ciphertext", "timestamp", "nonce", "version"];
+  const message = ["NPMX-RECONNECT-1", ...fields.map((name) => String(payload?.[name] || ""))].join("\n");
+  return crypto.createHmac("sha256", String(tokenHash)).update(message, "utf8").digest("base64url");
+};
+
+export const verifyReconnectPayload = (tokenHash, payload) => {
+  const expected = Buffer.from(reconnectPayloadSignature(tokenHash, payload), "utf8");
+  const supplied = Buffer.from(String(payload?.proof || ""), "utf8");
+  return expected.length === supplied.length && crypto.timingSafeEqual(expected, supplied);
+};
