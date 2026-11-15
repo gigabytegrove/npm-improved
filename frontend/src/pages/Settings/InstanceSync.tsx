@@ -11,12 +11,12 @@ import {
 } from "@tabler/icons-react";
 import { Form, Formik } from "formik";
 import { useState } from "react";
-import { Alert, Badge } from "react-bootstrap";
+import { Alert, Badge, Modal } from "react-bootstrap";
 import { Button, Loading } from "src/components";
 import {
-	useCreateNpmxPairingCode,
+	useCreateSecondaryNpmxReconnectCode,
+	useReconnectExistingNpmxPeer,
 	useInstanceSync,
-	useJoinNpmxPairing,
 	usePromoteInstanceSync,
 	useRunInstanceSync,
 	useSetInstanceSync,
@@ -35,15 +35,17 @@ export default function InstanceSync() {
 	const setSync = useSetInstanceSync();
 	const runSync = useRunInstanceSync();
 	const promote = usePromoteInstanceSync();
-	const createPairing = useCreateNpmxPairingCode();
-	const joinPairing = useJoinNpmxPairing();
+	const createReconnectCode = useCreateSecondaryNpmxReconnectCode();
+	const reconnectPeer = useReconnectExistingNpmxPeer();
 	const updatePeer = useUpdateNpmxPeer();
 	const [message, setMessage] = useState("");
 	const [actionError, setActionError] = useState("");
 	const [pairingCode, setPairingCode] = useState("");
-	const [joinCode, setJoinCode] = useState("");
 	const [pairingExpires, setPairingExpires] = useState("");
-	const [pairingTarget, setPairingTarget] = useState("");
+	const [showCodeModal, setShowCodeModal] = useState(false);
+	const [reconnectingPeerId, setReconnectingPeerId] = useState("");
+	const [reconnectCode, setReconnectCode] = useState("");
+	const [modalError, setModalError] = useState("");
 	const [editingPeerId, setEditingPeerId] = useState("");
 	const [peerDraft, setPeerDraft] = useState({ nodeName: "", publicUrl: "" });
 
