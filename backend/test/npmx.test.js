@@ -135,3 +135,47 @@ test("NPMX request signatures cover method, path, node, nonce, timestamp, and bo
 		false,
 	);
 });
+
+test("renewal code binds to the existing secondary identity and name", () => {
+	const expiresAt = new Date(Date.now() + 60_000).toISOString();
+	const code = createNpmxPairingCode({
+		primaryUrl: "http://192.168.0.17:81",
+		tokenId: generateNpmxTokenId(),
+		tokenSecret: generateNpmxSecret(),
+		expiresAt,
+		targetPeerId: "existing-proxy2-id",
+		targetPeerName: "proxy2",
+	});
+	const parsed = parseNpmxPairingCode(code);
+	assert.equal(parsed.peer, "existing-proxy2-id");
+	assert.equal(parsed.peer_name, "proxy2");
+	assert.equal(parsed.url, "http://192.168.0.17:81");
+});
+
+test("new-secondary enrollment code carries no existing peer identity", () => {
+	const code = createNpmxPairingCode({
+		primaryUrl: "http://192.168.0.17:81",
+		tokenId: generateNpmxTokenId(),
+		tokenSecret: generateNpmxSecret(),
+		expiresAt: new Date(Date.now() + 60_000).toISOString(),
+	});
+	const parsed = parseNpmxPairingCode(code);
+	assert.equal(Object.hasOwn(parsed, "peer"), false);
+});
+
+test("rejects tampered peer identity metadata before any network pairing", () => {
+	const code = createNpmxPairingCode({
+		primaryUrl: "http://192.168.0.17:81",
+		tokenId: generateNpmxTokenId(),
+		tokenSecret: generateNpmxSecret(),
+		expiresAt: new Date(Date.now() + 60_000).toISOString(),
+		targetPeerId: "valid-peer",
+	});
+	const [prefix, encoded] = code.split(".");
+	const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+	payload.peer = "x".repeat(101);
+	assert.throws(
+		() => parseNpmxPairingCode(`${prefix}.${Buffer.from(JSON.stringify(payload)).toString("base64url")}`),
+		/invalid peer identity/,
+	);
+});
