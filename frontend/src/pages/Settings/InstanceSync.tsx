@@ -652,7 +652,7 @@ export default function InstanceSync() {
 													<td>{publicUrl || "Not advertised"}</td>
 													<td>{peer.version || "Unknown"}</td>
 													<td>{formatDate(lastSeen)}</td>
-													<td>{formatDate(peer.lastSync || peer.last_sync)}</td>
+													<td>{peer.repairPending ? "Awaiting first post-repair sync" : formatDate(peer.lastSync || peer.last_sync)}</td>
 												</tr>
 											);
 										})}
