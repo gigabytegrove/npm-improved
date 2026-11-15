@@ -1,6 +1,14 @@
 import crypto from "node:crypto";
 
 export const NPMX_RECONNECT_PREFIX = "npmxr1";
+/**
+ * Upgrades can leave a former secondary reporting "primary" with no peers.
+ * Such a node may initiate a secondary reconnect without altering settings.
+ * A primary which actually owns enrolled peers must not be converted.
+ */
+export const canInitiateSecondaryReconnect = (meta = {}) =>
+  meta.role !== "primary" || !(Array.isArray(meta.peers) && meta.peers.length > 0);
+
 
 // The code is a short-lived, operator-carried invitation from the secondary.
 // It contains an ephemeral PUBLIC key and a one-time token, never the cluster secret.
@@ -31,8 +39,11 @@ export const createNpmxReconnectCode = ({
 
 export const parseNpmxReconnectCode = (code) => {
   const value = String(code || "").trim();
+  if (value.startsWith("npmx1.")) {
+    throw new Error("This is an old primary-generated NPMX code (npmx1). Generate a new reconnect code on the secondary, then paste its npmxr1 code into the primary.");
+  }
   if (value.length > 8192 || !value.startsWith(NPMX_RECONNECT_PREFIX + ".")) {
-    throw new Error("Invalid secondary-generated NPMX reconnect code");
+    throw new Error("Invalid NPMX reconnect code. Generate a new npmxr1 code on the secondary and paste it into the primary.");
   }
   let payload;
   try {
