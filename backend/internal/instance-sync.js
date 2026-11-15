@@ -835,6 +835,7 @@ const internalInstanceSync = {
 			true,
 		);
 		const targetPeerId = String(data.targetPeerId || "").trim();
+		let targetPeerName = "";
 		if (targetPeerId) {
 			const peer = (Array.isArray(meta.peers) ? meta.peers : []).find(
 				(item) => item.node_id === targetPeerId && item.role === "secondary",
@@ -842,6 +843,7 @@ const internalInstanceSync = {
 			if (!peer) {
 				throw new errs.ValidationError("NPMX repair requires an existing enrolled secondary. No peer record will be created.");
 			}
+			targetPeerName = String(peer.node_name || "").slice(0, 100);
 		}
 		const tokenId = generateNpmxTokenId();
 		const tokenSecret = generateNpmxSecret();
@@ -874,6 +876,7 @@ const internalInstanceSync = {
 				tokenSecret,
 				expiresAt,
 				targetPeerId,
+				targetPeerName,
 			}),
 		};
 	},
@@ -1007,6 +1010,9 @@ const internalInstanceSync = {
 			throw new errs.ValidationError("Disable this primary before joining a different cluster.");
 		}
 		const pairingNodeId = targetPeerId || meta.node_id;
+		if (targetPeerId && meta.role === "primary" && Array.isArray(meta.peers) && meta.peers.length > 0) {
+			throw new errs.ValidationError("This node already manages NPMX peers as a primary. Refusing to discard its established primary identity.");
+		}
 		const ephemeral = generateNpmxEphemeralKeyPair();
 		const timestamp = new Date().toISOString();
 		const nonce = generateNpmxNonce();
@@ -1020,7 +1026,7 @@ const internalInstanceSync = {
 		const requestBody = {
 			token_id: parsed.id,
 			node_id: pairingNodeId,
-			node_name: meta.node_name || os.hostname(),
+			node_name: String(targetPeerId ? (parsed.peer_name || meta.node_name) : meta.node_name || os.hostname()).slice(0, 100),
 			public_url: meta.public_url || "",
 			version: currentVersion(),
 			build_commit: process.env.NPM_BUILD_COMMIT || null,
@@ -1084,6 +1090,7 @@ const internalInstanceSync = {
 			meta: {
 				...meta,
 				node_id: pairingNodeId,
+				node_name: targetPeerId ? (parsed.peer_name || meta.node_name) : meta.node_name,
 				role: "secondary",
 				primary_url: primaryUrl,
 				write_session_floor: Math.ceil(Date.now() / 1000),
