@@ -819,6 +819,38 @@ const internalInstanceSync = {
 		};
 	},
 
+	// Edit an existing enrolled secondary in place. Never mint a new ID or
+	// alter its pairing credentials, history, role, or replicated proxy data.
+	updateEnrolledPeer: async (nodeId, data) => {
+		if (sharedDatabaseMode()) {
+			throw new errs.ValidationError("NPMX peer editing is not available in shared database mode");
+		}
+		const row = await getRow();
+		const meta = row.meta || {};
+		if (meta.role !== "primary") {
+			throw new errs.ValidationError("Only the primary can edit enrolled secondary records");
+		}
+		const peers = Array.isArray(meta.peers) ? [...meta.peers] : [];
+		const index = peers.findIndex((peer) => peer.node_id === nodeId && peer.role === "secondary");
+		if (index < 0) {
+			throw new errs.ValidationError("This secondary is not enrolled. No peer record was created.");
+		}
+		const nodeName = String(data.nodeName || "").trim();
+		if (!nodeName || nodeName.length > 100) {
+			throw new errs.ValidationError("Secondary node name must be between 1 and 100 characters");
+		}
+		const publicUrl = normalizeUrl(data.publicUrl, "Secondary address", false);
+		peers[index] = {
+			...peers[index],
+			node_name: nodeName,
+			public_url: publicUrl,
+			name_overridden: true,
+			url_overridden: true,
+		};
+		await settingModel.query().findById(SETTING_ID).patch({ meta: { ...meta, peers } });
+		return sanitizedStatus();
+	},
+
 	createPairingCode: async (data = {}) => {
 		if (sharedDatabaseMode()) {
 			throw new errs.ValidationError("Shared MySQL nodes do not use NPMX Primary/Secondary pairing");
@@ -1236,13 +1268,21 @@ const internalInstanceSync = {
 			remote_address: remoteAddress || null,
 		};
 		const index = peers.findIndex((item) => item.node_id === nodeId);
-		if (index >= 0) peers[index] = { ...peers[index], ...peer, last_sync: peer.last_sync || peers[index].last_sync || null };
-		else peers.push(peer);
+		if (index >= 0) {
+			const previous = peers[index];
+			peers[index] = {
+				...previous,
+				...peer,
+				node_name: previous.name_overridden ? previous.node_name : peer.node_name,
+				public_url: previous.url_overridden ? previous.public_url : peer.public_url,
+				last_sync: peer.last_sync || previous.last_sync || null,
+			};
+		} else peers.push(peer);
 
-		const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
-		meta.peers = peers
-			.filter((item) => !item.last_seen || Date.parse(item.last_seen) >= cutoff)
-			.sort((a, b) => String(a.node_name).localeCompare(String(b.node_name)));
+		// A disconnected secondary remains enrolled until explicitly removed.
+		// Expiring peers after 30 days made reconnect impossible without
+		// creating another node record and discarding its sync history.
+		meta.peers = peers.sort((a, b) => String(a.node_name).localeCompare(String(b.node_name)));
 		await settingModel.query().findById(SETTING_ID).patch({ meta });
 		return { ok: true };
 	},
