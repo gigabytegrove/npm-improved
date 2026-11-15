@@ -16,11 +16,12 @@ export const replaceSnapshotRowsAtomically = async (
     throw new Error("NPMX cluster snapshot must not contain the node-local instance-sync setting");
   }
 
+  const preserveLocalIdentity = scope === "cluster" || scope === "configuration";
   await knex.transaction(async (trx) => {
-    const identity = scope === "cluster"
+    const identity = preserveLocalIdentity
       ? await trx("setting").where({ id: "instance-sync" }).first()
       : null;
-    if (scope === "cluster" && !identity) {
+    if (preserveLocalIdentity && !identity) {
       throw new Error("NPMX local node identity is missing; refusing to apply a cluster snapshot");
     }
 
@@ -28,7 +29,12 @@ export const replaceSnapshotRowsAtomically = async (
       await trx(table).del();
     }
     for (const [table, model] of tables) {
-      await writeRows(trx, table, model, snapshot[table] || [], ownerUserId);
+      // Configuration-only backups may include the source node identity.
+      // A restore must never overwrite the destination node pairing state.
+      const rows = preserveLocalIdentity && table === "setting"
+        ? (snapshot[table] || []).filter((row) => row.id !== "instance-sync")
+        : (snapshot[table] || []);
+      await writeRows(trx, table, model, rows, ownerUserId);
     }
     if (identity) {
       await trx("setting").insert(identity);
