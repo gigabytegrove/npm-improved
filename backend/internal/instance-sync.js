@@ -672,6 +672,49 @@ const internalInstanceSync = {
 		return internalInstanceSync.resolveAcmeChallenge(token);
 	},
 
+	activateRecoveredPair: async ({ confirmed = false } = {}) => {
+		if (confirmed !== true) throw new errs.ValidationError("Explicit backup and synchronization confirmation is required");
+		const row = await getRow();
+		const meta = row.meta || {};
+		if (row.value !== "disabled" || meta.role !== "secondary" || !meta.recovery_pending) {
+			throw new errs.ValidationError("This node does not have a staged secondary pairing to activate");
+		}
+		const secret = readSecret();
+		if (!secret || !meta.primary_url) throw new errs.ValidationError("Paired secondary credentials or primary URL are missing");
+		// Keep the secondary's CURRENT configuration recoverable before any
+		// authoritative primary snapshot can replace it. Never prune this backup.
+		const bundle = await internalDisasterRecovery.createClusterEnvelope(secret);
+		const directory = "/data/backups";
+		fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+		const filename = "npmx-pre-activation-" + new Date().toISOString().replace(/[:.]/g, "-") + "-" + crypto.randomUUID() + ".npmibak";
+		const destination = path.join(directory, filename);
+		const temporary = destination + ".tmp";
+		try {
+			fs.writeFileSync(temporary, bundle.data, { mode: 0o600, flag: "wx" });
+			fs.renameSync(temporary, destination);
+		} finally {
+			fs.rmSync(temporary, { force: true });
+		}
+		await settingModel.query().findById(SETTING_ID).patch({
+			value: "enabled",
+			meta: { ...meta, recovery_pending: false, recovery_backup: filename, last_error: null },
+		});
+		internalInstanceSync.reschedule(1000);
+		return { ok: true, backup: filename, status: await sanitizedStatus() };
+	},
+
+	getRecoveryBackup: async () => {
+		const row = await getRow();
+		const filename = row.meta?.recovery_backup;
+		if (typeof filename !== "string" || !/^npmx-pre-activation-[A-Za-z0-9-]+\\.npmibak$/.test(filename)) {
+			throw new errs.ValidationError("No retained NPMX pre-activation backup is available");
+		}
+		const fullPath = path.join("/data/backups", filename);
+		const stat = fs.statSync(fullPath);
+		if (!stat.isFile() || stat.size > 512 * 1024 * 1024) throw new errs.ValidationError("Recovery backup is not a valid bounded file");
+		return { filename, contents: fs.readFileSync(fullPath) };
+	},
+
 	updateSettings: async (data) => {
 		if (sharedDatabaseMode() && data.enabled !== false) {
 			throw new errs.ValidationError(
@@ -682,6 +725,12 @@ const internalInstanceSync = {
 		const current = row.meta || {};
 		const enabled = typeof data.enabled === "boolean" ? data.enabled : row.value === "enabled";
 		const role = String(data.role || current.role || "primary");
+		if (current.recovery_pending && enabled) {
+			throw new errs.ValidationError("Repair is staged. Use Activate synchronization to create a retained backup before allowing primary snapshots");
+		}
+		if (role !== current.role && readSecret()) {
+			throw new errs.ValidationError("Cannot overwrite a paired node role through settings. Use targeted NPMX repair or controlled failover promotion");
+		}
 		if (!["primary", "secondary"].includes(role)) {
 			throw new errs.ValidationError("Instance sync role must be primary or secondary");
 		}
@@ -708,8 +757,9 @@ const internalInstanceSync = {
 			: "";
 
 		if (typeof data.sharedSecret === "string" && data.sharedSecret.trim()) {
-			// Legacy/manual configuration remains accepted for backwards compatibility,
-			// but the UI uses NPMX one-time pairing and never asks users to create a secret.
+			if (readSecret()) {
+				throw new errs.ValidationError("Paired cluster secrets cannot be replaced through settings. Use targeted NPMX repair");
+			}
 			writeSecret(data.sharedSecret);
 		}
 		if (enabled && role === "primary") {
