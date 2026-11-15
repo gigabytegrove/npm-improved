@@ -10,7 +10,7 @@ import {
 	IconTopologyStar3,
 } from "@tabler/icons-react";
 import { Form, Formik } from "formik";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Alert, Badge, Modal } from "react-bootstrap";
 import { Button, Loading } from "src/components";
 import {
@@ -23,6 +23,7 @@ import {
 	useUpdateNpmxPeer,
 } from "src/hooks";
 import { T } from "src/locale";
+import { copyText } from "src/modules/copyText";
 
 const formatDate = (value?: string | null) => {
 	if (!value) return "Never";
@@ -42,6 +43,8 @@ export default function InstanceSync() {
 	const [actionError, setActionError] = useState("");
 	const [pairingCode, setPairingCode] = useState("");
 	const [pairingExpires, setPairingExpires] = useState("");
+	const [copyNotice, setCopyNotice] = useState("");
+	const pairingCodeField = useRef<HTMLTextAreaElement>(null);
 	const [showCodeModal, setShowCodeModal] = useState(false);
 	const [reconnectingPeerId, setReconnectingPeerId] = useState("");
 	const [reconnectCode, setReconnectCode] = useState("");
@@ -268,6 +271,7 @@ export default function InstanceSync() {
 													const result = await createReconnectCode.mutateAsync(window.location.origin);
 													setPairingCode(result.pairingCode);
 													setPairingExpires(result.expiresAt);
+													setCopyNotice("");
 													setShowCodeModal(true);
 												} catch (err) {
 													setActionError(err instanceof Error ? err.message : String(err));
@@ -493,11 +497,11 @@ export default function InstanceSync() {
 														<div className="fw-bold">{nodeName}</div>
 														<div className="small text-secondary">{nodeId}</div>
 													</td>
-													<td>{peer.role === "primary" ? "Primary" : "Secondary"}</td>
+													<td>{data.role === "secondary" || peer.role === "primary" ? "Primary" : "Secondary"}</td>
 													<td>{publicUrl || "Not advertised"}</td>
 													<td>{peer.version || "Unknown"}</td>
 													<td>{formatDate(lastSeen)}</td>
-													<td>{formatDate(peer.lastSync || peer.last_sync)}</td>
+													<td>{data.role === "secondary" || peer.role === "primary" ? "Receives from secondaries" : formatDate(peer.lastSync || peer.last_sync)}</td>
 													<td>
 														{data.role === "primary" && peer.role === "secondary" && nodeId ? (
 															<div className="d-flex gap-2 flex-wrap">
@@ -597,19 +601,26 @@ export default function InstanceSync() {
 								Copy this code and paste it into the Reconnect dialog for this node on the primary.
 							</p>
 							<label className="form-label" htmlFor="npmx-secondary-code">Pairing code</label>
-							<textarea id="npmx-secondary-code" className="form-control font-monospace"
+							<textarea ref={pairingCodeField} id="npmx-secondary-code" className="form-control font-monospace"
 								rows={5} readOnly value={pairingCode} />
 							<div className="small text-secondary mt-2">
 								One use only. Expires {formatDate(pairingExpires)}.
 							</div>
+							{copyNotice ? <Alert variant="info" role="status" className="mt-3 mb-0">{copyNotice}</Alert> : null}
 							{modalError ? <Alert variant="danger" className="mt-3">{modalError}</Alert> : null}
 						</Modal.Body>
 						<Modal.Footer>
 							<Button type="button" onClick={() => setShowCodeModal(false)}>Close</Button>
 							<Button type="button" actionType="primary" onClick={async () => {
 								setModalError("");
-								try { await navigator.clipboard.writeText(pairingCode); }
-								catch (err) { setModalError(err instanceof Error ? err.message : "Unable to copy code."); }
+								const copied = await copyText(pairingCode);
+								if (copied) {
+									setCopyNotice("Pairing code copied.");
+								} else {
+									pairingCodeField.current?.focus();
+									pairingCodeField.current?.select();
+									setCopyNotice("Automatic clipboard access is blocked on this HTTP page. The code is selected; press Ctrl+C to copy it.");
+								}
 							}}><IconClipboard size={16} /> Copy code</Button>
 						</Modal.Footer>
 					</Modal>
