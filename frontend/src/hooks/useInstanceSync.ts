@@ -6,6 +6,7 @@ import {
 	promoteInstanceSync,
 	runInstanceSync,
 	type InstanceSyncSettings,
+	updateNpmxPeer,
 	updateInstanceSyncSettings,
 } from "src/api/backend";
 
@@ -62,6 +63,17 @@ const useJoinNpmxPairing = () => {
 	});
 };
 
+const useUpdateNpmxPeer = () => {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: ({ nodeId, nodeName, publicUrl }: { nodeId: string; nodeName: string; publicUrl: string }) =>
+			updateNpmxPeer(nodeId, { nodeName, publicUrl }),
+		onSuccess: async () => {
+			await queryClient.invalidateQueries({ queryKey: ["instance-sync"] });
+		},
+	});
+};
+
 const usePromoteInstanceSync = () => {
 	const queryClient = useQueryClient();
 	return useMutation({
@@ -78,5 +90,6 @@ export {
 	useRunInstanceSync,
 	useCreateNpmxPairingCode,
 	useJoinNpmxPairing,
+	useUpdateNpmxPeer,
 	usePromoteInstanceSync,
 };
