@@ -915,6 +915,9 @@ const internalInstanceSync = {
 		}
 
 		const targetNodeId = data.peerNodeId ? findRepairPeer(meta.peers, data.peerNodeId).node_id : null;
+		if (targetNodeId && row.value !== "enabled") {
+			throw new errs.ValidationError("Enable the existing primary before issuing an NPMX repair code");
+		}
 		const primaryUrl = normalizeUrl(
 			data.primaryUrl || meta.public_url,
 			"Primary node URL",
@@ -1005,6 +1008,9 @@ const internalInstanceSync = {
 
 		const row = await getRow();
 		const meta = row.meta || {};
+		if (mode === "repair" && (row.value !== "enabled" || meta.role !== "primary")) {
+			throw new errs.ValidationError("Targeted peer repair requires an already enabled primary; it cannot promote or enable one implicitly");
+		}
 		if (row.value !== "enabled" || meta.role !== "primary") {
 			await settingModel.query().findById(SETTING_ID).patch({
 				value: "enabled",
