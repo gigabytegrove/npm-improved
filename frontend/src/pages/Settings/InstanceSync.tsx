@@ -488,6 +488,7 @@ export default function InstanceSync() {
 											name="role"
 											className="form-select"
 											value={values.role}
+											disabled={data.secretConfigured && !data.recoveryPending}
 											onChange={handleChange}
 										>
 											<option value="primary">
