@@ -20,8 +20,12 @@ import {
 	usePromoteInstanceSync,
 	useRunInstanceSync,
 	useSetInstanceSync,
+	usePreviewNpmxCode,
+	useEditNpmxPeer,
+	useActivateNpmxPair,
 } from "src/hooks";
 import { T } from "src/locale";
+import { downloadNpmxRecoveryBackup, type NpmxCodePreview } from "src/api/backend";
 
 const formatDate = (value?: string | null) => {
 	if (!value) return "Never";
@@ -36,11 +40,20 @@ export default function InstanceSync() {
 	const promote = usePromoteInstanceSync();
 	const createPairing = useCreateNpmxPairingCode();
 	const joinPairing = useJoinNpmxPairing();
+	const previewPairing = usePreviewNpmxCode();
+	const editPeer = useEditNpmxPeer();
+	const activatePair = useActivateNpmxPair();
 	const [message, setMessage] = useState("");
 	const [actionError, setActionError] = useState("");
 	const [pairingCode, setPairingCode] = useState("");
 	const [joinCode, setJoinCode] = useState("");
 	const [pairingExpires, setPairingExpires] = useState("");
+	const [pairingMode, setPairingMode] = useState<"repair" | "enroll">("enroll");
+	const [pairingTarget, setPairingTarget] = useState<string | null>(null);
+	const [joinPreview, setJoinPreview] = useState<NpmxCodePreview | null>(null);
+	const [editingPeerId, setEditingPeerId] = useState<string | null>(null);
+	const [editPeerName, setEditPeerName] = useState("");
+	const [editPeerUrl, setEditPeerUrl] = useState("");
 
 	if (isLoading) {
 		return (
@@ -265,7 +278,9 @@ export default function InstanceSync() {
 															publicUrl: primaryUrl,
 															intervalSeconds: Number(values.intervalSeconds),
 														});
-														const result = await createPairing.mutateAsync(primaryUrl);
+														const result = await createPairing.mutateAsync({ primaryUrl });
+												setPairingMode(result.mode);
+												setPairingTarget(result.targetNodeId);
 														setPairingCode(result.pairingCode);
 														setPairingExpires(result.expiresAt);
 														setFieldValue("enabled", true);
@@ -287,7 +302,7 @@ export default function InstanceSync() {
 										{pairingCode ? (
 											<>
 												<label className="form-label" htmlFor="npmx-pairing-code">
-													One-time pairing code
+													{pairingMode === "repair" ? "Repair existing secondary" : "One-time pairing code"}
 												</label>
 												<textarea
 													id="npmx-pairing-code"
@@ -308,7 +323,7 @@ export default function InstanceSync() {
 														Copy pairing code
 													</Button>
 													<span className="text-secondary small">
-														Expires {formatDate(pairingExpires)}
+														Expires {formatDate(pairingExpires)}{pairingTarget ? ` · Original node: ${pairingTarget}` : ""}
 													</span>
 												</div>
 											</>
@@ -324,7 +339,7 @@ export default function InstanceSync() {
 											className="form-control font-monospace"
 											rows={4}
 											value={joinCode}
-											onChange={(event) => setJoinCode(event.target.value)}
+											onChange={(event) => { setJoinCode(event.target.value); setJoinPreview(null); }}
 											placeholder="npmx1.…"
 										/>
 										<div className="d-flex flex-wrap gap-2 align-items-center mt-2">
