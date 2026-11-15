@@ -139,6 +139,9 @@ export interface NpmxPeerReconnectResult {
 	ok: boolean;
 	nodeId: string;
 	status: InstanceSyncStatus;
+	protocolUpgraded?: boolean;
+	peerVersion?: string;
+	versionMismatch?: boolean;
 }
 
 export async function createSecondaryNpmxReconnectCode(secondaryUrl: string): Promise<NpmxSecondaryReconnectCode> {
