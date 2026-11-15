@@ -456,6 +456,7 @@ export default function InstanceSync() {
 											<th>Version</th>
 											<th>Last seen</th>
 											<th>Last successful sync</th>
+											<th>Actions</th>
 										</tr>
 									</thead>
 									<tbody>
@@ -477,95 +478,43 @@ export default function InstanceSync() {
 											<td>{data.role === "secondary" ? formatDate(data.lastSync) : "Receives from secondaries"}</td>
 										</tr>
 										{peers.map((peer, index) => {
-											const nodeName = peer.nodeName || peer.node_name || `Node ${index + 1}`;
+											const nodeName = peer.nodeName || peer.node_name || "Node " + (index + 1);
 											const nodeId = peer.nodeId || peer.node_id || "";
 											const publicUrl = peer.publicUrl || peer.public_url || "";
 											const lastSeen = peer.lastSeen || peer.last_seen;
 											return (
-												<tr key={nodeId || `${nodeName}-${index}`}>
+												<tr key={nodeId || nodeName + "-" + index}>
 													<td>
-														{editingPeerId === nodeId ? (
-															<input
-																className="form-control form-control-sm mb-1"
-																aria-label={`Edit name of ${nodeName}`}
-																maxLength={100}
-																value={peerDraft.nodeName}
-																onChange={(event) => setPeerDraft((current) => ({ ...current, nodeName: event.target.value }))}
-															/>
-														) : <div className="fw-bold">{nodeName}</div>}
+														<div className="fw-bold">{nodeName}</div>
 														<div className="small text-secondary">{nodeId}</div>
-																			{data.role === "primary" && nodeId && peer.role === "secondary" ? (
-																			<div className="d-flex flex-wrap gap-2 mt-2">
-																				{editingPeerId === nodeId ? (
-																					<>
-																						<Button type="button" disabled={updatePeer.isPending || !peerDraft.nodeName.trim()} onClick={async () => {
-																							setActionError("");
-																							try {
-																								await updatePeer.mutateAsync({ nodeId, nodeName: peerDraft.nodeName.trim(), publicUrl: peerDraft.publicUrl.trim() });
-																								setEditingPeerId("");
-																								setMessage(`Saved ${peerDraft.nodeName.trim()} without changing its enrollment or synchronized configuration.`);
-																							} catch (err) { setActionError(err instanceof Error ? err.message : String(err)); }
-																						}}>Save edit</Button>
-																						<Button type="button" disabled={updatePeer.isPending} onClick={() => setEditingPeerId("")}>Cancel</Button>
-																					</>
-																				) : <Button type="button" onClick={() => {
-																					setEditingPeerId(nodeId);
-																					setPeerDraft({ nodeName, publicUrl });
-																				}}>Edit node</Button>}
-																				</div>
-																		) : null}
-																	{data.role === "primary" && nodeId && peer.role === "secondary" ? (
-																				<Button type="button" disabled={createPairing.isPending} onClick={async () => {
-																					setActionError("");
-																					try {
-																						const primaryUrl = values.publicUrl.trim() || data.publicUrl || window.location.origin;
-																						const code = await createPairing.mutateAsync({ primaryUrl, targetPeerId: nodeId });
-																						setPairingCode(code.pairingCode);
-																						setPairingExpires(code.expiresAt);
-																						setPairingTarget(nodeId);
-																						setMessage(`Reconnect code renewed for ${nodeName}; its existing peer record is preserved.`);
-																					} catch (err) { setActionError(err instanceof Error ? err.message : String(err)); }
-																				}}><IconKey size={15} /> Reconnect / renew code</Button>
-																			) : null}
-																			{pairingTarget === nodeId && pairingCode ? (
-																				<div className="mt-2">
-																					<label className="form-label small" htmlFor={`npmx-peer-code-${nodeId}`}>Reconnect code for {nodeName}</label>
-																					<textarea id={`npmx-peer-code-${nodeId}`} className="form-control font-monospace" rows={3} readOnly value={pairingCode} />
-																					<div className="d-flex flex-wrap align-items-center gap-2 mt-1">
-																						<Button type="button" onClick={async () => {
-																							try { await navigator.clipboard.writeText(pairingCode); setMessage("Reconnect code copied."); }
-																							catch (err) { setActionError(err instanceof Error ? err.message : "Could not copy code."); }
-																						}}>Copy code</Button>
-																						<span className="small text-secondary">Expires {formatDate(pairingExpires)}. Use on this secondary only.</span>
-																					</div>
-																				</div>
-																			) : null}
 													</td>
-													<td>
-														{peer.role === "primary" ? (
-															<T id="sync.node-role-primary" />
-														) : (
-															<T id="sync.node-role-secondary" />
-														)}
-													</td>
-													<td>{editingPeerId === nodeId ? (
-																<input
-																type="url"
-																className="form-control form-control-sm"
-																aria-label={`Edit address of ${nodeName}`}
-																value={peerDraft.publicUrl}
-																onChange={(event) => setPeerDraft((current) => ({ ...current, publicUrl: event.target.value }))}
-															/>
-														) : publicUrl || "Not advertised"}</td>
+													<td>{peer.role === "primary" ? "Primary" : "Secondary"}</td>
+													<td>{publicUrl || "Not advertised"}</td>
 													<td>{peer.version || "Unknown"}</td>
 													<td>{formatDate(lastSeen)}</td>
 													<td>{formatDate(peer.lastSync || peer.last_sync)}</td>
+													<td>
+														{data.role === "primary" && peer.role === "secondary" && nodeId ? (
+															<div className="d-flex gap-2 flex-wrap">
+																<Button type="button" onClick={() => {
+																	setEditingPeerId(nodeId);
+																	setPeerDraft({ nodeName, publicUrl });
+																	setModalError("");
+																}}>Edit</Button>
+																<Button type="button" onClick={() => {
+																	setReconnectingPeerId(nodeId);
+																	setReconnectCode("");
+																	setModalError("");
+																}}>Reconnect</Button>
+															</div>
+														) : null}
+													</td>
 												</tr>
 											);
 										})}
 										{peers.length === 0 ? (
 											<tr>
-												<td colSpan={6} className="text-center text-secondary py-4">
+												<td colSpan={7} className="text-center text-secondary py-4">
 													No other NPMX nodes have checked in yet.
 												</td>
 											</tr>
