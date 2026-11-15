@@ -53,6 +53,10 @@ export function mergePeerHeartbeat(previous, incoming, now) {
   return {
     ...(previous || {}),
     ...incoming,
+    // Administratively configured peer addresses must remain authoritative
+    // for ACME preflight and all other primary-to-secondary requests.
+    public_url: previous?.configured_url || incoming.public_url || previous?.public_url || "",
+    reported_public_url: incoming.public_url || previous?.reported_public_url || "",
     last_sync: incoming.last_sync || previous?.last_sync || null,
     last_seen: now,
     ...(incoming.repair_pending
