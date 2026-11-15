@@ -708,9 +708,14 @@ export default function InstanceSync() {
 													setActionError("");
 													try {
 														await editPeer.mutateAsync({ nodeId: editingPeerId, nodeName: editPeerName.trim(), publicUrl: editPeerUrl.trim() });
-														setMessage("Existing secondary's management details updated; original node ID and pairing preserved.");
+														const updated = await createPairing.mutateAsync({ primaryUrl: values.publicUrl.trim() || data.publicUrl || window.location.origin, peerNodeId: editingPeerId });
+												setPairingCode(updated.pairingCode);
+												setPairingExpires(updated.expiresAt);
+												setPairingMode(updated.mode);
+												setPairingTarget(updated.targetNodeId);
+												setMessage("Existing secondary updated. Its refreshed in-place pairing code is displayed above; the original peer record and configuration remain intact.");
 													} catch (err) { setActionError(err instanceof Error ? err.message : String(err)); }
-												}}>Save existing peer</Button>
+												}}>Save and refresh repair code</Button>
 												<Button type="button" actionType="primary" disabled={createPairing.isPending} isLoading={createPairing.isPending}
 													onClick={async () => {
 													setActionError("");
