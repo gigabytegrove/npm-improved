@@ -59,8 +59,8 @@ export function mergePeerHeartbeat(previous, incoming, now) {
     reported_public_url: incoming.public_url || previous?.reported_public_url || "",
     last_sync: incoming.last_sync || previous?.last_sync || null,
     last_seen: now,
-    ...(incoming.repair_pending
-      ? { repair_pending: true, repaired_at: now }
-      : incoming.last_sync ? { repair_pending: false } : {}),
+    repair_pending: incoming.repair_pending === true ? true
+      : Boolean(incoming.last_sync) ? false : Boolean(previous?.repair_pending),
+    ...(incoming.repair_pending === true ? { repaired_at: now } : {}),
   };
 }
