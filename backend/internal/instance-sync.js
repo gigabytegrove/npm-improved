@@ -4,7 +4,7 @@ import os from "node:os";
 import { latestPeerCheckin, latestSuccessfulPeerSync } from "../lib/npmx-sync-status.js";
 import { editEnrolledNpmxPeer, mergeNpmxPeerHeartbeat } from "../lib/npmx-peer-state.js";
 import { canInitiateSecondaryReconnect, createNpmxReconnectCode, parseNpmxReconnectCode, reconnectPayloadSignature, verifyReconnectPayload } from "../lib/npmx-reconnect.js";
-import { connectionCodeType, createLegacyPrepareProof, verifyLegacyPrepareProof, createLegacyPrepareResponseProof, verifyLegacyPrepareResponseProof } from "../lib/npmx-legacy-bridge.js";
+import { connectionCodeType, createLegacyPrepareProof, verifyLegacyPrepareProof, createLegacyPrepareResponseProof, verifyLegacyPrepareResponseProof, createLegacyReconnectAckProof, verifyLegacyReconnectAckProof } from "../lib/npmx-legacy-bridge.js";
 import path from "node:path";
 import { getDatabaseRuntime, isMysql } from "../lib/config.js";
 import {
@@ -950,8 +950,14 @@ const internalInstanceSync = {
 		}
 		internalInstanceSync.reschedule(1000);
 		internalInstanceSync.startAcmePolling();
-		return { ok: true, node_id: data.node_id, version: currentVersion(), upgraded: true,
-			versionMismatch: data.version !== currentVersion() };
+		const acknowledgement = {
+			ok: true, token_id: data.token_id, node_id: data.node_id,
+			version: currentVersion(), upgraded: true,
+			timestamp: new Date().toISOString(), nonce: generateNpmxNonce(),
+			versionMismatch: data.version !== currentVersion(),
+		};
+		acknowledgement.proof = createLegacyReconnectAckProof(state.token_secret_hash, acknowledgement);
+		return acknowledgement;
 	},
 
 	// Accept either code generation direction. A valid npmx1 code from an
@@ -1036,8 +1042,11 @@ const internalInstanceSync = {
 		}, REQUEST_TIMEOUT_MS);
 		if (!completed.ok) throw new errs.ValidationError("Legacy NPMX upgrade failed (HTTP " + completed.status + ")");
 		const result = await completed.json();
-		if (!result?.ok || result?.node_id !== nodeId || !result?.upgraded) {
-			throw new errs.ValidationError("Secondary did not confirm original peer identity after legacy upgrade");
+		if (!result?.ok || result?.token_id !== legacy.id || result?.node_id !== nodeId ||
+			!result?.upgraded || result?.version !== prepared.version ||
+			!timestampIsCurrent(result.timestamp) ||
+			!verifyLegacyReconnectAckProof(tokenHash, result)) {
+			throw new errs.TokenRevokedError("Secondary did not authenticate the original peer identity after legacy upgrade");
 		}
 		const peers = meta.peers.map((item) => item.node_id === nodeId ? {
 			...item,
