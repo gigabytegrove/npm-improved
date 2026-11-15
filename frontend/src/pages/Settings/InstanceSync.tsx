@@ -250,7 +250,7 @@ export default function InstanceSync() {
 								<h3 className="card-title mb-0">NPMX pairing</h3>
 							</div>
 							<div className="card-body">
-								{data.role === "secondary" || !(data.peers?.length) ? (
+								{data.role === "secondary" || (data.role === "primary" && !data.enabled && !(data.peers?.length)) ? (
 									<>
 										<p className="text-secondary mb-3">
 											Generate a one-time code on this secondary, then paste it into the existing node's
