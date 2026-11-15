@@ -260,6 +260,7 @@ export default function InstanceSync() {
 											disabled={createReconnectCode.isPending}
 											onClick={async () => {
 												setActionError("");
+												setModalError("");
 												try {
 													const result = await createReconnectCode.mutateAsync(window.location.origin);
 													setPairingCode(result.pairingCode);
@@ -476,6 +477,7 @@ export default function InstanceSync() {
 											<td>{data.version}</td>
 											<td>Now</td>
 											<td>{data.role === "secondary" ? formatDate(data.lastSync) : "Receives from secondaries"}</td>
+											<td>—</td>
 										</tr>
 										{peers.map((peer, index) => {
 											const nodeName = peer.nodeName || peer.node_name || "Node " + (index + 1);
