@@ -1,0 +1,84 @@
+name: NPM Improved beta.11 security qualification
+
+on:
+  push:
+    branches: ["release/1.8.0-beta.11-security"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-improved-beta11-security
+  cancel-in-progress: true
+
+jobs:
+  go-and-release-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: controlplane/go.mod
+          cache: false
+      - name: Verify versions, source lineage and publisher shell
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(cat .version)" = 1.8.0-beta.11
+          test "$(node -p "require('./backend/package.json').version")" = 1.8.0-beta.11
+          test "$(node -p "require('./frontend/package.json').version")" = 1.8.0-beta.11
+          test "$(go env GOVERSION)" = go1.27.4
+          grep -Fxq 'go 1.27.4' controlplane/go.mod
+          grep -Fq 'BASE_TAG='\''v1.8.0-beta.10'\''' scripts/release/publish-firewall-beta11.sh
+          grep -Fq 'COPY --from=patched-controlplane' docker/Dockerfile.incremental-release
+          grep -Fq 'go1.27.4' scripts/ci/assert-nginx-security
+          grep -Fq 'golang:1.27.4-alpine' docker/firewall/Dockerfile
+          bash -n scripts/release/publish-firewall-beta11.sh
+          bash -n scripts/install-host-updater
+          sh -n scripts/update-handoff.sh
+      - name: Go control plane
+        working-directory: controlplane
+        run: |
+          go test -race -count=1 ./...
+          go vet ./...
+      - name: Native firewall companion
+        run: |
+          GO111MODULE=off go test -race -count=1 ./docker/firewall
+      - name: Check checksum-to-OCI conversion and updater
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_host_updater*.py' -v
+          ( cd scripts/ci && python3 -m unittest test_docker_release_to_oci.py -v )
+          python3 scripts/ci/check-release-contract.py
+      - name: Verify patched security layers build as independent targets
+        run: |
+          docker build --target patched-controlplane -f docker/Dockerfile.incremental-release -t npmi-beta11-controlplane:ci .
+          docker build -f docker/firewall/Dockerfile -t npmi-beta11-firewall:ci .
+
+  beta-frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.1'
+      - name: Install pinned Yarn v1
+        run: npm install -g yarn@1.22.22
+      - name: Compile and test beta frontend
+        working-directory: frontend
+        run: |
+          set -Eeuo pipefail
+          yarn install --frozen-lockfile
+          yarn locale-compile
+          yarn vitest run src/pages/Settings/Firewall.test.ts src/modules/instanceFirewallVisibility.test.ts src/hooks/useReleaseChannel.test.tsx src/modules/copyText.test.ts
+          yarn build
+      - name: Validate beta control API and NPMX source
+        run: |
+          set -Eeuo pipefail
+          node --check backend/app.js
+          node --check backend/internal/update-manager.js
+          node --check backend/lib/npmx.js
+          node --check backend/lib/npmx-version-alignment.js
+          node --check backend/lib/npmx-legacy-bridge.js
