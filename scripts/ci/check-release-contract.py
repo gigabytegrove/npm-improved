@@ -31,7 +31,8 @@ require("python3 scripts/ci/check-release-contract.py" in workflow,
         "Release must execute this contract test")
 require("verify_and_extract(" in maintenance and "hashlib.sha256(package)" in maintenance,
         "Updater archive checksum verification was removed")
-require("len(members) != len(expected)" in maintenance and "found != expected" in maintenance\n        and "sum(member.size for member in members)" in maintenance,
+require("len(members) != len(expected)" in maintenance and "found != expected" in maintenance
+        and "sum(member.size for member in members)" in maintenance,
         "Duplicate and oversized extracted updater archive protection missing")
 require("MAX_PACKAGE_BYTES" in maintenance and "member.isfile()" in maintenance,
         "Host updater archive path and type guards missing")
