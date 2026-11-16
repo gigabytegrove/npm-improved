@@ -17,11 +17,16 @@ RUN set -eux; \
 # Caller MUST provide checksum-verified, architecture-specific OCI build
 # contexts for npmi_host_base (builder architecture) and npmi_target_base.
 # Do not use public floating tags or Docker daemon-wide builder settings.
-FROM --platform=$BUILDPLATFORM npmi_host_base AS frontend-builder
+# Build the frontend with the same pinned Node/Yarn toolchain that passes
+# beta security CI, independently of the inherited application image. The
+# image inherited from beta.10 is a runtime, not a reproducible build SDK.
+FROM --platform=$BUILDPLATFORM node:24.22.1-bookworm AS frontend-builder
 ENV NODE_ENV=development NODE_OPTIONS=--openssl-legacy-provider
 WORKDIR /build/frontend
 COPY frontend/package.json frontend/yarn.lock ./
-RUN yarn install --frozen-lockfile
+RUN test "$(node -v)" = 'v24.22.1' \
+    && test "$(yarn --version)" = '1.22.22' \
+    && yarn install --frozen-lockfile --non-interactive --network-timeout 180000
 COPY frontend/ ./
 # IntlProvider imports generated language JSON; generate it before Vitest
 # starts Vite's TypeScript checker. The production build also recompiles it.

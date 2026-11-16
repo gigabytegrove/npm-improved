@@ -56,6 +56,26 @@ jobs:
           docker build --target patched-controlplane -f docker/Dockerfile.incremental-release -t npmi-beta11-controlplane:ci .
           docker build -f docker/firewall/Dockerfile -t npmi-beta11-firewall:ci .
 
+  docker-frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reproduce actual incremental Docker frontend build
+        run: |
+          set -Eeuo pipefail
+          docker build --platform linux/amd64 \
+            --target frontend-builder \
+            -f docker/Dockerfile.incremental-release \
+            -t npmi-beta11-frontend:ci .
+      - name: Verify frontend production bundle exists
+        run: |
+          set -Eeuo pipefail
+          container="$(docker create npmi-beta11-frontend:ci)"
+          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+          docker cp "$container:/build/frontend/dist" /tmp/npmi-beta11-dist
+          test -s /tmp/npmi-beta11-dist/index.html
+
   beta-frontend:
     runs-on: ubuntu-24.04
     timeout-minutes: 35

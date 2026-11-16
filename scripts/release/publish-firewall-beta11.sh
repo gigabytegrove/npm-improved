@@ -65,7 +65,7 @@ cleanup() {
   exit "$result"
 }
 trap cleanup EXIT
-mkdir -p "$WORK/source" "$WORK/dist" "$WORK/oci"
+mkdir -p "$WORK/source" "$WORK/dist" "$WORK/oci" "$WORK/build-logs"
 # These two architectures need compressed OCI contexts, four release image
 # bundles, and intermediate beta packaging. This is a conservative, bounded
 # minimum for a shared host; never discover a full disk during extraction.
@@ -207,7 +207,8 @@ for arch in amd64 arm64; do
       --build-arg "BUILD_COMMIT=$revision" \
       --build-arg "BUILD_DATE=$DATE" \
       -f "$src/docker/Dockerfile.incremental-release" \
-      -t "$app" --output "type=docker,dest=-" "$src" | gzip -1 > "$out"
+      -t "$app" --output "type=docker,dest=-" "$src" \
+      2> >(tee "$WORK/build-logs/$key-$arch-app.log" >&2) | gzip -1 > "$out"
     check_docker_tar "$out" "$app" "$arch" "$revision" "$version"
     if [[ "$key" == stable ]]; then
       echo "=== Package stable $arch ==="
@@ -221,7 +222,8 @@ for arch in amd64 arm64; do
       echo "=== Cross-compile and test beta firewall $arch ==="
       docker buildx build --builder "$BUILDER" --progress plain \
         --platform "linux/$arch" -f "$src/docker/firewall/Dockerfile" \
-        -t "$fw" --output "type=docker,dest=-" "$src" | gzip -1 > "$fw_tar"
+        -t "$fw" --output "type=docker,dest=-" "$src" \
+          2> >(tee "$WORK/build-logs/$key-$arch-firewall.log" >&2) | gzip -1 > "$fw_tar"
       if docker image inspect "$app" >/dev/null 2>&1 || docker image inspect "$fw" >/dev/null 2>&1; then
         echo 'Existing release tag on Docker daemon; refusing overwrite.' >&2
         exit 1
