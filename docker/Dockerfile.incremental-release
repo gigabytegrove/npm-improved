@@ -1,3 +1,18 @@
+# Pinned Go standard-library security rebuild for v1.8.0-beta.11.
+# This layer is necessary: the beta.10 image being overlaid contains Go 1.27.3.
+FROM --platform=$BUILDPLATFORM golang:1.27.4-alpine AS patched-controlplane
+ARG TARGETOS
+ARG TARGETARCH
+ARG TARGETVARIANT
+WORKDIR /src
+COPY controlplane/go.mod ./
+COPY controlplane/*.go ./
+RUN CGO_ENABLED=0 go test ./...
+RUN set -eux; \
+    if [ "$TARGETARCH" = "arm" ] && [ -n "${TARGETVARIANT:-}" ]; then export GOARM="${TARGETVARIANT#v}"; fi; \
+    CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -trimpath -ldflags="-s -w" -o /out/npm-improved-control-plane .; \
+    go version -m /out/npm-improved-control-plane | grep -F 'go1.27.4'
+
 # Incremental beta release overlay; the caller provides the exact verified base.
 # Caller MUST provide checksum-verified, architecture-specific OCI build
 # contexts for npmi_host_base (builder architecture) and npmi_target_base.
@@ -23,6 +38,13 @@ ARG BUILD_DATE
 ENV NPM_BUILD_VERSION="${BUILD_VERSION}" \
     NPM_BUILD_COMMIT="${BUILD_COMMIT}" \
     NPM_BUILD_DATE="${BUILD_DATE}"
+# Replace the older beta control plane with the patched binary from this
+# exact source commit. Restore the bind capability after COPY, and verify it.
+COPY --from=patched-controlplane /out/npm-improved-control-plane /usr/local/bin/npm-improved-control-plane
+RUN set -eux; \
+    setcap 'cap_net_bind_service=+ep' /usr/local/bin/npm-improved-control-plane; \
+    getcap /usr/local/bin/npm-improved-control-plane | grep -F cap_net_bind_service; \
+    grep -a -q 'go1.27.4' /usr/local/bin/npm-improved-control-plane
 WORKDIR /app
 COPY backend/ /app/
 COPY --from=frontend-builder /build/frontend/dist/ /app/frontend/
@@ -38,7 +60,7 @@ RUN set -eux; \
     node --check /app/internal/update-manager.js; \
     test "$(node -p 'process.versions.node')" = '24.22.1'; \
     /usr/sbin/nginx -v 2>&1 | grep -F 'nginx/1.31.8'; \
-    grep -a -q 'go1.27.3' /usr/local/bin/npm-improved-control-plane; \
+    grep -a -q 'go1.27.4' /usr/local/bin/npm-improved-control-plane; \
     node --test /app/test/release-versions.test.js /app/test/update-channels.test.js /app/test/instance-security-policy.test.js /app/test/instance-network-observation.test.js /app/test/npmx-cluster-database.test.js /app/test/npmx-update-identity.test.js /app/test/npmx.test.js /app/test/npmx-peer-state.test.js /app/test/npmx-reconnect.test.js /app/test/npmx-legacy-bridge.test.js /app/test/npmx-version-alignment.test.js
 LABEL org.opencontainers.image.title="NPM Improved" \
       org.opencontainers.image.version="${BUILD_VERSION}" \

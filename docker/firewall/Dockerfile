@@ -1,6 +1,6 @@
 # Compile on the build host, cross-compiling the static agent for the
 # requested release architecture. Runtime is native to TARGETPLATFORM.
-FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27.4-alpine AS builder
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src
