@@ -21,6 +21,13 @@ RUN set -eux; \
 # beta security CI, independently of the inherited application image. The
 # image inherited from beta.10 is a runtime, not a reproducible build SDK.
 FROM --platform=$BUILDPLATFORM node:24.22.1-bookworm AS frontend-builder
+# The frontend's locale-sort.sh calls jq (and Bash); the official Node
+# image does not supply jq. Install this required build dependency explicitly.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends jq \
+    && rm -rf /var/lib/apt/lists/* \
+    && command -v bash \
+    && command -v jq
 ENV NODE_ENV=development NODE_OPTIONS=--openssl-legacy-provider
 WORKDIR /build/frontend
 COPY frontend/package.json frontend/yarn.lock ./
