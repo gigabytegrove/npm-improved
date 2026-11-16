@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - develop
+      - security/npm-improved-v1.7.10-20261115
     paths:
       - ".version"
       - ".github/workflows/release.yml"
