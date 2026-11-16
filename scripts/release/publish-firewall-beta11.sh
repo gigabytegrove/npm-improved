@@ -8,7 +8,7 @@ STABLE_BRANCH='unused'
 BETA_BRANCH='release/1.8.0-beta.11-security'
 STABLE_TAG='v1.7.10'
 BETA_TAG='v1.8.0-beta.11'
-BASE_TAG='v1.8.0-beta.11'
+BASE_TAG='v1.8.0-beta.10'
 BETA_REV="${1:-}"
 EXPECTED_STABLE_REV="$BETA_REV"
 
