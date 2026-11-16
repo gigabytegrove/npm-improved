@@ -8,6 +8,7 @@ on:
     paths:
       - ".version"
       - ".github/workflows/release.yml"
+      - "scripts/ci/check-release-contract.py"
   workflow_dispatch:
 
 permissions:
