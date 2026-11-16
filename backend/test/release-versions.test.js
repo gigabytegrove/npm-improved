@@ -53,3 +53,11 @@ test("never treats a missing channel as a current installed release", () => {
 	assert.equal(parseReleaseVersion(null), null);
 	assert.throws(() => selectReleaseForChannel([], "nightly"), /Unsupported/);
 });
+
+test("stable 1.8.0 supersedes the qualified security beta and remains stable", () => {
+    assert.equal(compareReleaseVersions("v1.8.0", "v1.8.0-beta.11"), 1);
+    assert.equal(isNewerRelease("v1.8.0-beta.10", "v1.8.0"), true);
+    assert.equal(isNewerRelease("v1.8.0-beta.11", "v1.8.0"), true);
+    assert.equal(isNewerRelease("v1.8.0", "v1.8.0-beta.11"), false);
+    assert.equal(parseReleaseVersion("v1.8.0").stage, null);
+});

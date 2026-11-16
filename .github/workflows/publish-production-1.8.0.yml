@@ -1,0 +1,244 @@
+name: NPM Improved 1.8.0 — Production publication
+
+on:
+  push:
+    branches: ["release/1.8.0-production"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: npmi-production-v1.8.0
+  cancel-in-progress: false
+
+jobs:
+  source-qualification:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: controlplane/go.mod
+          cache: false
+      - name: Require exact promoted version and original security baseline
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git merge-base --is-ancestor 0e794b4d08f741ee77ed472441e70f7d91ac4d83 HEAD
+          test "$(cat .version)" = 1.8.0
+          test "$(node -p "require('./backend/package.json').version")" = 1.8.0
+          test "$(node -p "require('./frontend/package.json').version")" = 1.8.0
+          test "$(go env GOVERSION)" = go1.27.4
+          grep -Fq 'golang:1.27.4-alpine' docker/firewall/Dockerfile
+          grep -Fq 'golang:1.27.4-alpine' docker/Dockerfile.incremental-release
+          grep -Fq 'node:24.22.1-bookworm' docker/Dockerfile.incremental-release
+          grep -Fq 'ghcr.io/gigabytegrove/npm-improved:v1.8.0-beta.11' docker/Dockerfile.incremental-release
+          test -s .github/release-notes/v1.8.0.md
+      - name: Verify native security components
+        run: |
+          set -Eeuo pipefail
+          (cd controlplane && go test -race -count=1 ./... && go vet ./...)
+          GO111MODULE=off go test -race -count=1 ./docker/firewall
+          python3 -m unittest discover -s scripts -p 'test_host_updater*.py' -v
+          (cd scripts/ci && python3 -m unittest test_docker_release_to_oci.py -v)
+          python3 scripts/ci/check-release-contract.py
+          bash -n scripts/install-host-updater
+          sh -n scripts/update-handoff.sh
+          node --test backend/test/release-versions.test.js
+
+  build-native:
+    needs: source-qualification
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preflight immutable release and working space
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(uname -m)" = "$([[ '${{ matrix.arch }}' = amd64 ]] && echo x86_64 || echo aarch64)"
+          test "$(df -B1 --output=avail . | tail -n 1 | tr -d '[:space:]')" -gt $((8*1024*1024*1024))
+          test "$(gh api repos/gigabytegrove/npm-improved/releases/tags/v1.8.0-beta.11 --jq .tag_name)" = v1.8.0-beta.11
+          if gh release view v1.8.0 -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'Production release already exists; immutable assets cannot be overwritten' >&2
+            exit 1
+          fi
+      - name: Fetch and verify matching beta.11 application and firewall images
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p base dist
+          archive="npm-improved-v1.8.0-beta.11-linux-${{ matrix.arch }}.tar.gz"
+          sums='npm-improved-v1.8.0-beta.11-SHA256SUMS.txt'
+          gh release download v1.8.0-beta.11 -R "$GITHUB_REPOSITORY" -D base \
+            -p "$archive" -p "$sums"
+          (
+            cd base
+            awk -v name="$archive" '$2 == name {print; found++} END {if(found!=1) exit 1}' "$sums" > selected.sha256
+            sha256sum -c selected.sha256
+          )
+          gzip -dc "base/$archive" | docker load
+          docker image inspect 'ghcr.io/gigabytegrove/npm-improved:v1.8.0-beta.11' >/dev/null
+          docker image inspect 'ghcr.io/gigabytegrove/npm-improved-firewall:v1.8.0-beta.11' >/dev/null
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}'             'ghcr.io/gigabytegrove/npm-improved:v1.8.0-beta.11')" = 1.8.0-beta.11
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}'             'ghcr.io/gigabytegrove/npm-improved:v1.8.0-beta.11')" = 0e794b4d08f741ee77ed472441e70f7d91ac4d83
+      - name: Rebuild complete production application from the approved base
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          app='ghcr.io/gigabytegrove/npm-improved:v1.8.0'
+          docker build --pull=false --progress=plain \
+            --platform 'linux/${{ matrix.arch }}' \
+            --build-arg BUILD_VERSION=1.8.0 \
+            --build-arg BUILD_COMMIT="$GITHUB_SHA" \
+            --build-arg BUILD_DATE="$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+            -f docker/Dockerfile.incremental-release -t "$app" .
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "$app")" = 1.8.0
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$app")" = "$GITHUB_SHA"
+          docker run --rm --entrypoint /bin/sh "$app" -ec '
+            test "$(node -p "process.versions.node")" = 24.22.1
+            nginx -v 2>&1 | grep -F "nginx/1.31.8"
+            grep -a -q go1.27.4 /usr/local/bin/npm-improved-control-plane
+            getcap /usr/local/bin/npm-improved-control-plane | grep -F cap_net_bind_service
+            test -s /app/frontend/index.html
+          '
+      - name: Rebuild firewall companion and package both production images
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          app='ghcr.io/gigabytegrove/npm-improved:v1.8.0'
+          fw='ghcr.io/gigabytegrove/npm-improved-firewall:v1.8.0'
+          docker build --pull=false --progress=plain --platform 'linux/${{ matrix.arch }}' \
+            -f docker/firewall/Dockerfile -t "$fw" .
+          test "$(docker image inspect --format '{{.Architecture}}' "$app")" = '${{ matrix.arch }}'
+          test "$(docker image inspect --format '{{.Architecture}}' "$fw")" = '${{ matrix.arch }}'
+          docker save "$app" "$fw" | gzip -1 > "dist/npm-improved-v1.8.0-linux-${{ matrix.arch }}.tar.gz"
+          gzip -t "dist/npm-improved-v1.8.0-linux-${{ matrix.arch }}.tar.gz"
+          test -s "dist/npm-improved-v1.8.0-linux-${{ matrix.arch }}.tar.gz"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-improved-1.8.0-${{ matrix.arch }}
+          path: dist/npm-improved-v1.8.0-linux-${{ matrix.arch }}.tar.gz
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 5
+      - name: Publish architecture-specific GHCR images
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin >/dev/null
+          for component in npm-improved npm-improved-firewall; do
+            image="ghcr.io/gigabytegrove/$component"
+            docker tag "$image:v1.8.0" "$image:v1.8.0-${{ matrix.arch }}"
+            docker push "$image:v1.8.0-${{ matrix.arch }}"
+          done
+
+  publish-production:
+    needs: [source-qualification, build-native]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: npm-improved-1.8.0-*
+          path: dist
+          merge-multiple: true
+      - name: Package verified stable updater and checksum inventory
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(cat .version)" = 1.8.0
+          for arch in amd64 arm64; do
+            file="dist/npm-improved-v1.8.0-linux-$arch.tar.gz"
+            test -s "$file"
+            gzip -t "$file"
+          done
+          tar -czf dist/npm-improved-v1.8.0-host-updater.tar.gz \
+            scripts/install-host-updater scripts/host-update-dispatch.py \
+            scripts/host-update-maintenance.py scripts/update-handoff.sh \
+            .version compose.firewall.yaml
+          (
+            cd dist
+            sha256sum npm-improved-v1.8.0-linux-amd64.tar.gz \
+              npm-improved-v1.8.0-linux-arm64.tar.gz \
+              npm-improved-v1.8.0-host-updater.tar.gz \
+              > npm-improved-v1.8.0-SHA256SUMS.txt
+            sha256sum -c npm-improved-v1.8.0-SHA256SUMS.txt
+          )
+          python3 - <<'PY'
+          import importlib.util
+          import tempfile
+          from pathlib import Path
+          src=Path('scripts/host-update-maintenance.py')
+          spec=importlib.util.spec_from_file_location('update_contract',src)
+          mod=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(mod)
+          with tempfile.TemporaryDirectory() as tmp:
+              base=Path('dist')
+              mod.verify_and_extract('1.8.0',
+                (base/'npm-improved-v1.8.0-SHA256SUMS.txt').read_bytes(),
+                (base/'npm-improved-v1.8.0-host-updater.tar.gz').read_bytes(),
+                Path(tmp))
+          print('Production updater contract passed')
+          PY
+      - uses: docker/setup-buildx-action@v3
+      - name: Assemble and verify multiarch production registry tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin >/dev/null
+          for component in npm-improved npm-improved-firewall; do
+            image="ghcr.io/gigabytegrove/$component"
+            docker buildx imagetools create \
+              -t "$image:v1.8.0" -t "$image:1.8.0" -t "$image:latest" \
+              "$image:v1.8.0-amd64" "$image:v1.8.0-arm64"
+            docker buildx imagetools inspect "$image:v1.8.0" > "/tmp/$component-manifest.txt"
+            grep -q 'linux/amd64' "/tmp/$component-manifest.txt"
+            grep -q 'linux/arm64' "/tmp/$component-manifest.txt"
+          done
+      - name: Publish official 1.8.0 stable GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if gh release view v1.8.0 -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'Stable 1.8.0 release already exists; refusing version overwrite' >&2
+            exit 1
+          fi
+          gh release create v1.8.0 -R "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --title 'NPM Improved v1.8.0 — Production' \
+            --notes-file .github/release-notes/v1.8.0.md --latest \
+            dist/npm-improved-v1.8.0-linux-amd64.tar.gz \
+            dist/npm-improved-v1.8.0-linux-arm64.tar.gz \
+            dist/npm-improved-v1.8.0-host-updater.tar.gz \
+            dist/npm-improved-v1.8.0-SHA256SUMS.txt
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)" = v1.8.0
+          gh release view v1.8.0 -R "$GITHUB_REPOSITORY" --json assets \
+            --jq '.assets[].name' > /tmp/npm-improved-1.8.0-assets
+          for asset in npm-improved-v1.8.0-linux-amd64.tar.gz npm-improved-v1.8.0-linux-arm64.tar.gz \
+                       npm-improved-v1.8.0-host-updater.tar.gz npm-improved-v1.8.0-SHA256SUMS.txt; do
+            grep -Fxq "$asset" /tmp/npm-improved-1.8.0-assets
+          done

@@ -1,5 +1,10 @@
+# Production 1.8.0 is rebuilt against the SHA-256 verified beta.11
+# release image loaded locally by the production workflow. --pull=false
+# ensures this source stage never silently replaces the trusted base.
+FROM ghcr.io/gigabytegrove/npm-improved:v1.8.0-beta.11 AS npmi_target_base
+
 # Pinned Go standard-library security rebuild for v1.8.0-beta.11.
-# This layer is necessary: the beta.10 image being overlaid contains Go 1.27.3.
+# This layer is necessary: the older feature baseline contained Go 1.27.3.
 FROM --platform=$BUILDPLATFORM golang:1.27.4-alpine AS patched-controlplane
 ARG TARGETOS
 ARG TARGETARCH
@@ -13,7 +18,7 @@ RUN set -eux; \
     CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -trimpath -ldflags="-s -w" -o /out/npm-improved-control-plane .; \
     go version -m /out/npm-improved-control-plane | grep -F 'go1.27.4'
 
-# Incremental beta release overlay; the caller provides the exact verified base.
+# Incremental security-qualified production release overlay; the caller provides the exact verified base.
 # Caller MUST provide checksum-verified, architecture-specific OCI build
 # contexts for npmi_host_base (builder architecture) and npmi_target_base.
 # Do not use public floating tags or Docker daemon-wide builder settings.
