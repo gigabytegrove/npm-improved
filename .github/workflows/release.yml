@@ -173,7 +173,8 @@ jobs:
             ASSET="npm-improved-${TAG}-linux-${ARCH}.tar.gz"
             docker pull --platform "linux/${ARCH}" "$IMAGE"
             DOCKER_DEFAULT_PLATFORM="linux/${ARCH}" bash scripts/ci/assert-nginx-security "$IMAGE"
-            docker save "$IMAGE" | gzip -1 > "$OUT/$ASSET"
+            docker save --platform "linux/${ARCH}" "$IMAGE" | gzip -1 > "$OUT/$ASSET"
+            gzip -t "$OUT/$ASSET"
             test -s "$OUT/$ASSET"
             docker image rm "$IMAGE" >/dev/null 2>&1 || true
           done
