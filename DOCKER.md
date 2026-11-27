@@ -1,15 +1,38 @@
 # Docker installation
 
-Fresh installs use the published **v1.8.0** release images for Linux amd64 and arm64. The installer pulls the official GHCR image, falls back to the SHA-256-verified GitHub Release image archive if necessary, and installs the matching native systemd updater. No Git clone, source compilation, Docker build, or Buildx invocation is needed. Deployment files are installed in `/opt/npm-improved`. Existing installations are never overwritten.
-
-## Requirements
-
-- Linux amd64 or arm64 with systemd
-- Docker Engine 24 or newer and Docker Compose v2 supporting `up --wait-timeout`
-- curl, Python 3, CA certificates, gzip, and iproute2
-- TCP ports 80, 81 and 443, or free alternatives
+NPM Improved runs as Linux containers on Docker. It is not tied to Ubuntu, Debian, or an x86-64 host OS. The v1.8.0 deployment targets **linux/amd64 and linux/arm64**. Use a compatible Docker Engine or Docker Desktop in Linux-container mode, including supported Linux distributions, Windows, macOS, and NAS platforms. Windows-native containers and other CPU architectures are not supported by these images. Host networking, storage permissions, and capability restrictions vary by platform.
 
 ## Quick start: SQLite
+
+### Standard Docker Compose (recommended for portable deployment)
+
+Requires Docker and Docker Compose v2. No systemd, Linux package manager, Git clone, compilation, or local image build is needed.
+
+Create a dedicated project directory and save [compose.yaml](deploy/compose.yaml) into it as `compose.yaml` (use **Raw** or download the file on GitHub). This SQLite template contains only published image references and persistent mounts. From that directory, run these commands in your usual terminal, including PowerShell:
+
+```bash
+docker compose pull
+docker compose up -d --no-build --pull never --wait --wait-timeout 240
+docker compose ps
+```
+
+Open `http://localhost:81` on the Docker host, or port 81 on the remote Docker host. For alternate host ports, create a file named `.env` next to the Compose file:
+
+```dotenv
+HTTP_PORT=8080
+ADMIN_PORT=8181
+HTTPS_PORT=8443
+```
+
+For example, the management UI then uses port 8181. Use the same project directory for all future operations.
+
+**Security:** Restrict the management port to a trusted network or VPN. The default SQLite template includes the release's firewall companion, which requires Docker support for `NET_ADMIN` in the application network namespace. If your host cannot grant this capability, explicitly deploy only the app with `docker compose pull app` followed by `docker compose up -d --no-build --pull never --wait app`; the companion's instance-level network filtering is then unavailable. Use an appropriate host firewall. This is a reduced-feature deployment, not a way to bypass a host security policy. Docker Desktop and NAS deployments must provide persistent writable storage with Linux-compatible file permissions. For clustered deployments set a unique `NPM_NODE_HOSTNAME` in `.env`.
+
+If a registry pull fails, stop and use the verified release archive recovery path in the Docker guide; never build from source.
+
+### Optional managed installation on Linux hosts with systemd
+
+For native **Settings → Update** support, use the managed host installer on a Linux Docker host running systemd. Install Docker, Compose v2, Bash, curl, Python 3, CA certificates, gzip, and iproute2 using your distribution's package tools. No Ubuntu or Debian requirement applies. The installer uses published images, automatically selects free ports with `--auto-ports`, and installs the native updater. It refuses to overwrite an existing project.
 
 ```bash
 (
@@ -21,11 +44,7 @@ Fresh installs use the published **v1.8.0** release images for Linux amd64 and a
 )
 ```
 
-Open the management URL printed by the installer. The default deployment uses SQLite at `/data/database.sqlite` and the matching published firewall companion image `ghcr.io/gigabytegrove/npm-improved-firewall:v1.8.0`.
-
-## Port conflicts
-
-Omit `--auto-ports` to require the default host ports. With the flag, the installer selects free alternatives and saves them in `/opt/npm-improved/.env`. It never stops existing services. Internal ports remain 80, 81 and 443. Restrict management access to your trusted network or VPN.
+Use `mysql` or `postgres` for a managed database deployment. This path stores the deployment in `/opt/npm-improved`. The portable Compose path does not provision the native updater.
 
 ## Change databases from the UI
 
@@ -45,33 +64,27 @@ For multi-server Shared MySQL deployments, all nodes must use the same NPM Impro
 
 ## MariaDB / MySQL
 
-For a fresh installation:
+Save [compose.mysql.yaml](deploy/compose.mysql.yaml) in a new project directory. Create a private `.env` file with unique, strong values for both `MYSQL_PASSWORD` and `MYSQL_ROOT_PASSWORD`. Then run:
 
 ```bash
-(
-  set -e
-  installer="$(mktemp)"
-  trap 'rm -f "$installer"' EXIT
-  curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer"
-  sudo bash "$installer" mysql --auto-ports
-)
+docker compose -f compose.mysql.yaml pull
+docker compose -f compose.mysql.yaml up -d --no-build --pull never --wait --wait-timeout 240
 ```
 
 ## PostgreSQL
 
-For a fresh installation:
+Save [compose.postgres.yaml](deploy/compose.postgres.yaml) in a new project directory. Create a private `.env` file with a strong unique `POSTGRES_PASSWORD`. Then run:
 
 ```bash
-(
-  set -e
-  installer="$(mktemp)"
-  trap 'rm -f "$installer"' EXIT
-  curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer"
-  sudo bash "$installer" postgres --auto-ports
-)
+docker compose -f compose.postgres.yaml pull
+docker compose -f compose.postgres.yaml up -d --no-build --pull never --wait --wait-timeout 240
 ```
 
-Database credentials are generated automatically and stored in `/opt/npm-improved/.env` (mode 0600). The installer uses the corresponding version-matched Compose definition and pulls the database image. It does not build any images.
+Do not expose the database ports. Both configurations preserve the release's database-specific service definitions.
+
+## Registry unavailable: verified release archives
+
+On the [v1.8.0 release page](https://github.com/gigabytegrove/npm-improved/releases/tag/v1.8.0), locate the archive for your Docker engine's Linux architecture and its SHA-256 checksum file. Verify the archive's SHA-256 against the corresponding entry before loading it using `docker load -i <archive>`. Check that `docker image inspect` succeeds for the exact application tag and, for the full SQLite deployment, the matching firewall tag. If either tag or checksum is unavailable, stop rather than building. Database deployments additionally require pulling their database image. Then use the same `up --no-build --pull never` command above. Do not run a registry pull after loading an offline bundle unless you deliberately want to replace it.
 
 ## Persistent data
 
@@ -163,10 +176,7 @@ sudo ./scripts/install-host-updater /absolute/path/to/existing/npm-project
 That installs the *managed* dispatcher once. Future app versions update both
 components automatically without repeating these commands.
 
-Running `docker compose up` directly on an unprepared host is not an
-equivalent installer: Docker container permissions cannot grant the root-owned
-systemd installation that is required for in-place restart. Use the supported image-only
-host installer for new nodes.
+Portable Compose deployments run without the native updater. Docker container permissions cannot provision the root-owned systemd service. On those hosts, use Docker or your stack manager to update, restart and roll back. Use the managed release installer only when native host lifecycle management is required.
 
 For operational checks, use:
 
@@ -193,6 +203,8 @@ the NPMi application.
   code from an application-writable directory.
 
 ### Existing installations and recovery
+
+For portable Compose installations, back up the persistent directories and review the target release notes. Change `NPM_IMAGE` in `.env` to the exact official release tag and, when using the firewall companion, change `NPM_FIREWALL_IMAGE` to the matching release tag. Pull the target images and recreate the same project using the appropriate Compose file and `up -d --no-build --pull never --wait`. Verify health and preserve the previous images and backups for recovery. For database deployments use the matching `-f` option. For a reduced-feature app-only deployment, continue targeting `app` explicitly.
 
 Use **Settings → Update** for managed installations. Do not run the fresh installer over an existing project. For manual recovery, use the target release's prebuilt image or checksum-verified release archive, retain the existing Compose project and persistent directories, and follow its release notes. Do not switch to a locally built image as a recovery step.
 
