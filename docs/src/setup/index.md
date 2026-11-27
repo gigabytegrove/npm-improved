@@ -13,9 +13,13 @@ Requirements: Linux amd64 or arm64 with systemd, Docker Engine 24 or newer, Dock
 ## SQLite deployment
 
 ```bash
-installer="$(mktemp)"
-curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer" && sudo bash "$installer" sqlite --auto-ports
-rm -f "$installer"
+(
+  set -e
+  installer="$(mktemp)"
+  trap 'rm -f "$installer"' EXIT
+  curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer"
+  sudo bash "$installer" sqlite --auto-ports
+)
 ```
 
 Open the management URL printed at completion, on a trusted network. Persistent data is stored under `/opt/npm-improved/data` and `/opt/npm-improved/letsencrypt`.
@@ -27,9 +31,13 @@ The installer does not stop existing services. `--auto-ports` selects free alter
 ## MariaDB / MySQL deployment
 
 ```bash
-installer="$(mktemp)"
-curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer" && sudo bash "$installer" mysql --auto-ports
-rm -f "$installer"
+(
+  set -e
+  installer="$(mktemp)"
+  trap 'rm -f "$installer"' EXIT
+  curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer"
+  sudo bash "$installer" mysql --auto-ports
+)
 ```
 
 Database passwords are generated automatically and stored in the root-only `/opt/npm-improved/.env`. Database data is persisted in `./mariadb` relative to the deployment directory.
@@ -52,9 +60,13 @@ See [Database & Shared MySQL](/guide/database).
 ## PostgreSQL deployment
 
 ```bash
-installer="$(mktemp)"
-curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer" && sudo bash "$installer" postgres --auto-ports
-rm -f "$installer"
+(
+  set -e
+  installer="$(mktemp)"
+  trap 'rm -f "$installer"' EXIT
+  curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer"
+  sudo bash "$installer" postgres --auto-ports
+)
 ```
 
 The installer generates the database password and persists database data under `./postgres` relative to the deployment directory. The default PostgreSQL schema is `public`.
