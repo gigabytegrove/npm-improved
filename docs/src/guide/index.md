@@ -129,21 +129,35 @@ Managed HTTP protection profiles provide common request-rate and connection cont
 
 ## Quick start
 
-Fresh installs use the published **v1.8.0** release images for Linux amd64 and arm64. The installer pulls the official GHCR image, falls back to the SHA-256-verified GitHub Release image archive if necessary, and installs the matching native systemd updater. No Git clone, source compilation, Docker build, or Buildx invocation is needed. Deployment files are installed in `/opt/npm-improved`. Existing installations are never overwritten.
+NPM Improved runs as Linux containers on Docker. It is not tied to Ubuntu, Debian, or an x86-64 host OS. The v1.8.0 deployment targets **linux/amd64 and linux/arm64**. Use a compatible Docker Engine or Docker Desktop in Linux-container mode, including supported Linux distributions, Windows, macOS, and NAS platforms. Windows-native containers and other CPU architectures are not supported by these images. Host networking, storage permissions, and capability restrictions vary by platform.
 
-Install Docker Engine, Docker Compose v2, curl, Python 3, CA certificates, gzip and iproute2 on a Linux systemd host. Then run:
+### Standard Docker Compose (recommended for portable deployment)
+
+Requires Docker and Docker Compose v2. No systemd, Linux package manager, Git clone, compilation, or local image build is needed.
+
+Create a dedicated project directory and save [compose.yaml](https://github.com/gigabytegrove/npm-improved/blob/develop/deploy/compose.yaml) into it as `compose.yaml` (use **Raw** or download the file on GitHub). This SQLite template contains only published image references and persistent mounts. From that directory, run these commands in your usual terminal, including PowerShell:
 
 ```bash
-(
-  set -e
-  installer="$(mktemp)"
-  trap 'rm -f "$installer"' EXIT
-  curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer"
-  sudo bash "$installer" sqlite --auto-ports
-)
+docker compose pull
+docker compose up -d --no-build --pull never --wait --wait-timeout 240
+docker compose ps
 ```
 
-Open the printed management URL on a trusted network. For detailed instructions, see [Docker installation](/setup/) and [DOCKER.md](https://github.com/gigabytegrove/npm-improved/blob/develop/DOCKER.md).
+Open `http://localhost:81` on the Docker host, or port 81 on the remote Docker host. For alternate host ports, create a file named `.env` next to the Compose file:
+
+```dotenv
+HTTP_PORT=8080
+ADMIN_PORT=8181
+HTTPS_PORT=8443
+```
+
+For example, the management UI then uses port 8181. Use the same project directory for all future operations.
+
+**Security:** Restrict the management port to a trusted network or VPN. The default SQLite template includes the release's firewall companion, which requires Docker support for `NET_ADMIN` in the application network namespace. If your host cannot grant this capability, explicitly deploy only the app with `docker compose pull app` followed by `docker compose up -d --no-build --pull never --wait app`; the companion's instance-level network filtering is then unavailable. Use an appropriate host firewall. This is a reduced-feature deployment, not a way to bypass a host security policy. Docker Desktop and NAS deployments must provide persistent writable storage with Linux-compatible file permissions. For clustered deployments set a unique `NPM_NODE_HOSTNAME` in `.env`.
+
+If a registry pull fails, stop and use the verified release archive recovery path in the Docker guide; never build from source.
+
+For database variants and optional native systemd lifecycle management, see [Docker installation](/setup/).
 
 ## Normal ports
 

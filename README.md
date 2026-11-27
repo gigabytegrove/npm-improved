@@ -42,20 +42,41 @@
 
 ## Quick start with Docker
 
-Fresh installs use the published **v1.8.0** release images for Linux amd64 and arm64. The installer pulls the official GHCR image, falls back to the SHA-256-verified GitHub Release image archive if necessary, and installs the matching native systemd updater. No Git clone, source compilation, Docker build, or Buildx invocation is needed. Deployment files are installed in `/opt/npm-improved`. Existing installations are never overwritten.
+NPM Improved runs as Linux containers on Docker. It is not tied to Ubuntu, Debian, or an x86-64 host OS. The v1.8.0 deployment targets **linux/amd64 and linux/arm64**. Use a compatible Docker Engine or Docker Desktop in Linux-container mode, including supported Linux distributions, Windows, macOS, and NAS platforms. Windows-native containers and other CPU architectures are not supported by these images. Host networking, storage permissions, and capability restrictions vary by platform.
 
-### Ubuntu / Debian prerequisites
+### Standard Docker Compose (recommended for portable deployment)
 
-Use a 64-bit systemd host. Install Docker Engine and the Compose v2 plugin using the [official Docker installation instructions](https://docs.docker.com/engine/install/). If Docker is already installed, do not replace it. Install the remaining prerequisites:
+Requires Docker and Docker Compose v2. No systemd, Linux package manager, Git clone, compilation, or local image build is needed.
+
+Create a dedicated project directory and save [compose.yaml](deploy/compose.yaml) into it as `compose.yaml` (use **Raw** or download the file on GitHub). This SQLite template contains only published image references and persistent mounts. From that directory, run these commands in your usual terminal, including PowerShell:
 
 ```bash
-sudo apt-get update
-sudo apt-get install -y ca-certificates curl python3 iproute2 gzip
+docker compose pull
+docker compose up -d --no-build --pull never --wait --wait-timeout 240
+docker compose ps
 ```
 
-### Install NPM Improved (SQLite)
+Open `http://localhost:81` on the Docker host, or port 81 on the remote Docker host. For alternate host ports, create a file named `.env` next to the Compose file:
 
-Copy and paste the following block into a Bash terminal:
+```dotenv
+HTTP_PORT=8080
+ADMIN_PORT=8181
+HTTPS_PORT=8443
+```
+
+For example, the management UI then uses port 8181. Use the same project directory for all future operations.
+
+**Security:** Restrict the management port to a trusted network or VPN. The default SQLite template includes the release's firewall companion, which requires Docker support for `NET_ADMIN` in the application network namespace. If your host cannot grant this capability, explicitly deploy only the app with `docker compose pull app` followed by `docker compose up -d --no-build --pull never --wait app`; the companion's instance-level network filtering is then unavailable. Use an appropriate host firewall. This is a reduced-feature deployment, not a way to bypass a host security policy. Docker Desktop and NAS deployments must provide persistent writable storage with Linux-compatible file permissions. For clustered deployments set a unique `NPM_NODE_HOSTNAME` in `.env`.
+
+If a registry pull fails, stop and use the verified release archive recovery path in the Docker guide; never build from source.
+
+### MariaDB / MySQL or PostgreSQL
+
+Use [compose.mysql.yaml](deploy/compose.mysql.yaml) or [compose.postgres.yaml](deploy/compose.postgres.yaml) instead. Set strong unique database passwords in a private `.env` file before pulling and starting the selected stack. See [DOCKER.md](DOCKER.md) for commands and storage details.
+
+### Optional managed installation on Linux hosts with systemd
+
+For native **Settings → Update** support, use the managed host installer on a Linux Docker host running systemd. Install Docker, Compose v2, Bash, curl, Python 3, CA certificates, gzip, and iproute2 using your distribution's package tools. No Ubuntu or Debian requirement applies. The installer uses published images, automatically selects free ports with `--auto-ports`, and installs the native updater. It refuses to overwrite an existing project.
 
 ```bash
 (
@@ -67,13 +88,7 @@ Copy and paste the following block into a Bash terminal:
 )
 ```
 
-The installer checks the configured ports before starting. With `--auto-ports`, it finds free alternatives without stopping existing services. Open the management URL printed by the installer and finish first-time setup.
-
-**Security:** Restrict the management/recovery port (default 81) to your trusted network or VPN. Docker-published ports may bypass UFW; see [Docker's firewall guidance](https://docs.docker.com/engine/network/packet-filtering-firewalls/). For public HTTP and HTTPS, review any automatically changed port mappings.
-
-### MariaDB / MySQL or PostgreSQL
-
-For a new installation, replace `sqlite` in the command with `mysql` or `postgres`. The installer generates unique database passwords and saves them in the root-only `.env` file. See [DOCKER.md](DOCKER.md) for details.
+Use `mysql` or `postgres` for a managed database deployment. This path stores the deployment in `/opt/npm-improved`. The portable Compose path does not provision the native updater.
 
 ## Default ports
 
@@ -101,6 +116,8 @@ Keep both locations on persistent storage.
 Even though NPM Improved includes application-level backups, infrastructure-level backups or snapshots of these locations are still recommended.
 
 ## Updating
+
+For portable Compose deployments, back up persistent data, review the target release notes, update the pinned application image (and matching firewall image, when used), pull the images, and recreate the same stack with `docker compose up -d --no-build --pull never --wait`. The native systemd updater is not available on this path.
 
 For existing installations with a managed native updater, use **Settings → Update** to download the published image and perform a health-verified replacement with rollback. The host-side updater is a native systemd service, not an updater container. The fresh-install command deliberately refuses to overwrite existing deployments.
 
@@ -532,7 +549,7 @@ The active integration branch is:
 develop
 ```
 
-Official prebuilt images are published at `ghcr.io/gigabytegrove/npm-improved`. Normal production installation uses the release-only installer above. The source installer (`scripts/install-docker`) and development Compose definitions are for intentional developer builds only.
+Official prebuilt images are published at `ghcr.io/gigabytegrove/npm-improved`. Normal production installation uses the portable image-only Compose templates or managed release installer above. The source installer (`scripts/install-docker`) and development Compose definitions are for intentional developer builds only.
 
 Do **not** use the upstream `jc21/nginx-proxy-manager` image when testing NPM Improved features. That image is the upstream project and does not contain NPM Improved changes.
 

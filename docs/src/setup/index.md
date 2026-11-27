@@ -6,11 +6,37 @@ outline: deep
 
 ## Docker quick start
 
-Fresh installs use the published **v1.8.0** release images for Linux amd64 and arm64. The installer pulls the official GHCR image, falls back to the SHA-256-verified GitHub Release image archive if necessary, and installs the matching native systemd updater. No Git clone, source compilation, Docker build, or Buildx invocation is needed. Deployment files are installed in `/opt/npm-improved`. Existing installations are never overwritten.
+NPM Improved runs as Linux containers on Docker. It is not tied to Ubuntu, Debian, or an x86-64 host OS. The v1.8.0 deployment targets **linux/amd64 and linux/arm64**. Use a compatible Docker Engine or Docker Desktop in Linux-container mode, including supported Linux distributions, Windows, macOS, and NAS platforms. Windows-native containers and other CPU architectures are not supported by these images. Host networking, storage permissions, and capability restrictions vary by platform.
 
-Requirements: Linux amd64 or arm64 with systemd, Docker Engine 24 or newer, Docker Compose v2 supporting `up --wait-timeout`, curl, Python 3, CA certificates, gzip and iproute2.
+### Standard Docker Compose (recommended for portable deployment)
 
-## SQLite deployment
+Requires Docker and Docker Compose v2. No systemd, Linux package manager, Git clone, compilation, or local image build is needed.
+
+Create a dedicated project directory and save [compose.yaml](https://github.com/gigabytegrove/npm-improved/blob/develop/deploy/compose.yaml) into it as `compose.yaml` (use **Raw** or download the file on GitHub). This SQLite template contains only published image references and persistent mounts. From that directory, run these commands in your usual terminal, including PowerShell:
+
+```bash
+docker compose pull
+docker compose up -d --no-build --pull never --wait --wait-timeout 240
+docker compose ps
+```
+
+Open `http://localhost:81` on the Docker host, or port 81 on the remote Docker host. For alternate host ports, create a file named `.env` next to the Compose file:
+
+```dotenv
+HTTP_PORT=8080
+ADMIN_PORT=8181
+HTTPS_PORT=8443
+```
+
+For example, the management UI then uses port 8181. Use the same project directory for all future operations.
+
+**Security:** Restrict the management port to a trusted network or VPN. The default SQLite template includes the release's firewall companion, which requires Docker support for `NET_ADMIN` in the application network namespace. If your host cannot grant this capability, explicitly deploy only the app with `docker compose pull app` followed by `docker compose up -d --no-build --pull never --wait app`; the companion's instance-level network filtering is then unavailable. Use an appropriate host firewall. This is a reduced-feature deployment, not a way to bypass a host security policy. Docker Desktop and NAS deployments must provide persistent writable storage with Linux-compatible file permissions. For clustered deployments set a unique `NPM_NODE_HOSTNAME` in `.env`.
+
+If a registry pull fails, stop and use the verified release archive recovery path in the Docker guide; never build from source.
+
+### Optional managed installation on Linux hosts with systemd
+
+For native **Settings → Update** support, use the managed host installer on a Linux Docker host running systemd. Install Docker, Compose v2, Bash, curl, Python 3, CA certificates, gzip, and iproute2 using your distribution's package tools. No Ubuntu or Debian requirement applies. The installer uses published images, automatically selects free ports with `--auto-ports`, and installs the native updater. It refuses to overwrite an existing project.
 
 ```bash
 (
@@ -22,25 +48,18 @@ Requirements: Linux amd64 or arm64 with systemd, Docker Engine 24 or newer, Dock
 )
 ```
 
-Open the management URL printed at completion, on a trusted network. Persistent data is stored under `/opt/npm-improved/data` and `/opt/npm-improved/letsencrypt`.
-
-## Port conflicts
-
-The installer does not stop existing services. `--auto-ports` selects free alternative mappings and saves them in `.env`; omit it to require ports 80, 81 and 443.
+Use `mysql` or `postgres` for a managed database deployment. This path stores the deployment in `/opt/npm-improved`. The portable Compose path does not provision the native updater.
 
 ## MariaDB / MySQL deployment
 
+Save [compose.mysql.yaml](https://github.com/gigabytegrove/npm-improved/blob/develop/deploy/compose.mysql.yaml) and configure unique `MYSQL_PASSWORD` and `MYSQL_ROOT_PASSWORD` in `.env` before running:
+
 ```bash
-(
-  set -e
-  installer="$(mktemp)"
-  trap 'rm -f "$installer"' EXIT
-  curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer"
-  sudo bash "$installer" mysql --auto-ports
-)
+docker compose -f compose.mysql.yaml pull
+docker compose -f compose.mysql.yaml up -d --no-build --pull never --wait --wait-timeout 240
 ```
 
-Database passwords are generated automatically and stored in the root-only `/opt/npm-improved/.env`. Database data is persisted in `./mariadb` relative to the deployment directory.
+Data persists under `./mariadb`.
 
 ## Change databases later from the UI
 
@@ -59,17 +78,14 @@ See [Database & Shared MySQL](/guide/database).
 
 ## PostgreSQL deployment
 
+Save [compose.postgres.yaml](https://github.com/gigabytegrove/npm-improved/blob/develop/deploy/compose.postgres.yaml) and configure a unique `POSTGRES_PASSWORD` in `.env` before running:
+
 ```bash
-(
-  set -e
-  installer="$(mktemp)"
-  trap 'rm -f "$installer"' EXIT
-  curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer"
-  sudo bash "$installer" postgres --auto-ports
-)
+docker compose -f compose.postgres.yaml pull
+docker compose -f compose.postgres.yaml up -d --no-build --pull never --wait --wait-timeout 240
 ```
 
-The installer generates the database password and persists database data under `./postgres` relative to the deployment directory. The default PostgreSQL schema is `public`.
+Data persists under `./postgres`. The default PostgreSQL schema is `public`.
 
 ## Ports
 
@@ -159,7 +175,7 @@ The independent control plane also exposes:
 
 Before upgrading, back up `./data`, `./letsencrypt`, and the external database data when MariaDB or PostgreSQL is used.
 
-For existing managed installations, open **Settings → Update**. The native systemd updater pulls published images and verifies the replacement before reporting success, with automatic rollback on failure. It does not run a helper updater container.
+For portable Compose deployments, back up your project, change the pinned image tags to the intended release, pull them, and recreate the same stack using `up -d --no-build --pull never --wait` (include the matching `-f` option for database variants). The portable path has no native host updater. For existing managed installations, open **Settings → Update**. The native systemd updater pulls published images and verifies the replacement before reporting success, with automatic rollback on failure. It does not run a helper updater container.
 
 The fresh installer refuses to overwrite an existing deployment. For legacy recovery or coordinated Shared MySQL upgrades, use the target release notes and preserve the existing Compose project, database and persistent storage. Do not rebuild images for normal production upgrades.
 
