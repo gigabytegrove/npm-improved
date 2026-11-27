@@ -431,9 +431,13 @@ sudo apt-get install -y ca-certificates curl python3 iproute2 gzip
 Copy and paste the following block into a Bash terminal:
 
 ```bash
-installer="$(mktemp)"
-curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer" && sudo bash "$installer" sqlite --auto-ports
-rm -f "$installer"
+(
+  set -e
+  installer="$(mktemp)"
+  trap 'rm -f "$installer"' EXIT
+  curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer"
+  sudo bash "$installer" sqlite --auto-ports
+)
 ```
 
 The installer checks the configured ports before starting. With `--auto-ports`, it finds free alternatives without stopping existing services. Open the management URL printed by the installer and finish first-time setup.
