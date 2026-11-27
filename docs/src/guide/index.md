@@ -134,9 +134,13 @@ Fresh installs use the published **v1.8.0** release images for Linux amd64 and a
 Install Docker Engine, Docker Compose v2, curl, Python 3, CA certificates, gzip and iproute2 on a Linux systemd host. Then run:
 
 ```bash
-installer="$(mktemp)"
-curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer" && sudo bash "$installer" sqlite --auto-ports
-rm -f "$installer"
+(
+  set -e
+  installer="$(mktemp)"
+  trap 'rm -f "$installer"' EXIT
+  curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer"
+  sudo bash "$installer" sqlite --auto-ports
+)
 ```
 
 Open the printed management URL on a trusted network. For detailed instructions, see [Docker installation](/setup/) and [DOCKER.md](https://github.com/gigabytegrove/npm-improved/blob/develop/DOCKER.md).
