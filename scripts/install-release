@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+# Fresh stable deployment from published images; never compiles source.
+set -Eeuo pipefail
+umask 077
+TAG=v1.8.0
+SOURCE=f47cecd13815638b61f41daa7c46cc7d069df727
+ROOT=/opt/npm-improved
+MODE=sqlite
+AUTO_PORTS=0
+fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+for arg in "$@"; do
+  case "$arg" in
+    sqlite|mysql|postgres) MODE="$arg" ;;
+    --auto-ports) AUTO_PORTS=1 ;;
+    -h|--help) echo 'Usage: sudo bash install-release [sqlite|mysql|postgres] [--auto-ports]'; exit 0 ;;
+    *) fail "Unknown argument: $arg" ;;
+  esac
+done
+[[ "$(id -u)" == 0 ]] || fail 'Run as root or with sudo.'
+[[ -d /run/systemd/system ]] || fail 'A Linux systemd host is required.'
+for cmd in docker curl python3 sha256sum gzip awk ss; do
+  command -v "$cmd" >/dev/null || fail "Missing prerequisite: $cmd"
+done
+docker info >/dev/null || fail 'Docker daemon unavailable.'
+docker compose version >/dev/null || fail 'Docker Compose v2 required.'
+docker compose up --help | grep -F -- '--wait-timeout' >/dev/null || fail 'Update Compose v2 to support --wait-timeout.'
+[[ ! -e "$ROOT" && ! -L "$ROOT" ]] || fail "$ROOT already exists; use Settings > Update for an existing installation."
+[[ -z "$(docker ps -aq --filter label=com.docker.compose.project=npm-improved)" ]] || fail 'Existing npm-improved Compose project detected.'
+case "$(uname -m)" in
+  x86_64) ARCH=amd64 ;;
+  aarch64|arm64) ARCH=arm64 ;;
+  *) fail 'Only Linux amd64 and arm64 are supported.' ;;
+esac
+case "$MODE" in
+  sqlite) COMPOSE=compose.yaml ;;
+  mysql) COMPOSE=compose.mysql.yaml ;;
+  postgres) COMPOSE=compose.postgres.yaml ;;
+esac
+STAGE="$(mktemp -d)"
+trap 'rm -rf -- "$STAGE"' EXIT
+RAW="https://raw.githubusercontent.com/gigabytegrove/npm-improved/$SOURCE"
+RELEASE="https://github.com/gigabytegrove/npm-improved/releases/download/$TAG"
+APP="ghcr.io/gigabytegrove/npm-improved:$TAG"
+FIREWALL="ghcr.io/gigabytegrove/npm-improved-firewall:$TAG"
+download() {
+  curl --fail --silent --show-error --location --retry 3 --proto '=https' --proto-redir '=https' "$1" -o "$2"
+}
+mkdir -p "$STAGE/scripts"
+for file in "$COMPOSE" .env.example .version compose.firewall.yaml scripts/install-host-updater scripts/host-update-dispatch.py scripts/host-update-maintenance.py scripts/update-handoff.sh; do
+  download "$RAW/$file" "$STAGE/$file"
+done
+[[ "$(tr -d '[:space:]' < "$STAGE/.version")" == "${TAG#v}" ]] || fail 'Deployment template version mismatch.'
+chmod 0755 "$STAGE/scripts/"*
+
+# Use the version-matched deployment configuration, without its build blocks.
+python3 - "$STAGE/$COMPOSE" "$STAGE/.env.example" "$STAGE/.env" "$ROOT" "$MODE" "$APP" "$FIREWALL" "$AUTO_PORTS" <<'PY'
+import re
+import secrets
+import subprocess
+import sys
+from pathlib import Path
+compose, example, env, root, mode, app, firewall, auto = sys.argv[1:]
+p = Path(compose)
+output = []
+skipping = False
+for line in p.read_text().splitlines(keepends=True):
+    if re.match(r"^    build:\s*$", line):
+        skipping = True
+        continue
+    if skipping and (not line.strip() or line.startswith("      ")):
+        continue
+    skipping = False
+    output.append(line)
+result = "".join(output)
+if re.search(r"(?m)^\s*build\s*:", result):
+    raise SystemExit("Unexpected build definition; installation refused.")
+p.write_text(result.replace("npm-improved:local", app).replace("npm-improved-firewall:local", firewall))
+values = {"NPM_IMAGE": app, "NPM_FIREWALL_IMAGE": firewall, "NPM_HOST_PROJECT_DIR": root, "NPM_DEPLOYMENT_MODE": mode}
+ports = set()
+for row in subprocess.check_output(["ss", "-H", "-ltn"], text=True).splitlines():
+    fields = row.split()
+    if len(fields) >= 4:
+        port = fields[3].rsplit(":", 1)[-1]
+        if port.isdecimal():
+            ports.add(int(port))
+published = subprocess.check_output(["docker", "ps", "--format", "{{.Ports}}"], text=True)
+ports.update(int(n) for n in re.findall(r":(\d+)->", published))
+requested = {"HTTP_PORT": (80, 8080), "ADMIN_PORT": (81, 8181), "HTTPS_PORT": (443, 8443)}
+reserved = {port for port, _ in requested.values() if port not in ports}
+for key, (port, fallback) in requested.items():
+    if port in ports:
+        if auto != "1":
+            raise SystemExit(f"Host port {port} is occupied. Rerun with --auto-ports.")
+        port = next((n for n in range(fallback, 65536) if n not in ports and n not in reserved), None)
+        if port is None:
+            raise SystemExit(f"No available port for {key}")
+        reserved.add(port)
+    values[key] = str(port)
+if mode == "mysql":
+    values.update(MYSQL_PASSWORD=secrets.token_hex(32), MYSQL_ROOT_PASSWORD=secrets.token_hex(32))
+elif mode == "postgres":
+    values["POSTGRES_PASSWORD"] = secrets.token_hex(32)
+lines = Path(example).read_text().splitlines()
+for i, line in enumerate(lines):
+    key = line.partition("=")[0]
+    if key in values:
+        lines[i] = f"{key}={values.pop(key)}"
+lines.extend(f"{key}={value}" for key, value in values.items())
+Path(env).write_text("\n".join(lines) + "\n")
+PY
+
+# Ignore exported Compose variables that could override the pinned images.
+compose() {
+  local project="$1"; shift
+  env -i PATH="$PATH" HOME="${HOME:-/root}" docker compose --project-name npm-improved --project-directory "$project" --env-file "$project/.env" -f "$project/$COMPOSE" "$@"
+}
+compose "$STAGE" config --format json | python3 -c '
+import json, sys
+services = json.load(sys.stdin)["services"]
+app, firewall, mode = sys.argv[1:]
+if any("build" in service for service in services.values()):
+    raise SystemExit("Build definition detected")
+if services["app"]["image"] != app:
+    raise SystemExit("Unexpected application image")
+if mode == "sqlite" and services["firewall"]["image"] != firewall:
+    raise SystemExit("Unexpected firewall image")
+' "$APP" "$FIREWALL" "$MODE"
+
+images=("$APP")
+if [[ "$MODE" == sqlite ]]; then images+=("$FIREWALL"); fi
+pull_failed=0
+for image in "${images[@]}"; do
+  if ! docker pull "$image"; then pull_failed=1; fi
+done
+if [[ "$pull_failed" == 1 ]]; then
+  asset="npm-improved-$TAG-linux-$ARCH.tar.gz"
+  sums="npm-improved-$TAG-SHA256SUMS.txt"
+  download "$RELEASE/$sums" "$STAGE/$sums"
+  download "$RELEASE/$asset" "$STAGE/$asset"
+  python3 - "$STAGE/$sums" "$STAGE/$asset" <<'PY'
+import hashlib
+import re
+import sys
+from pathlib import Path
+sums, archive = map(Path, sys.argv[1:])
+matches = []
+for line in sums.read_text().splitlines():
+    match = re.fullmatch(r"([0-9a-fA-F]{64})\s+\*?(.+)", line)
+    if match and match.group(2) == archive.name:
+        matches.append(match.group(1).lower())
+if len(matches) != 1:
+    raise SystemExit("Missing or ambiguous published image checksum")
+digest = hashlib.sha256()
+with archive.open("rb") as stream:
+    for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+        digest.update(chunk)
+if digest.hexdigest() != matches[0]:
+    raise SystemExit("Release image checksum mismatch")
+PY
+  gzip -t "$STAGE/$asset"
+  docker load -i "$STAGE/$asset"
+fi
+for image in "${images[@]}"; do
+  docker image inspect "$image" >/dev/null || fail "Required published image missing: $image"
+done
+if [[ "$MODE" != sqlite ]]; then
+  compose "$STAGE" pull db
+fi
+# No deployment files are created before image acquisition succeeds.
+mkdir -- "$ROOT"
+install -m 0600 "$STAGE/.env" "$ROOT/.env"
+install -m 0644 "$STAGE/$COMPOSE" "$ROOT/$COMPOSE"
+mkdir -p "$ROOT/data" "$ROOT/letsencrypt"
+"$STAGE/scripts/install-host-updater" "$ROOT"
+compose "$ROOT" up -d --no-build --pull never --wait --wait-timeout 240
+cid="$(compose "$ROOT" ps -q app)"
+[[ -n "$cid" ]] || fail 'Application container missing.'
+actual="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$cid" | awk -F= '$1=="NPM_BUILD_VERSION" {print $2}')"
+[[ "${actual#v}" == "${TAG#v}" ]] || fail "Running application version mismatch: $actual"
+[[ "$(docker inspect --format '{{.State.Health.Status}}' "$cid")" == healthy ]] || fail 'Application health check failed.'
+admin="$(awk -F= '$1=="ADMIN_PORT" {print $2}' "$ROOT/.env")"
+printf '\nNPM Improved %s is healthy. No images were built.\n' "$TAG"
+printf 'Open http://YOUR-SERVER-IP:%s on a trusted network.\n' "$admin"
+printf 'Persistent deployment: %s\n' "$ROOT"
+compose "$ROOT" ps

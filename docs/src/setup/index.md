@@ -6,96 +6,41 @@ outline: deep
 
 ## Docker quick start
 
-NPM Improved v1.1.0 publishes official stable multi-architecture images and includes the built-in **Settings → Update** manager. The repository also retains production Compose files and the Docker installer for first installation, source builds, and recovery.
+Fresh installs use the published **v1.8.0** release images for Linux amd64 and arm64. The installer pulls the official GHCR image, falls back to the SHA-256-verified GitHub Release image archive if necessary, and installs the matching native systemd updater. No Git clone, source compilation, Docker build, or Buildx invocation is needed. Deployment files are installed in `/opt/npm-improved`. Existing installations are never overwritten.
 
-Requirements:
-
-- Docker Engine 24 or newer;
-- Docker Compose v2;
-- Git;
-- TCP ports 80, 81, and 443 available on the host unless you change the host mappings.
-
-Clone the repository and prepare the environment file:
-
-```bash
-git clone https://github.com/gigabytegrove/npm-improved.git
-cd npm-improved
-```
-
-The production Docker build is self-contained. A clean checkout does not require a separate frontend build. The installer creates `.env` automatically when needed and checks host-port availability before starting the build.
+Requirements: Linux amd64 or arm64 with systemd, Docker Engine 24 or newer, Docker Compose v2 supporting `up --wait-timeout`, curl, Python 3, CA certificates, gzip and iproute2.
 
 ## SQLite deployment
 
-SQLite is the simplest deployment and is the default `compose.yaml` stack:
-
 ```bash
-./scripts/install-docker sqlite
+(
+  set -e
+  installer="$(mktemp)"
+  trap 'rm -f "$installer"' EXIT
+  curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer"
+  sudo bash "$installer" sqlite --auto-ports
+)
 ```
 
-Persistent data is stored in:
-
-```text
-./data
-./letsencrypt
-```
-
-Inside the application container these map to:
-
-```text
-/data
-/etc/letsencrypt
-```
-
-The SQLite database is stored at:
-
-```text
-/data/database.sqlite
-```
-
-Open the management interface at:
-
-```text
-http://<host>:81
-```
+Open the management URL printed at completion, on a trusted network. Persistent data is stored under `/opt/npm-improved/data` and `/opt/npm-improved/letsencrypt`.
 
 ## Port conflicts
 
-The installer refuses to build/start when a configured host port is already occupied and shows the listener information it can identify. It does not stop or replace an existing service automatically.
-
-For a parallel test deployment, choose unused host-side ports in `.env`, for example:
-
-```dotenv
-HTTP_PORT=8080
-ADMIN_PORT=8181
-HTTPS_PORT=8443
-```
-
-Then rerun `./scripts/install-docker sqlite`. Internal container ports remain 80, 81, and 443.
+The installer does not stop existing services. `--auto-ports` selects free alternative mappings and saves them in `.env`; omit it to require ports 80, 81 and 443.
 
 ## MariaDB / MySQL deployment
 
-Edit `.env` and set both database passwords:
-
-```dotenv
-MYSQL_PASSWORD=<strong-unique-password>
-MYSQL_ROOT_PASSWORD=<strong-unique-root-password>
-```
-
-The MariaDB Compose stack refuses to start while either password is blank.
-
-Then start the MariaDB stack:
-
 ```bash
-./scripts/install-docker mysql
+(
+  set -e
+  installer="$(mktemp)"
+  trap 'rm -f "$installer"' EXIT
+  curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer"
+  sudo bash "$installer" mysql --auto-ports
+)
 ```
 
-The database is persisted under:
-
-```text
-./mariadb
-```
-
-The application receives the existing `DB_MYSQL_*` environment variables from the Compose definition.
+Database passwords are generated automatically and stored in the root-only `/opt/npm-improved/.env`. Database data is persisted in `./mariadb` relative to the deployment directory.
 
 ## Change databases later from the UI
 
@@ -114,27 +59,17 @@ See [Database & Shared MySQL](/guide/database).
 
 ## PostgreSQL deployment
 
-Edit `.env` and set the PostgreSQL password:
-
-```dotenv
-POSTGRES_PASSWORD=<strong-unique-password>
-```
-
-The PostgreSQL Compose stack refuses to start while the password is blank.
-
-Then start the PostgreSQL stack:
-
 ```bash
-./scripts/install-docker postgres
+(
+  set -e
+  installer="$(mktemp)"
+  trap 'rm -f "$installer"' EXIT
+  curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer"
+  sudo bash "$installer" postgres --auto-ports
+)
 ```
 
-The database is persisted under:
-
-```text
-./postgres
-```
-
-The application receives the existing `DB_POSTGRES_*` environment variables from the Compose definition. Custom PostgreSQL schemas are not supported; the normal `public` schema is used.
+The installer generates the database password and persists database data under `./postgres` relative to the deployment directory. The default PostgreSQL schema is `public`.
 
 ## Ports
 
@@ -224,21 +159,9 @@ The independent control plane also exposes:
 
 Before upgrading, back up `./data`, `./letsencrypt`, and the external database data when MariaDB or PostgreSQL is used.
 
-For normal single-node Docker installations running v1.1.0 or newer, open **Settings → Update**. The page checks the official stable release, shows release notes and progress, replaces only the application container through a temporary self-cleaning Docker handoff, and verifies the new container before reporting success. A failed health/build verification triggers automatic rollback to the previous image configuration.
+For existing managed installations, open **Settings → Update**. The native systemd updater pulls published images and verifies the replacement before reporting success, with automatic rollback on failure. It does not run a helper updater container.
 
-The first move from v1.0.0 to v1.1.0 still uses the installer because v1.0.0 does not contain the Update manager:
-
-```bash
-git checkout develop
-git pull --ff-only
-./scripts/install-docker sqlite
-```
-
-Use `mysql` or `postgres` instead of `sqlite` for those underlying deployments. Add `--clean-build` only when a cache-free source rebuild is intentionally required.
-
-Shared MySQL and Instance Synchronization deployments are updated as coordinated maintenance operations rather than through the single-node Update action.
-
-If **Settings → Database & Storage** selected a runtime database, that selection is stored under `/data` and survives the rebuild.
+The fresh installer refuses to overwrite an existing deployment. For legacy recovery or coordinated Shared MySQL upgrades, use the target release notes and preserve the existing Compose project, database and persistent storage. Do not rebuild images for normal production upgrades.
 
 After an upgrade, verify the Control Center, Proxy Hosts, certificates, Streams, Database & Storage, logs, System Health, and any HA/synchronization features you rely on.
 
@@ -271,7 +194,7 @@ Stop it with:
 ./scripts/stop-dev
 ```
 
-## Building only the production image
+## Developer-only local image build (not installation)
 
 To build the local image without starting Compose:
 
