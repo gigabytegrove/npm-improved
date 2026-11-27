@@ -12,9 +12,13 @@ Fresh installs use the published **v1.8.0** release images for Linux amd64 and a
 ## Quick start: SQLite
 
 ```bash
-installer="$(mktemp)"
-curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer" && sudo bash "$installer" sqlite --auto-ports
-rm -f "$installer"
+(
+  set -e
+  installer="$(mktemp)"
+  trap 'rm -f "$installer"' EXIT
+  curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer"
+  sudo bash "$installer" sqlite --auto-ports
+)
 ```
 
 Open the management URL printed by the installer. The default deployment uses SQLite at `/data/database.sqlite` and the matching published firewall companion image `ghcr.io/gigabytegrove/npm-improved-firewall:v1.8.0`.
@@ -44,9 +48,13 @@ For multi-server Shared MySQL deployments, all nodes must use the same NPM Impro
 For a fresh installation:
 
 ```bash
-installer="$(mktemp)"
-curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer" && sudo bash "$installer" mysql --auto-ports
-rm -f "$installer"
+(
+  set -e
+  installer="$(mktemp)"
+  trap 'rm -f "$installer"' EXIT
+  curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer"
+  sudo bash "$installer" mysql --auto-ports
+)
 ```
 
 ## PostgreSQL
@@ -54,9 +62,13 @@ rm -f "$installer"
 For a fresh installation:
 
 ```bash
-installer="$(mktemp)"
-curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer" && sudo bash "$installer" postgres --auto-ports
-rm -f "$installer"
+(
+  set -e
+  installer="$(mktemp)"
+  trap 'rm -f "$installer"' EXIT
+  curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer"
+  sudo bash "$installer" postgres --auto-ports
+)
 ```
 
 Database credentials are generated automatically and stored in `/opt/npm-improved/.env` (mode 0600). The installer uses the corresponding version-matched Compose definition and pulls the database image. It does not build any images.
