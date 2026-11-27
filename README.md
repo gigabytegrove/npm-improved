@@ -38,9 +38,7 @@
 
 ---
 
-> **Current release**
->
-> NPM Improved **[v1.6.13](https://github.com/gigabytegrove/npm-improved/releases/tag/v1.6.13)** is the latest published stable release (October 15, 2026). It adds an explicit opt-in Management HTTPS activation workflow for each physical node, building on certificate setup introduced in v1.6.12. The separate port 81 HTTP recovery listener remains available and must be protected by a firewall or VPN. Earlier v1.6.11 traffic investigation and mobile Control Center capabilities remain included. The `develop` branch remains the active integration branch.
+> **Stable installation:** [v1.8.0](https://github.com/gigabytegrove/npm-improved/releases/tag/v1.8.0). Install the published images using the quick start below. The `develop` branch is for development, not a production source build.
 
 ## What is NPM Improved?
 
@@ -417,110 +415,34 @@ This protection is useful against application-layer abuse that reaches Nginx. It
 
 ## Quick start with Docker
 
-### One-paste installation (Ubuntu / Debian)
+Fresh installs use the published **v1.8.0** release images for Linux amd64 and arm64. The installer pulls the official GHCR image, falls back to the SHA-256-verified GitHub Release image archive if necessary, and installs the matching native systemd updater. No Git clone, source compilation, Docker build, or Buildx invocation is needed. Deployment files are installed in `/opt/npm-improved`. Existing installations are never overwritten.
 
-On a **64-bit Ubuntu or Debian Linux server running systemd**, sign in as a user with `sudo` access. **Copy and paste the entire command block into a Bash terminal.** You do not need to install Docker first.
+### Ubuntu / Debian prerequisites
 
-The block installs Docker Engine and Docker Compose from [Docker's official apt repository](https://docs.docker.com/engine/install/) when Docker is missing, installs the other prerequisites, builds NPM Improved from the repository's `develop` branch, configures its native host updater, and starts the SQLite deployment. If Docker is already present, it is not replaced; the block checks for Compose v2 instead.
+Use a 64-bit systemd host. Install Docker Engine and the Compose v2 plugin using the [official Docker installation instructions](https://docs.docker.com/engine/install/). If Docker is already installed, do not replace it. Install the remaining prerequisites:
 
 ```bash
-bash <<'NPMI_INSTALL'
-set -Eeuo pipefail
-. /etc/os-release
-if [ "$ID" != ubuntu ] && [ "$ID" != debian ]; then
-  echo 'This install block supports Ubuntu and Debian only.' >&2
-  exit 1
-fi
-if [ ! -d /run/systemd/system ]; then
-  echo 'A Linux host running systemd is required for NPM Improved updates.' >&2
-  exit 1
-fi
-if ! command -v sudo >/dev/null 2>&1; then
-  echo 'Sign in as a user with sudo access before installing.' >&2
-  exit 1
-fi
-sudo -v
 sudo apt-get update
-sudo apt-get install -y ca-certificates curl git python3 iproute2
-
-# Install Docker and Compose from Docker's official apt repository if needed.
-if ! command -v docker >/dev/null 2>&1; then
-  sudo install -m 0755 -d /etc/apt/keyrings
-  sudo curl -fsSL "https://download.docker.com/linux/$ID/gpg" -o /etc/apt/keyrings/docker.asc
-  sudo chmod a+r /etc/apt/keyrings/docker.asc
-  sudo tee /etc/apt/sources.list.d/docker.sources >/dev/null <<DOCKER_SOURCE
-Types: deb
-URIs: https://download.docker.com/linux/$ID
-Suites: $VERSION_CODENAME
-Components: stable
-Architectures: $(dpkg --print-architecture)
-Signed-By: /etc/apt/keyrings/docker.asc
-DOCKER_SOURCE
-  sudo apt-get update
-  sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-fi
-sudo systemctl enable --now docker
-if ! sudo docker compose version >/dev/null 2>&1; then
-  echo 'Docker is present, but Docker Compose v2 is missing. Install the Compose plugin before continuing.' >&2
-  exit 1
-fi
-if [ -e /opt/npm-improved ]; then
-  echo '/opt/npm-improved already exists; installation stopped to protect it.' >&2
-  exit 1
-fi
-sudo git clone --depth 1 --branch develop https://github.com/gigabytegrove/npm-improved.git /opt/npm-improved
-cd /opt/npm-improved
-sudo ./scripts/install-docker sqlite --auto-ports
-admin_port="$(sed -n 's/^ADMIN_PORT=//p' .env | tail -n 1)"
-printf '\nNPM Improved is ready. Open http://YOUR-SERVER-IP:%s\n' "$admin_port"
-NPMI_INSTALL
+sudo apt-get install -y ca-certificates curl python3 iproute2 gzip
 ```
 
-After it finishes, replace `YOUR-SERVER-IP` with your server's IP address in the printed management URL (usually port **81**). Complete the first-time setup in your browser. The installer uses free alternative host ports if 80, 81, or 443 are already occupied, without stopping other services.
+### Install NPM Improved (SQLite)
 
-**Security:** Keep the management/recovery port (default **81**) restricted to your trusted network or VPN. Docker-published ports may bypass rules configured with UFW; review [Docker's firewall guidance](https://docs.docker.com/engine/network/packet-filtering-firewalls/) before exposing this host to the internet. Internet-facing HTTP/HTTPS normally require ports 80 and 443, so review any automatically changed port mappings.
-
-### If Docker and Compose are already installed
-
-To install manually without the Docker prerequisite steps:
+Copy and paste the following block into a Bash terminal:
 
 ```bash
-git clone https://github.com/gigabytegrove/npm-improved.git
-cd npm-improved
-sudo ./scripts/install-docker sqlite --auto-ports
+installer="$(mktemp)"
+curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer" && sudo bash "$installer" sqlite --auto-ports
+rm -f "$installer"
 ```
 
-The project's installer creates `.env` as needed, verifies Docker and Compose, validates the configured ports, builds the checked-out source, provisions the **native systemd updater** (no permanent helper container), starts the stack, waits for application health, and verifies that the running app is NPM Improved. It preserves existing NPM Improved data on repeat installs.
+The installer checks the configured ports before starting. With `--auto-ports`, it finds free alternatives without stopping existing services. Open the management URL printed by the installer and finish first-time setup.
 
-For database variations, custom port mapping, and backups, see [DOCKER.md](DOCKER.md).
+**Security:** Restrict the management/recovery port (default 81) to your trusted network or VPN. Docker-published ports may bypass UFW; see [Docker's firewall guidance](https://docs.docker.com/engine/network/packet-filtering-firewalls/). For public HTTP and HTTPS, review any automatically changed port mappings.
 
-### If ports 80, 81, or 443 are already being used
+### MariaDB / MySQL or PostgreSQL
 
-NPM Improved checks before building and will not stop another service automatically.
-
-To let the installer find and save free host-side ports:
-
-```bash
-./scripts/install-docker sqlite --auto-ports
-```
-
-### MySQL / MariaDB
-
-```bash
-cp .env.example .env
-# Set MYSQL_PASSWORD and MYSQL_ROOT_PASSWORD in .env
-./scripts/install-docker mysql
-```
-
-### PostgreSQL
-
-```bash
-cp .env.example .env
-# Set the PostgreSQL values required by the compose file
-./scripts/install-docker postgres
-```
-
-For storage paths, environment variables, database configuration, port mapping, backups, health checks, and update behavior, see [DOCKER.md](DOCKER.md).
+For a new installation, replace `sqlite` in the command with `mysql` or `postgres`. The installer generates unique database passwords and saves them in the root-only `.env` file. See [DOCKER.md](DOCKER.md) for details.
 
 ## Default ports
 
@@ -549,22 +471,9 @@ Even though NPM Improved includes application-level backups, infrastructure-leve
 
 ## Updating
 
-Beginning with v1.1.0, normal single-node Docker installations can use **Settings → Update**.
+For existing installations with a managed native updater, use **Settings → Update** to download the published image and perform a health-verified replacement with rollback. The host-side updater is a native systemd service, not an updater container. The fresh-install command deliberately refuses to overwrite existing deployments.
 
-The Update workspace shows the installed and latest stable versions, release notes, update progress, restart controls, and the previous image when rollback is available. Update/restart/rollback actions require the current administrator password.
-
-NPM Improved uses a temporary, self-cleaning Docker handoff only while replacing the running application container. There is no permanent updater worker.
-
-The move from v1.0.0 to v1.1.0 is the final normal CLI upgrade because v1.0.0 does not yet contain the Update manager. A typical SQLite upgrade is:
-
-```bash
-cd ~/npm-improved
-git checkout develop
-git pull --ff-only
-./scripts/install-docker sqlite
-```
-
-Shared MySQL and Instance Synchronization deployments are intentionally excluded from single-node automatic updates. Upgrade those nodes together during a coordinated maintenance window.
+For legacy deployments or coordinated Shared MySQL upgrades, see [DOCKER.md](DOCKER.md) and the target release notes. Preserve the existing Compose project, data and certificates.
 
 For every upgrade:
 
@@ -619,7 +528,7 @@ The active integration branch is:
 develop
 ```
 
-A pre-built NPM Improved container image is not published yet. The supported deployment workflow is to build from this repository using the included Docker installer/Compose files.
+Official prebuilt images are published at `ghcr.io/gigabytegrove/npm-improved`. Normal production installation uses the release-only installer above. The source installer (`scripts/install-docker`) and development Compose definitions are for intentional developer builds only.
 
 Do **not** use the upstream `jc21/nginx-proxy-manager` image when testing NPM Improved features. That image is the upstream project and does not contain NPM Improved changes.
 
