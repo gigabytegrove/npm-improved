@@ -40,6 +40,78 @@
 
 > **Stable installation:** [v1.8.0](https://github.com/gigabytegrove/npm-improved/releases/tag/v1.8.0). Install the published images using the quick start below. The `develop` branch is for development, not a production source build.
 
+## Quick start with Docker
+
+Fresh installs use the published **v1.8.0** release images for Linux amd64 and arm64. The installer pulls the official GHCR image, falls back to the SHA-256-verified GitHub Release image archive if necessary, and installs the matching native systemd updater. No Git clone, source compilation, Docker build, or Buildx invocation is needed. Deployment files are installed in `/opt/npm-improved`. Existing installations are never overwritten.
+
+### Ubuntu / Debian prerequisites
+
+Use a 64-bit systemd host. Install Docker Engine and the Compose v2 plugin using the [official Docker installation instructions](https://docs.docker.com/engine/install/). If Docker is already installed, do not replace it. Install the remaining prerequisites:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl python3 iproute2 gzip
+```
+
+### Install NPM Improved (SQLite)
+
+Copy and paste the following block into a Bash terminal:
+
+```bash
+(
+  set -e
+  installer="$(mktemp)"
+  trap 'rm -f "$installer"' EXIT
+  curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer"
+  sudo bash "$installer" sqlite --auto-ports
+)
+```
+
+The installer checks the configured ports before starting. With `--auto-ports`, it finds free alternatives without stopping existing services. Open the management URL printed by the installer and finish first-time setup.
+
+**Security:** Restrict the management/recovery port (default 81) to your trusted network or VPN. Docker-published ports may bypass UFW; see [Docker's firewall guidance](https://docs.docker.com/engine/network/packet-filtering-firewalls/). For public HTTP and HTTPS, review any automatically changed port mappings.
+
+### MariaDB / MySQL or PostgreSQL
+
+For a new installation, replace `sqlite` in the command with `mysql` or `postgres`. The installer generates unique database passwords and saves them in the root-only `.env` file. See [DOCKER.md](DOCKER.md) for details.
+
+## Default ports
+
+The normal container-side ports are:
+
+| Port | Used for |
+| ---: | --- |
+| **80** | HTTP web traffic |
+| **81** | NPM Improved Control Center |
+| **443** | HTTPS web traffic |
+
+The host-side ports can be changed in `.env` when needed.
+
+## Persistent data
+
+The important persistent locations are:
+
+```text
+/data
+/etc/letsencrypt
+```
+
+Keep both locations on persistent storage.
+
+Even though NPM Improved includes application-level backups, infrastructure-level backups or snapshots of these locations are still recommended.
+
+## Updating
+
+For existing installations with a managed native updater, use **Settings → Update** to download the published image and perform a health-verified replacement with rollback. The host-side updater is a native systemd service, not an updater container. The fresh-install command deliberately refuses to overwrite existing deployments.
+
+For legacy deployments or coordinated Shared MySQL upgrades, see [DOCKER.md](DOCKER.md) and the target release notes. Preserve the existing Compose project, data and certificates.
+
+For every upgrade:
+
+- keep a current backup;
+- review release notes;
+- verify Proxy Hosts, certificates, streams, logs, health, and database state afterward.
+
 ## What is NPM Improved?
 
 NPM Improved is a modernized fork of [Nginx Proxy Manager](https://github.com/NginxProxyManager/nginx-proxy-manager).
@@ -412,78 +484,6 @@ Trusted IP addresses or networks can be excluded from those counters.
 This protection is useful against application-layer abuse that reaches Nginx. It is **not** a replacement for upstream DDoS protection when an attack is large enough to saturate your Internet connection before Nginx ever sees the traffic.
 
 [Read the HTTP Protection guide](docs/src/guide/protection.md).
-
-## Quick start with Docker
-
-Fresh installs use the published **v1.8.0** release images for Linux amd64 and arm64. The installer pulls the official GHCR image, falls back to the SHA-256-verified GitHub Release image archive if necessary, and installs the matching native systemd updater. No Git clone, source compilation, Docker build, or Buildx invocation is needed. Deployment files are installed in `/opt/npm-improved`. Existing installations are never overwritten.
-
-### Ubuntu / Debian prerequisites
-
-Use a 64-bit systemd host. Install Docker Engine and the Compose v2 plugin using the [official Docker installation instructions](https://docs.docker.com/engine/install/). If Docker is already installed, do not replace it. Install the remaining prerequisites:
-
-```bash
-sudo apt-get update
-sudo apt-get install -y ca-certificates curl python3 iproute2 gzip
-```
-
-### Install NPM Improved (SQLite)
-
-Copy and paste the following block into a Bash terminal:
-
-```bash
-(
-  set -e
-  installer="$(mktemp)"
-  trap 'rm -f "$installer"' EXIT
-  curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer"
-  sudo bash "$installer" sqlite --auto-ports
-)
-```
-
-The installer checks the configured ports before starting. With `--auto-ports`, it finds free alternatives without stopping existing services. Open the management URL printed by the installer and finish first-time setup.
-
-**Security:** Restrict the management/recovery port (default 81) to your trusted network or VPN. Docker-published ports may bypass UFW; see [Docker's firewall guidance](https://docs.docker.com/engine/network/packet-filtering-firewalls/). For public HTTP and HTTPS, review any automatically changed port mappings.
-
-### MariaDB / MySQL or PostgreSQL
-
-For a new installation, replace `sqlite` in the command with `mysql` or `postgres`. The installer generates unique database passwords and saves them in the root-only `.env` file. See [DOCKER.md](DOCKER.md) for details.
-
-## Default ports
-
-The normal container-side ports are:
-
-| Port | Used for |
-| ---: | --- |
-| **80** | HTTP web traffic |
-| **81** | NPM Improved Control Center |
-| **443** | HTTPS web traffic |
-
-The host-side ports can be changed in `.env` when needed.
-
-## Persistent data
-
-The important persistent locations are:
-
-```text
-/data
-/etc/letsencrypt
-```
-
-Keep both locations on persistent storage.
-
-Even though NPM Improved includes application-level backups, infrastructure-level backups or snapshots of these locations are still recommended.
-
-## Updating
-
-For existing installations with a managed native updater, use **Settings → Update** to download the published image and perform a health-verified replacement with rollback. The host-side updater is a native systemd service, not an updater container. The fresh-install command deliberately refuses to overwrite existing deployments.
-
-For legacy deployments or coordinated Shared MySQL upgrades, see [DOCKER.md](DOCKER.md) and the target release notes. Preserve the existing Compose project, data and certificates.
-
-For every upgrade:
-
-- keep a current backup;
-- review release notes;
-- verify Proxy Hosts, certificates, streams, logs, health, and database state afterward.
 
 ## Compatibility with Nginx Proxy Manager
 
