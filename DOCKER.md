@@ -1,52 +1,27 @@
 # Docker installation
 
-NPM Improved includes production-ready Docker Compose definitions in the repository root.
-
-> NPM Improved v1.1.0 publishes official stable multi-architecture images and includes the built-in **Settings → Update** manager. The Docker installer remains supported for first installation and recovery.
+Fresh installs use the published **v1.8.0** release images for Linux amd64 and arm64. The installer pulls the official GHCR image, falls back to the SHA-256-verified GitHub Release image archive if necessary, and installs the matching native systemd updater. No Git clone, source compilation, Docker build, or Buildx invocation is needed. Deployment files are installed in `/opt/npm-improved`. Existing installations are never overwritten.
 
 ## Requirements
 
-- Docker Engine 24 or newer
-- Docker Compose v2
-- Git
-- TCP ports 80, 81, and 443 available on the host, unless overridden in `.env`
+- Linux amd64 or arm64 with systemd
+- Docker Engine 24 or newer and Docker Compose v2 supporting `up --wait-timeout`
+- curl, Python 3, CA certificates, gzip, and iproute2
+- TCP ports 80, 81 and 443, or free alternatives
 
 ## Quick start: SQLite
 
 ```bash
-git clone https://github.com/gigabytegrove/npm-improved.git
-cd npm-improved
-./scripts/install-docker sqlite
+installer="$(mktemp)"
+curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer" && sudo bash "$installer" sqlite --auto-ports
+rm -f "$installer"
 ```
 
-The installer creates `.env` from `.env.example` when needed, validates Docker/Compose, checks host-port availability before the build starts, launches the stack, and waits for the application healthcheck.
-
-Open:
-
-```text
-http://<host>:81
-```
-
-The default deployment uses SQLite at `/data/database.sqlite`.
+Open the management URL printed by the installer. The default deployment uses SQLite at `/data/database.sqlite` and the matching published firewall companion image `ghcr.io/gigabytegrove/npm-improved-firewall:v1.8.0`.
 
 ## Port conflicts
 
-The installer checks the configured host ports before building. It never stops an existing service automatically. When a port is occupied it detects free alternatives on that specific host instead of suggesting fixed port numbers.
-
-If configured ports are already in use because NPM Improved is being tested alongside another reverse proxy, the installer prints free host-side mappings it found. To apply those detected mappings automatically and continue:
-
-```bash
-./scripts/install-docker sqlite --auto-ports
-```
-
-The selected ports are written to `.env`. The internal container ports remain 80, 81, and 443.
-
-To inspect a conflict manually:
-
-```bash
-ss -ltnp | grep -E ':(80|81|443)\\b' || true
-docker ps --format 'table {{.Names}}\\t{{.Ports}}'
-```
+Omit `--auto-ports` to require the default host ports. With the flag, the installer selects free alternatives and saves them in `/opt/npm-improved/.env`. It never stops existing services. Internal ports remain 80, 81 and 443. Restrict management access to your trusted network or VPN.
 
 ## Change databases from the UI
 
@@ -66,23 +41,25 @@ For multi-server Shared MySQL deployments, all nodes must use the same NPM Impro
 
 ## MariaDB / MySQL
 
-Copy and edit the environment file first. Set both `MYSQL_PASSWORD` and `MYSQL_ROOT_PASSWORD`. The MariaDB Compose stack refuses to start while either value is blank.
+For a fresh installation:
 
 ```bash
-cp .env.example .env
-# Set MYSQL_PASSWORD and MYSQL_ROOT_PASSWORD in .env
-./scripts/install-docker mysql
+installer="$(mktemp)"
+curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer" && sudo bash "$installer" mysql --auto-ports
+rm -f "$installer"
 ```
 
 ## PostgreSQL
 
-Copy and edit the environment file first. Set `POSTGRES_PASSWORD`. The PostgreSQL Compose stack refuses to start while it is blank.
+For a fresh installation:
 
 ```bash
-cp .env.example .env
-# Set POSTGRES_PASSWORD in .env
-./scripts/install-docker postgres
+installer="$(mktemp)"
+curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer" && sudo bash "$installer" postgres --auto-ports
+rm -f "$installer"
 ```
+
+Database credentials are generated automatically and stored in `/opt/npm-improved/.env` (mode 0600). The installer uses the corresponding version-matched Compose definition and pulls the database image. It does not build any images.
 
 ## Persistent data
 
@@ -138,8 +115,7 @@ Backups are retained under `/data/backups`. Copy disaster-recovery backups off t
 
 ## Updating (v1.4.2+)
 
-NPM Improved uses **one application container**. It never launches a second
-container to update, restart or roll back that application.
+NPM Improved uses a native host-side updater. The SQLite release deployment also includes its dedicated firewall companion; that service is not an updater container.
 
 The trusted update runner is a **native Linux host-side systemd service**, installed
 once into the Docker host. It is not an extra Docker image or service container.
@@ -155,19 +131,7 @@ application image. No helper images are pulled from Docker Hub.
 
 ### Managed host updater lifecycle
 
-**No helper/updater Docker containers are ever used.** On supported Linux
-systems, the normal NPMi installer provisions its native root-owned updater
-before starting the NPMi app. Use the normal installer from a trusted checkout:
-
-```bash
-sudo ./scripts/install-docker sqlite
-```
-
-Use `mysql` or `postgres` for those deployments. The installer configures
-`NPM_HOST_PROJECT_DIR`, validates the Docker Compose deployment and installs
-both a native systemd request watcher and a native maintenance timer. It aborts
-if native provisioning fails instead of leaving an app with a broken Update UI.
-The original database, certificates, and project-specific ports remain intact.
+**No helper/updater Docker containers are used.** The image-only fresh installer provisions its native root-owned updater before starting the app. It configures `NPM_HOST_PROJECT_DIR`, validates the image-only Compose deployment, and installs the native systemd request watcher and maintenance timer. It aborts if provisioning fails.
 
 On each subsequent release, the existing host-side dispatcher completes the
 app upgrade, verifies health, then downloads its version-matched host updater
@@ -189,7 +153,7 @@ components automatically without repeating these commands.
 
 Running `docker compose up` directly on an unprepared host is not an
 equivalent installer: Docker container permissions cannot grant the root-owned
-systemd installation that is required for in-place restart. Use the supported
+systemd installation that is required for in-place restart. Use the supported image-only
 host installer for new nodes.
 
 For operational checks, use:
@@ -216,20 +180,13 @@ the NPMi application.
 - The worker runs the **root-owned installed script**, not arbitrary executable
   code from an application-writable directory.
 
-### CLI update/recovery path
+### Existing installations and recovery
 
-The source installer remains supported for manual recovery and rebuilds.
-It preserves existing host-side data volumes:
+Use **Settings → Update** for managed installations. Do not run the fresh installer over an existing project. For manual recovery, use the target release's prebuilt image or checksum-verified release archive, retain the existing Compose project and persistent directories, and follow its release notes. Do not switch to a locally built image as a recovery step.
 
-```bash
-cd /path/to/npm-improved
-git pull --ff-only
-sudo ./scripts/install-docker sqlite
-```
+### Developer source builds (not installation)
 
-Use `mysql` or `postgres` instead of `sqlite` when your actual Compose
-deployment uses that underlying database mode. Do not run the source installer
-against a custom production Compose layout without checking its configuration.
+`scripts/install-docker` intentionally builds the checkout and is reserved for developers. It is not the production installation or upgrade command. The repository-root Compose templates contain development build directives; do not run them directly for a fresh production deployment.
 
 ## Logs and status
 
