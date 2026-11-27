@@ -10,15 +10,7 @@ You can still create a hostname, point it at an app, turn on HTTPS, and move on.
 
 ## Project status
 
-NPM Improved **[v1.6.13](https://github.com/gigabytegrove/npm-improved/releases/tag/v1.6.13)** is the latest published stable release (October 15, 2026). It introduces explicit, opt-in Management HTTPS activation for an exact node hostname; the separate plain HTTP recovery listener on port 81 remains available and should be restricted to a trusted network. Earlier per-host traffic investigation, responsive host management, and mobile navigation remain available. Existing server behavior and host-management permissions remain unchanged.
-
-The active integration branch is:
-
-```text
-develop
-```
-
-Stable Linux amd64 and arm64 images are published at `ghcr.io/gigabytegrove/npm-improved`. The included Docker installer remains the supported first-install and source-build path.
+NPM Improved [v1.8.0](https://github.com/gigabytegrove/npm-improved/releases/tag/v1.8.0) is the pinned stable installation release. The `develop` branch is for integration. Published Linux amd64 and arm64 images are available at `ghcr.io/gigabytegrove/npm-improved`; normal installation does not build source.
 
 Do not use an upstream Nginx Proxy Manager container image when you expect NPM Improved features to be present.
 
@@ -137,27 +129,17 @@ Managed HTTP protection profiles provide common request-rate and connection cont
 
 ## Quick start
 
-Requirements:
+Fresh installs use the published **v1.8.0** release images for Linux amd64 and arm64. The installer pulls the official GHCR image, falls back to the SHA-256-verified GitHub Release image archive if necessary, and installs the matching native systemd updater. No Git clone, source compilation, Docker build, or Buildx invocation is needed. Deployment files are installed in `/opt/npm-improved`. Existing installations are never overwritten.
 
-- Docker Engine 24 or newer;
-- Docker Compose v2;
-- Git.
-
-For the simplest SQLite installation:
+Install Docker Engine, Docker Compose v2, curl, Python 3, CA certificates, gzip and iproute2 on a Linux systemd host. Then run:
 
 ```bash
-git clone https://github.com/gigabytegrove/npm-improved.git
-cd npm-improved
-./scripts/install-docker sqlite
+installer="$(mktemp)"
+curl -fsSL https://raw.githubusercontent.com/gigabytegrove/npm-improved/develop/scripts/install-release -o "$installer" && sudo bash "$installer" sqlite --auto-ports
+rm -f "$installer"
 ```
 
-When the installer finishes, open:
-
-```text
-http://<your-server>:81
-```
-
-For detailed installation, database, port, update, and storage guidance, see [Docker installation](/setup/) and [DOCKER.md](https://github.com/gigabytegrove/npm-improved/blob/develop/DOCKER.md).
+Open the printed management URL on a trusted network. For detailed instructions, see [Docker installation](/setup/) and [DOCKER.md](https://github.com/gigabytegrove/npm-improved/blob/develop/DOCKER.md).
 
 ## Normal ports
 
